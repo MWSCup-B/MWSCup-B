@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "1.0",
+  "selectedAttackIds": [
+    "sql_injection",
+    "reflected_xss",
+    "phishing"
+  ],
+  "assignments": [
+    {
+      "attackId": "sql_injection",
+      "bindings": [
+        {
+          "name": "attacker",
+          "entityId": "actor-a"
+        },
+        {
+          "name": "source",
+          "entityId": "sender-host"
+        },
+        {
+          "name": "web_host",
+          "entityId": "web-host"
+        },
+        {
+          "name": "web",
+          "entityId": "web-service"
+        },
+        {
+          "name": "db_host",
+          "entityId": "db-host"
+        },
+        {
+          "name": "database",
+          "entityId": "db-service"
+        },
+        {
+          "name": "db_principal",
+          "entityId": "db-account"
+        },
+        {
+          "name": "request",
+          "entityId": "sql-request"
+        }
+      ]
+    },
+    {
+      "attackId": "reflected_xss",
+      "bindings": [
+        {
+          "name": "attacker",
+          "entityId": "actor-a"
+        },
+        {
+          "name": "victim",
+          "entityId": "user-a"
+        },
+        {
+          "name": "client",
+          "entityId": "client-host"
+        },
+        {
+          "name": "browser",
+          "entityId": "browser-service"
+        },
+        {
+          "name": "web_host",
+          "entityId": "web-host"
+        },
+        {
+          "name": "web",
+          "entityId": "web-service"
+        },
+        {
+          "name": "request",
+          "entityId": "link-request"
+        }
+      ]
+    },
+    {
+      "attackId": "phishing",
+      "bindings": [
+        {
+          "name": "attacker",
+          "entityId": "actor-a"
+        },
+        {
+          "name": "victim",
+          "entityId": "user-a"
+        },
+        {
+          "name": "sender",
+          "entityId": "sender-host"
+        },
+        {
+          "name": "client",
+          "entityId": "client-host"
+        },
+        {
+          "name": "browser",
+          "entityId": "browser-service"
+        },
+        {
+          "name": "mail_host",
+          "entityId": "mail-host"
+        },
+        {
+          "name": "mail",
+          "entityId": "email-service"
+        },
+        {
+          "name": "web_host",
+          "entityId": "web-host"
+        },
+        {
+          "name": "web",
+          "entityId": "web-service"
+        },
+        {
+          "name": "request",
+          "entityId": "link-request"
+        }
+      ]
+    }
+  ]
+}

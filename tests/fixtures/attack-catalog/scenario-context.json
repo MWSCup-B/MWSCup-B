@@ -1,0 +1,238 @@
+{
+  "schemaVersion": "1.0",
+  "entities": [
+    {
+      "id": "actor-a",
+      "type": "actor"
+    },
+    {
+      "id": "user-a",
+      "type": "user"
+    },
+    {
+      "id": "db-account",
+      "type": "database_principal"
+    },
+    {
+      "id": "link-request",
+      "type": "web_request"
+    },
+    {
+      "id": "sql-request",
+      "type": "web_request"
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "predicate": "input_reflected_as_executable_script",
+      "args": [
+        "web-service",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "input_controls_sql_structure",
+      "args": [
+        "web-service",
+        "db-service",
+        "sql-request"
+      ],
+      "value": true
+    }
+  ],
+  "attackerInitialPrivileges": [
+    {
+      "predicate": "controls_node",
+      "args": [
+        "actor-a",
+        "sender-host"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "controls_request_input",
+      "args": [
+        "actor-a",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "controls_request_input",
+      "args": [
+        "actor-a",
+        "sql-request"
+      ],
+      "value": true
+    }
+  ],
+  "requiredUserActions": [
+    {
+      "predicate": "follows_email_link",
+      "args": [
+        "user-a",
+        "email-service",
+        "browser-service",
+        "link-request"
+      ],
+      "value": true
+    }
+  ],
+  "loggingConfiguration": [
+    {
+      "predicate": "email_record_available",
+      "args": [
+        "email-service",
+        "user-a",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "access_record_available",
+      "args": [
+        "web-service",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "access_record_available",
+      "args": [
+        "web-service",
+        "sql-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "script_execution_record_available",
+      "args": [
+        "browser-service",
+        "web-service",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "statement_record_available",
+      "args": [
+        "db-service",
+        "db-account",
+        "sql-request"
+      ],
+      "value": true
+    }
+  ],
+  "authenticationConditions": [
+    {
+      "predicate": "mail_access_permitted",
+      "args": [
+        "user-a",
+        "email-service"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "request_access_permitted",
+      "args": [
+        "user-a",
+        "web-service",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "request_access_permitted",
+      "args": [
+        "actor-a",
+        "web-service",
+        "sql-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "database_session_authorized",
+      "args": [
+        "web-service",
+        "db-service",
+        "db-account"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "query_execution_permitted",
+      "args": [
+        "db-account",
+        "db-service",
+        "sql-request"
+      ],
+      "value": true
+    }
+  ],
+  "otherConditions": [
+    {
+      "predicate": "request_targets_service",
+      "args": [
+        "link-request",
+        "web-service"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "request_targets_service",
+      "args": [
+        "sql-request",
+        "web-service"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "user_uses_browser",
+      "args": [
+        "user-a",
+        "browser-service"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "deceptive_email_deliverable",
+      "args": [
+        "actor-a",
+        "sender-host",
+        "email-service",
+        "user-a",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "script_execution_permitted",
+      "args": [
+        "browser-service",
+        "web-service",
+        "link-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "attacker_request_submitted",
+      "args": [
+        "actor-a",
+        "sender-host",
+        "web-service",
+        "sql-request"
+      ],
+      "value": true
+    },
+    {
+      "predicate": "request_reaches_sql_execution",
+      "args": [
+        "web-service",
+        "db-service",
+        "sql-request"
+      ],
+      "value": true
+    }
+  ]
+}

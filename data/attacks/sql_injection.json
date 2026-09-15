@@ -1,0 +1,277 @@
+{
+  "schemaVersion": "1.0",
+  "id": "sql_injection",
+  "label": "SQLインジェクション（Webアプリ経由）",
+  "category": "web_injection",
+  "description": "Webアプリに送られた入力がSQLの構文・意図を変え、アプリのDB接続権限内で実行される範囲。認証回避、データ窃取・改変、DB管理者権限、OS実行は自動的な効果にしない。",
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "source",
+      "kind": "node"
+    },
+    {
+      "id": "web_host",
+      "kind": "node"
+    },
+    {
+      "id": "web",
+      "kind": "service"
+    },
+    {
+      "id": "db_host",
+      "kind": "node"
+    },
+    {
+      "id": "database",
+      "kind": "service"
+    },
+    {
+      "id": "db_principal",
+      "kind": "entity"
+    },
+    {
+      "id": "request",
+      "kind": "entity"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    },
+    {
+      "binding": "db_principal",
+      "values": [
+        "database_principal"
+      ]
+    },
+    {
+      "binding": "request",
+      "values": [
+        "web_request"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "web",
+      "values": [
+        "web"
+      ]
+    },
+    {
+      "binding": "database",
+      "values": [
+        "sql"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "web",
+      "node": "web_host",
+      "values": [
+        "web_application"
+      ]
+    },
+    {
+      "binding": "database",
+      "node": "db_host",
+      "values": [
+        "sql_database"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "otherConditions",
+      "predicate": "request_targets_service",
+      "args": [
+        "$request",
+        "$web"
+      ],
+      "value": true,
+      "description": "このリクエストのURL・経路は、割り当てたWebサービスを対象とする。"
+    },
+    {
+      "source": "vulnerabilities",
+      "predicate": "input_controls_sql_structure",
+      "args": [
+        "$web",
+        "$database",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該入力がSQLに組み込まれ、値として安全に束縛されずSQLの構文・意図を変えられる。単なるDB利用や任意の入力欄だけでは成立しない。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "attacker_request_submitted",
+      "args": [
+        "$attacker",
+        "$source",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "攻撃者が当該送信元から対象リクエストを送るという明示条件。XSS実行だけからこの操作を補完しない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "request_access_permitted",
+      "args": [
+        "$attacker",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該入力処理に到達するための認証・認可条件を満たす。認証不要の場合も確認済みとして明示する。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "database_session_authorized",
+      "args": [
+        "$web",
+        "$database",
+        "$db_principal"
+      ],
+      "value": true,
+      "description": "対象WebアプリがこのDB主体で対象DBへの接続認証・利用条件を満たす。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "query_execution_permitted",
+      "args": [
+        "$db_principal",
+        "$database",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該改変クエリをDB主体の権限で実行できる。DBへの接続成功から管理者権限や任意操作権限を推測しない。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "request_reaches_sql_execution",
+      "args": [
+        "$web",
+        "$database",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該リクエストがアプリ・WAF等で阻止されず、対象DBのSQL処理まで到達する。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_node",
+      "args": [
+        "$attacker",
+        "$source"
+      ],
+      "value": true,
+      "description": "攻撃者がリクエストの送信元ノードを操作できる。"
+    },
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_request_input",
+      "args": [
+        "$attacker",
+        "$request"
+      ],
+      "value": true,
+      "description": "攻撃者がSQL処理へ渡る当該リクエスト入力を構成できる。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "source",
+      "toService": "web",
+      "description": "攻撃者の送信元からWebサービスへの到達性。"
+    },
+    {
+      "from": "web_host",
+      "toService": "database",
+      "description": "WebアプリのノードからDBサービスへの到達性。攻撃者からDBへの直接接続は必須としない。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "sql_query_structure_modified",
+      "args": [
+        "$attacker",
+        "$web",
+        "$database",
+        "$db_principal",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該リクエストによりSQLが改変され、指定されたDB主体の権限範囲内で実行される。具体的な漏えい・改変被害は別途条件が必要。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "web_access_record",
+      "description": "対象リクエストのアクセス記録。取得設定と保持が確認された場合のみ候補にする。これだけではスクリプト実行や実際の操作者を断定できない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "access_record_available",
+          "args": [
+            "$web",
+            "$request"
+          ],
+          "value": true,
+          "description": "対象リクエストが記録対象で、必要な時刻・対象情報を含むアクセス記録が取得・保持されている。"
+        }
+      ]
+    },
+    {
+      "id": "database_statement_record",
+      "description": "実行されたSQLに対応するDB監査記録。対象クエリを識別できる記録内容と保持条件が必要であり、記録だけで実際の操作者は断定できない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "statement_record_available",
+          "args": [
+            "$database",
+            "$db_principal",
+            "$request"
+          ],
+          "value": true,
+          "description": "当該主体のクエリを対象とする監査が有効で、当該SQLを識別できる記録が取得・保持されている。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "OWASP SQL Injection"
+  ],
+  "references": [
+    {
+      "id": "owasp_sql_injection",
+      "title": "OWASP: SQL Injection",
+      "url": "https://community.owasp.org/attacks/SQL_Injection",
+      "supports": "prerequisites/effects: Webアプリ入力によるSQL処理の改変と、DB側権限に依存する影響。個別被害やOS実行を一律に付与しない。"
+    },
+    {
+      "id": "owasp_sql_prevention",
+      "title": "OWASP: SQL Injection Prevention Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+      "supports": "input_controls_sql_structure: 値とSQL構造を分離するパラメータ化、およびDB権限の最小化。"
+    },
+    {
+      "id": "owasp_logging",
+      "title": "OWASP Logging Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "supports": "observableArtifacts: ログの取得内容・取得設定・保持を個別に確認する原則。製品固有のイベントIDや既定記録は保証しない。"
+    }
+  ]
+}

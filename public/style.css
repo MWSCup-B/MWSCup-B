@@ -1,0 +1,19 @@
+:root { font-family: system-ui, sans-serif; color: #182b39; background: #eef2f5; line-height: 1.7; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+header { background: #182b39; color: white; padding: .6rem max(1rem, calc((100% - 840px) / 2)); }
+main { max-width: 840px; margin: 2rem auto; padding: 0 1rem; }
+section { background: white; padding: clamp(1rem, 4vw, 2rem); border-radius: .5rem; }
+h1 { margin-top: 0; font-size: 1.7rem; }
+h2 { font-size: 1.2rem; margin-top: 1.6rem; }
+.notice, .kind { color: #445767; font-size: .9rem; }
+.card { border: 1px solid #becbd3; border-radius: .3rem; margin: .8rem 0; padding: 1rem; overflow-wrap: anywhere; }
+.card p { margin: .4rem 0; white-space: pre-wrap; }
+button { font: inherit; padding: .6rem 1rem; background: #155a74; color: white; border: 0; border-radius: .3rem; cursor: pointer; }
+button:disabled { background: #596772; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 3px solid #a45100; outline-offset: 3px; }
+label { display: block; cursor: pointer; }
+input { margin-right: .6rem; }
+fieldset { border: 0; padding: 0; margin: 1rem 0; min-width: 0; }
+legend { font-weight: bold; }
+#error { color: #a21b1b; }

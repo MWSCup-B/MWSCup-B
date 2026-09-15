@@ -1,0 +1,239 @@
+{
+  "schemaVersion": "1.0",
+  "id": "reflected_xss",
+  "label": "反射型クロスサイトスクリプティング",
+  "category": "web_injection",
+  "description": "攻撃者の入力がWeb応答に反射され、利用者のブラウザで対象オリジンのスクリプトとして実行される範囲。Cookie窃取、認証回避、OSコマンド実行、SQL injectionを自動的な効果にしない。",
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "victim",
+      "kind": "entity"
+    },
+    {
+      "id": "client",
+      "kind": "node"
+    },
+    {
+      "id": "browser",
+      "kind": "service"
+    },
+    {
+      "id": "web_host",
+      "kind": "node"
+    },
+    {
+      "id": "web",
+      "kind": "service"
+    },
+    {
+      "id": "request",
+      "kind": "entity"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    },
+    {
+      "binding": "victim",
+      "values": [
+        "user"
+      ]
+    },
+    {
+      "binding": "request",
+      "values": [
+        "web_request"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "browser",
+      "values": [
+        "browser"
+      ]
+    },
+    {
+      "binding": "web",
+      "values": [
+        "web"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "browser",
+      "node": "client",
+      "values": [
+        "web_browser"
+      ]
+    },
+    {
+      "binding": "web",
+      "node": "web_host",
+      "values": [
+        "web_application"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "otherConditions",
+      "predicate": "request_targets_service",
+      "args": [
+        "$request",
+        "$web"
+      ],
+      "value": true,
+      "description": "このリクエストのURL・経路は、割り当てたWebサービスを対象とする。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "user_uses_browser",
+      "args": [
+        "$victim",
+        "$browser"
+      ],
+      "value": true,
+      "description": "この利用者が、割り当てたブラウザを使用するというシナリオ条件。利用記録だけから人物を断定したものではない。"
+    },
+    {
+      "source": "vulnerabilities",
+      "predicate": "input_reflected_as_executable_script",
+      "args": [
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該リクエストの入力が応答へ反射され、出力先文脈のエンコード等の防御が不足して実行可能なスクリプトとして解釈される。単に文字列が反射されるだけでは成立しない。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "browser_request_issued",
+      "args": [
+        "$victim",
+        "$browser",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "対象利用者・ブラウザから当該リクエストが送られる。前段のリンク誘導効果または明示入力が必要。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "script_execution_permitted",
+      "args": [
+        "$browser",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該応答についてJavaScript設定・CSP等の実効制御がスクリプト実行を阻止しない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "request_access_permitted",
+      "args": [
+        "$victim",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "この利用者による対象リクエストが必要な認証・認可条件を満たす。認証不要の場合も確認済みとして明示する。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_request_input",
+      "args": [
+        "$attacker",
+        "$request"
+      ],
+      "value": true,
+      "description": "攻撃者がこのリクエストの反射される入力を構成できる。利用者やサーバーの管理者権限を仮定しない。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "client",
+      "toService": "web",
+      "description": "利用者端末から反射するWebサービスへの到達性。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "script_executed_in_origin",
+      "args": [
+        "$attacker",
+        "$victim",
+        "$browser",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "このブラウザの対象Webオリジンでスクリプトが実行される。Webオリジンを越えた権限やDB権限を付与しない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "web_access_record",
+      "description": "対象リクエストのアクセス記録。取得設定と保持が確認された場合のみ候補にする。これだけではスクリプト実行や実際の操作者を断定できない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "access_record_available",
+          "args": [
+            "$web",
+            "$request"
+          ],
+          "value": true,
+          "description": "対象リクエストが記録対象で、必要な時刻・対象情報を含むアクセス記録が取得・保持されている。"
+        }
+      ]
+    },
+    {
+      "id": "browser_execution_record",
+      "description": "当該スクリプトの実行を示すブラウザ計測記録。標準のアクセスログやCSP違反ログを実行成功の証明に置き換えない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "script_execution_record_available",
+          "args": [
+            "$browser",
+            "$web",
+            "$request"
+          ],
+          "value": true,
+          "description": "当該実行を識別できるブラウザ計測が有効で、実行成功の記録が取得・保持されている。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "OWASP Reflected XSS"
+  ],
+  "references": [
+    {
+      "id": "owasp_reflected_xss",
+      "title": "OWASP: Cross Site Scripting (XSS)",
+      "url": "https://community.owasp.org/attacks/xss/",
+      "supports": "prerequisites/effects: リクエスト入力の反射、別経路での配送、ブラウザによる対象サイトのスクリプト実行。単なる反射から実行を推定しない。"
+    },
+    {
+      "id": "owasp_logging",
+      "title": "OWASP Logging Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "supports": "observableArtifacts: ログの取得内容・取得設定・保持を個別に確認する原則。製品固有のイベントIDや既定記録は保証しない。"
+    }
+  ]
+}
