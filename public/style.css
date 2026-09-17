@@ -12,8 +12,21 @@ h2 { font-size: 1.2rem; margin-top: 1.6rem; }
 button { font: inherit; padding: .6rem 1rem; background: #155a74; color: white; border: 0; border-radius: .3rem; cursor: pointer; }
 button:disabled { background: #596772; cursor: default; }
 button:focus-visible, input:focus-visible { outline: 3px solid #a45100; outline-offset: 3px; }
+textarea:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #a45100; outline-offset: 3px; }
 label { display: block; cursor: pointer; }
 input { margin-right: .6rem; }
 fieldset { border: 0; padding: 0; margin: 1rem 0; min-width: 0; }
 legend { font-weight: bold; }
 #error { color: #a21b1b; }
+.author-main { max-width: 1120px; }
+.author-main > section { margin-bottom: 1rem; }
+.step { border-left: .35rem solid #155a74; }
+.status-panel { display: flex; flex-wrap: wrap; gap: 1rem; padding: .8rem; background: #e7f1f5; }
+.next-action { background: #fff6dc; padding: .6rem; }
+textarea, select { width: 100%; font: 0.9rem ui-monospace, monospace; padding: .6rem; margin: .35rem 0 1rem; }
+textarea { resize: vertical; white-space: pre; }
+.output { max-height: 24rem; overflow: auto; padding: .8rem; background: #f3f6f7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.button-row { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+.attack-option { padding: .5rem; border-bottom: 1px solid #d5dee3; }
+.button-link { display: inline-block; padding: .7rem 1rem; background: #155a74; color: white; text-decoration: none; border-radius: .3rem; }
+#author-errors { color: #a21b1b; white-space: pre-wrap; }

@@ -13,11 +13,7 @@ export function compareCondition(actual, expected) {
   return actual === undefined || actual === null ? UNKNOWN : actual === expected ? SATISFIED : UNSATISFIED;
 }
 
-function checkInput(network, context, candidate, definitions) {
-  validateDocument('network', network);
-  validateDocument('scenario-context', context);
-  validateDocument('candidate', candidate);
-  validateCatalog(definitions);
+function checkEnvironmentReferences(network, context, definitions) {
   const entities = new Map();
   for (const [kind, items] of [['node', network.nodes], ['service', network.services], ['entity', context.entities]]) {
     for (const item of items) {
@@ -60,9 +56,29 @@ function checkInput(network, context, candidate, definitions) {
     unique(context[source], x => keyOf(source, x.predicate, x.args), `scenario-context.${source}`);
     for (const fact of context[source]) for (const arg of fact.args) requireEntity(arg, null, `scenario-context.${source}.args`);
   }
+  return { entities, catalog: new Map(definitions.map(x => [x.id, x])) };
+}
+
+export function validateEnvironment(network, context, definitions) {
+  validateDocument('network', network);
+  validateDocument('scenario-context', context);
+  validateCatalog(definitions);
+  return checkEnvironmentReferences(network, context, definitions);
+}
+
+function checkInput(network, context, candidate, definitions) {
+  validateDocument('network', network);
+  validateDocument('scenario-context', context);
+  validateDocument('candidate', candidate);
+  validateCatalog(definitions);
+  const { entities, catalog } = checkEnvironmentReferences(network, context, definitions);
+  const requireEntity = (id, kind, field) => {
+    if (!entities.has(id) || (kind && entities.get(id).kind !== kind)) {
+      fail('BROKEN_REFERENCE', field, '参照先が存在しないか種類が一致しません。');
+    }
+  };
   unique(candidate.selectedAttackIds, x => x, 'candidate.selectedAttackIds');
   unique(candidate.assignments, x => x.attackId, 'candidate.assignments');
-  const catalog = new Map(definitions.map(x => [x.id, x]));
   for (const id of candidate.selectedAttackIds) if (!catalog.has(id)) fail('UNREGISTERED_ATTACK', 'candidate.selectedAttackIds', '未登録の攻撃が含まれています。');
   if (candidate.assignments.length !== candidate.selectedAttackIds.length
     || candidate.assignments.some(x => !candidate.selectedAttackIds.includes(x.attackId))) {
@@ -116,6 +132,13 @@ function evaluateAttack(attack, entities, network, facts) {
   for (const condition of [...definition.prerequisites, ...definition.requiredPrivileges]) {
     checks.push(evaluateFact(condition, bindings, facts));
   }
+  // Attack Graph v1が追跡する既存評価の順序は維持し、追加の割当て制約は末尾で検証する。
+  for (const constraint of definition.requiredRoles ?? []) {
+    const entity = entities.get(bindings.get(constraint.binding));
+    const state = constraint.values.every(role => entity.roles.includes(role)) ? SATISFIED : UNSATISFIED;
+    checks.push({ field: 'requiredRoles', args: [entity.id], state,
+      reason: 'Attack Definitionで宣言されたroleを対象ノードがすべて持つか確認します。' });
+  }
   return { attackId: definition.id, state: aggregate(checks.map(x => x.state)), checks };
 }
 
@@ -148,9 +171,10 @@ export function evaluateCandidate({ network, context, candidate, definitions }) 
       const edges = [];
       const reports = [];
       const reads = new Map();
-      const addEdge = (from, to, kind, field) => {
-        if (from && from !== to && !edges.some(x => x.from === from && x.to === to && x.kind === kind && x.field === field)) {
-          edges.push({ from, to, kind, field });
+      const addEdge = (from, to, kind, field, key) => {
+        if (from && from !== to && !edges.some(x => x.from === from && x.to === to
+          && x.kind === kind && x.field === field && x.key === key)) {
+          edges.push({ from, to, kind, field, key });
         }
       };
       for (const attack of order) {
@@ -159,7 +183,7 @@ export function evaluateCandidate({ network, context, candidate, definitions }) 
         reports.push(report);
         if (report.state !== SATISFIED) break;
         for (const check of report.checks.filter(x => x.key)) {
-          addEdge(check.producer, definition.id, 'ENABLES', check.field);
+          addEdge(check.producer, definition.id, 'ENABLES', check.field, check.key);
           const consumers = reads.get(check.key) ?? [];
           consumers.push({ id: definition.id, value: facts.get(check.key)?.value });
           reads.set(check.key, consumers);
@@ -168,9 +192,11 @@ export function evaluateCandidate({ network, context, candidate, definitions }) 
           const key = keyOf(effect.source, effect.predicate, effect.args.map(arg => bindings.get(arg.slice(1))));
           const previous = facts.get(key);
           if (previous?.value !== effect.value) {
-            addEdge(previous?.producer, definition.id, 'ORDERING', `${effect.source}.${effect.predicate}`);
+            addEdge(previous?.producer, definition.id, 'ORDERING', `${effect.source}.${effect.predicate}`, key);
             for (const consumer of reads.get(key) ?? []) {
-              if (consumer.value !== effect.value) addEdge(consumer.id, definition.id, 'ORDERING', `${effect.source}.${effect.predicate}`);
+              if (consumer.value !== effect.value) {
+                addEdge(consumer.id, definition.id, 'ORDERING', `${effect.source}.${effect.predicate}`, key);
+              }
             }
             facts.set(key, { value: effect.value, producer: definition.id });
           }

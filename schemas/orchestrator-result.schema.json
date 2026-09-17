@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Orchestrator Result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "workflowId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "chainFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "currentState": { "enum": ["DRAFT", "NEEDS_REVISION", "VERIFIED", "EVIDENCE_READY", "BUILT", "ACCEPTED", "BLOCKED"] },
+    "currentGate": { "enum": ["INPUT_VALIDATION", "CANDIDATE_BUILDER", "ATTACK_GRAPH", "SCENARIO_IMPORT", "VERIFICATION", "EVIDENCE_IMPORT", "GAME_CASE_CONVERSION", "GAME_PROGRESSION", "GAME_MAKE", "EVALUATION", "COMPLETE"] },
+    "waitingFor": { "enum": [null, "WAITING_EXTERNAL_SCENARIO", "WAITING_EXTERNAL_REVIEW", "WAITING_EXTERNAL_EVIDENCE"] },
+    "completedGates": {
+      "type": "array",
+      "items": { "enum": ["INPUT_VALIDATION", "CANDIDATE_BUILDER", "ATTACK_GRAPH", "SCENARIO_IMPORT", "VERIFICATION", "EVIDENCE_IMPORT", "GAME_CASE_CONVERSION", "GAME_PROGRESSION", "GAME_MAKE", "EVALUATION"] },
+      "minItems": 0,
+      "maxItems": 10
+    },
+    "blockedGate": { "type": ["string", "null"], "maxLength": 100 },
+    "artifactRefs": { "type": "object", "additionalProperties": true },
+    "fingerprints": { "type": "object", "additionalProperties": true },
+    "retryCounters": {
+      "type": "object",
+      "properties": {
+        "scenarioRevision": { "type": "number" },
+        "scenarioRevisionLimit": { "type": "number" },
+        "courtAttempts": { "type": "number" },
+        "courtAttemptLimit": { "type": "number" }
+      },
+      "required": ["scenarioRevision", "scenarioRevisionLimit", "courtAttempts", "courtAttemptLimit"],
+      "additionalProperties": false
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "gate": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "sourceRefs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "minItems": 1, "maxItems": 128 }
+        },
+        "required": ["code", "gate", "reason", "correctionHint", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 512
+    }
+  },
+  "required": ["schemaVersion", "workflowId", "inputFingerprint", "chainFingerprint", "currentState", "currentGate", "waitingFor", "completedGates", "blockedGate", "artifactRefs", "fingerprints", "retryCounters", "issues"],
+  "additionalProperties": false
+}

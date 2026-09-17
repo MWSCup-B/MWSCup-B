@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Candidate selection v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "selectedAttackIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "minItems": 1,
+      "maxItems": 3
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "selectedAttackIds"
+  ],
+  "additionalProperties": false
+}

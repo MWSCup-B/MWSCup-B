@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "External Evidence Generation Input v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "evidenceGenerationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "status": { "enum": ["READY", "BLOCKED"] },
+    "blocked": { "type": "boolean" },
+    "generatorMode": { "const": "EXTERNAL_USER_CODEX" },
+    "promptTemplateVersion": { "const": "1.0" },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "sourceRefs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "minItems": 1, "maxItems": 128 }
+        },
+        "required": ["code", "field", "reason", "correctionHint", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "evidenceAgentInput": { "type": ["object", "null"], "additionalProperties": true },
+    "outputContract": { "type": ["object", "null"], "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "evidenceGenerationInputId", "status", "blocked", "generatorMode", "promptTemplateVersion", "issues", "evidenceAgentInput", "outputContract"],
+  "additionalProperties": false
+}

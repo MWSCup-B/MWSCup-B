@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Orchestrator Input Validation Result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "const": "VALID" },
+    "inputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "selection": { "type": "object", "additionalProperties": true },
+    "network": { "type": "object", "additionalProperties": true },
+    "scenarioContext": { "type": "object", "additionalProperties": true },
+    "attackDefinitions": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 1,
+      "maxItems": 256
+    }
+  },
+  "required": ["schemaVersion", "status", "inputId", "inputFingerprint", "selection", "network", "scenarioContext", "attackDefinitions"],
+  "additionalProperties": false
+}

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ゲーム制作 — インシデント調査ゲーム</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/author.js"></script>
+</head>
+<body>
+  <header><p>インシデント調査ゲーム — 制作画面</p></header>
+  <main class="author-main">
+    <section aria-labelledby="author-title">
+      <h1 id="author-title">Generated Game Caseを制作</h1>
+      <p>外部Codexは手動で使用します。入力中の命令文、HTML、URL、コードは実行しません。</p>
+      <div class="status-panel">
+        <strong>現在状態: <span id="workflow-state">開始中</span></strong>
+        <span>外部待機: <span id="waiting-state">なし</span></span>
+        <span>現在工程: <span id="stage-state">INPUT</span></span>
+      </div>
+      <div id="author-errors" role="alert"></div>
+    </section>
+
+    <section class="step" id="step-input">
+      <h2>Step 1 — Attack / Network / Scenario Context</h2>
+      <p class="next-action">攻撃を1～3件選び、NetworkとScenario Contextを確認してScenario生成準備を実行します。</p>
+      <fieldset><legend>Attack Selection</legend><div id="attack-list"></div></fieldset>
+      <label for="network-json">Network JSON</label>
+      <textarea id="network-json" rows="16" spellcheck="false"></textarea>
+      <label for="context-json">Scenario Context JSON</label>
+      <textarea id="context-json" rows="16" spellcheck="false"></textarea>
+      <button id="prepare-scenario" type="button">Scenario生成準備</button>
+      <pre id="prepare-result" class="output" aria-label="生成前Validation結果"></pre>
+    </section>
+
+    <section class="step" id="step-scenario-generation">
+      <h2>Step 2–3 — Scenarioを外部Codexで生成</h2>
+      <p class="next-action">候補を選択し、PromptとGeneration Inputを同じCodex作業へ渡してください。</p>
+      <label for="scenario-option">Candidate / Attack Graph</label>
+      <select id="scenario-option"></select>
+      <div class="button-row">
+        <button type="button" data-copy="scenario-prompt">Promptをコピー</button>
+        <button type="button" data-copy="scenario-input">Input JSONをコピー</button>
+        <button type="button" data-save="scenario-input">Input JSONを保存</button>
+      </div>
+      <label for="scenario-prompt">Scenario Generation Prompt</label>
+      <textarea id="scenario-prompt" rows="10" readonly></textarea>
+      <label for="scenario-input">Scenario Generation Input</label>
+      <textarea id="scenario-input" rows="14" readonly></textarea>
+    </section>
+
+    <section class="step" id="step-scenario-import">
+      <h2>Step 4 — Scenario JSON Import</h2>
+      <p class="next-action">Codexが返したScenario Import Package JSONを貼り付けるか、JSONファイルを読み込みます。</p>
+      <input id="scenario-file" type="file" accept="application/json,.json">
+      <textarea id="scenario-json" rows="16" spellcheck="false"></textarea>
+      <button id="import-scenario" type="button">ScenarioをImport</button>
+      <pre id="scenario-result" class="output"></pre>
+    </section>
+
+    <section class="step" id="step-verification">
+      <h2>Step 5–8 — Independent Verification Review</h2>
+      <p class="next-action">Scenario生成とは分離したCodex作業へVerification Prompt/Inputを渡し、Review JSONを戻してください。</p>
+      <div class="button-row">
+        <button type="button" data-copy="verification-prompt">Promptをコピー</button>
+        <button type="button" data-copy="verification-input">Input JSONをコピー</button>
+        <button type="button" data-save="verification-input">Input JSONを保存</button>
+      </div>
+      <label for="verification-prompt">Verification Prompt</label>
+      <textarea id="verification-prompt" rows="10" readonly></textarea>
+      <label for="verification-input">Verification Input</label>
+      <textarea id="verification-input" rows="14" readonly></textarea>
+      <label for="review-json">Scenario Verification Review JSON</label>
+      <input id="review-file" type="file" accept="application/json,.json">
+      <textarea id="review-json" rows="14" spellcheck="false"></textarea>
+      <button id="import-review" type="button">Independent ReviewをImport</button>
+      <pre id="verification-result" class="output"></pre>
+      <button id="prepare-evidence" type="button">Evidence生成準備</button>
+    </section>
+
+    <section class="step" id="step-evidence">
+      <h2>Step 9–11 — Evidenceを外部Codexで生成・Import</h2>
+      <p class="next-action">VERIFIED後に表示されるPrompt/InputをCodexへ渡し、Evidence Import Packageを戻してください。</p>
+      <div class="button-row">
+        <button type="button" data-copy="evidence-prompt">Promptをコピー</button>
+        <button type="button" data-copy="evidence-input">Input JSONをコピー</button>
+        <button type="button" data-save="evidence-input">Input JSONを保存</button>
+      </div>
+      <label for="evidence-prompt">Evidence Generation Prompt</label>
+      <textarea id="evidence-prompt" rows="10" readonly></textarea>
+      <label for="evidence-input">Evidence Generation Input</label>
+      <textarea id="evidence-input" rows="14" readonly></textarea>
+      <label for="evidence-json">Evidence Import Package JSON</label>
+      <input id="evidence-file" type="file" accept="application/json,.json">
+      <textarea id="evidence-json" rows="16" spellcheck="false"></textarea>
+      <button id="import-evidence" type="button">EvidenceをImport</button>
+      <pre id="evidence-result" class="output"></pre>
+    </section>
+
+    <section class="step" id="step-progression">
+      <h2>Step 12 — Game Progression Plan</h2>
+      <p class="next-action">一覧に存在するIDだけを明示指定してください。本文からの自動推測やmaxCourtAttemptsの補完は行いません。</p>
+      <h3>利用可能なEvidence / Testimony / Statement ID</h3>
+      <pre id="progression-references" class="output"></pre>
+      <label for="progression-json">Game Progression Plan JSON</label>
+      <textarea id="progression-json" rows="20" spellcheck="false"></textarea>
+    </section>
+
+    <section class="step" id="step-build">
+      <h2>Step 13–15 — Game Build / Evaluation / Play</h2>
+      <p class="next-action">Planを検証し、Game Case、Game Make、独立Evaluation、Orchestratorを順に実行します。</p>
+      <button id="build-game" type="button">GameをBuildしてEvaluation</button>
+      <pre id="build-result" class="output"></pre>
+      <a id="play-game" class="button-link" hidden>ゲームをプレイ</a>
+    </section>
+  </main>
+</body>
+</html>

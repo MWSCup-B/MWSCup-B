@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evaluation Handoff v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "buildId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "buildFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "gameCaseId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "gameCaseFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "progressionFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "state": { "const": "BUILT" },
+    "eligibleForEvaluation": { "const": true }
+  },
+  "required": ["schemaVersion", "buildId", "buildFingerprint", "gameCaseId", "gameCaseFingerprint", "progressionFingerprint", "state", "eligibleForEvaluation"],
+  "additionalProperties": false
+}

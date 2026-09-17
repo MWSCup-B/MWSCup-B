@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "External Scenario Validation Feedback v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "const": "INVALID" },
+    "generationInputRef": {
+      "type": "object",
+      "properties": {
+        "generationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["generationInputId", "inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "validationStage": { "enum": ["SCHEMA_VALIDATION", "CONSISTENCY_VALIDATION"] },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        },
+        "required": ["code", "field", "reason", "correctionHint"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 256
+    }
+  },
+  "required": ["schemaVersion", "status", "generationInputRef", "validationStage", "errors"],
+  "additionalProperties": false
+}

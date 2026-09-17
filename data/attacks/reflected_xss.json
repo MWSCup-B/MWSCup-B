@@ -54,6 +54,20 @@
       ]
     }
   ],
+  "requiredRoles": [
+    {
+      "binding": "client",
+      "values": [
+        "workstation"
+      ]
+    },
+    {
+      "binding": "web_host",
+      "values": [
+        "web_server"
+      ]
+    }
+  ],
   "platforms": [
     {
       "binding": "browser",

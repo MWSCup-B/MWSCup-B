@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Validation Feedback v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "const": "INVALID" },
+    "generationInputRef": {
+      "type": "object",
+      "properties": {
+        "evidenceGenerationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["evidenceGenerationInputId", "inputFingerprint", "verificationId"],
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "evidenceId": { "type": ["string", "null"], "maxLength": 160 },
+          "requirementId": { "type": ["string", "null"], "maxLength": 160 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "sourceRefs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "minItems": 1, "maxItems": 128 }
+        },
+        "required": ["code", "field", "evidenceId", "requirementId", "reason", "correctionHint", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 512
+    }
+  },
+  "required": ["schemaVersion", "status", "generationInputRef", "errors"],
+  "additionalProperties": false
+}

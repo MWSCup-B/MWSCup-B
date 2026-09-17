@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game Case Handoff v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "handoffId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "evidenceSetId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "evidenceSetFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "state": { "const": "EVIDENCE_READY" },
+    "eligibleForGameCaseGeneration": { "const": true }
+  },
+  "required": ["schemaVersion", "handoffId", "evidenceSetId", "evidenceSetFingerprint", "scenarioId", "verificationId", "attackGraphRef", "state", "eligibleForGameCaseGeneration"],
+  "additionalProperties": false
+}

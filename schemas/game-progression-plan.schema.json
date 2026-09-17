@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game Progression Plan v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "planId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "evidenceSetId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "initialCourtEvidenceIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "initialCourtStatementIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "investigationEvidenceIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "retrialStatementIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "returnToCourtCondition": { "enum": ["AT_LEAST_ONE_EVIDENCE_COLLECTED", "ALL_REQUIRED_EVIDENCE_COLLECTED"] },
+    "objectionRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "objectionRuleId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "targetStatementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "acceptedEvidenceIds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+            "minItems": 1,
+            "maxItems": 64
+          },
+          "contradictionRef": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "exonerationRef": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+        },
+        "required": ["objectionRuleId", "targetStatementId", "acceptedEvidenceIds", "contradictionRef", "exonerationRef"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 256
+    },
+    "retryPolicy": {
+      "type": "object",
+      "properties": {
+        "maxCourtAttempts": { "type": "number" },
+        "onFailure": { "const": "RETURN_TO_INVESTIGATION" },
+        "onLimitReached": { "const": "BLOCKED" }
+      },
+      "required": ["maxCourtAttempts", "onFailure", "onLimitReached"],
+      "additionalProperties": false
+    },
+    "publicMessages": {
+      "type": "object",
+      "properties": {
+        "initialRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "acquittalRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "acquittalExplanation": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "failureFeedback": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      },
+      "required": ["initialRuling", "acquittalRuling", "acquittalExplanation", "failureFeedback"],
+      "additionalProperties": false
+    },
+    "fingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+  },
+  "required": ["schemaVersion", "planId", "scenarioId", "evidenceSetId", "attackGraphRef", "initialCourtEvidenceIds", "initialCourtStatementIds", "investigationEvidenceIds", "retrialStatementIds", "returnToCourtCondition", "objectionRules", "retryPolicy", "publicMessages", "fingerprint"],
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game Evaluation Input v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "evaluationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "gameMakeResult": { "type": "object", "additionalProperties": true },
+    "gameCaseResult": { "type": "object", "additionalProperties": true },
+    "internalGameCase": { "type": "object", "additionalProperties": true },
+    "publicGameCase": { "type": "object", "additionalProperties": true },
+    "gameProgression": { "type": "object", "additionalProperties": true },
+    "evidenceSet": { "type": "object", "additionalProperties": true },
+    "verificationResult": { "type": "object", "additionalProperties": true },
+    "scenarioPackage": { "type": "object", "additionalProperties": true },
+    "uiApiContract": { "type": "object", "additionalProperties": true },
+    "buildFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+  },
+  "required": ["schemaVersion", "evaluationInputId", "inputFingerprint", "gameMakeResult", "gameCaseResult", "internalGameCase", "publicGameCase", "gameProgression", "evidenceSet", "verificationResult", "scenarioPackage", "uiApiContract", "buildFingerprint"],
+  "additionalProperties": false
+}

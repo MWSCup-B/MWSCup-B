@@ -1,0 +1,879 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Attack Graph Build Result v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "status": {
+      "enum": [
+        "CREATED",
+        "BLOCKED"
+      ]
+    },
+    "evaluationState": {
+      "enum": [
+        "SATISFIED",
+        "UNSATISFIED",
+        "UNKNOWN",
+        null
+      ]
+    },
+    "scope": {
+      "const": "CANDIDATE_FEASIBILITY_ONLY"
+    },
+    "inputDigest": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "graphs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "1.0"
+          },
+          "graphId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "state": {
+            "const": "SATISFIED"
+          },
+          "structure": {
+            "enum": [
+              "SINGLE",
+              "LINEAR",
+              "BRANCHING",
+              "JOIN",
+              "PARALLEL",
+              "MIXED"
+            ]
+          },
+          "selectedAttackIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "rootNodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "leafNodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nodeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "attackDefinitionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "attackDefinitionSchemaVersion": {
+                  "const": "1.0"
+                },
+                "state": {
+                  "const": "SATISFIED"
+                },
+                "bindings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "entityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "entityId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 16
+                },
+                "evaluations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "evaluationId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "kind": {
+                        "enum": [
+                          "TARGET_TYPE",
+                          "PLATFORM",
+                          "REQUIRED_SERVICE",
+                          "REACHABILITY",
+                          "PREREQUISITE",
+                          "REQUIRED_PRIVILEGE",
+                          "ARTIFACT_CONDITION"
+                        ]
+                      },
+                      "field": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "predicate": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 80
+                      },
+                      "args": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "^[a-z][a-z0-9_-]*$"
+                        },
+                        "minItems": 0,
+                        "maxItems": 8
+                      },
+                      "expectedValues": {
+                        "type": "array",
+                        "items": {
+                          "type": [
+                            "string",
+                            "boolean"
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 32
+                      },
+                      "actualValue": {
+                        "type": [
+                          "string",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      "state": {
+                        "enum": [
+                          "SATISFIED",
+                          "UNSATISFIED",
+                          "UNKNOWN"
+                        ]
+                      },
+                      "origin": {
+                        "enum": [
+                          "NETWORK",
+                          "SCENARIO_CONTEXT",
+                          "ATTACK_EFFECT"
+                        ]
+                      },
+                      "sourceRef": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 512
+                      },
+                      "producerNodeId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 160,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "definitionRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "reason": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": [
+                      "evaluationId",
+                      "kind",
+                      "field",
+                      "predicate",
+                      "args",
+                      "expectedValues",
+                      "actualValue",
+                      "state",
+                      "origin",
+                      "sourceRef",
+                      "producerNodeId",
+                      "definitionRef",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 512
+                },
+                "effects": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "effectId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "source": {
+                        "enum": [
+                          "attackerInitialPrivileges",
+                          "authenticationConditions",
+                          "otherConditions"
+                        ]
+                      },
+                      "predicate": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "args": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "^[a-z][a-z0-9_-]*$"
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
+                      },
+                      "value": {
+                        "type": "boolean"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "definitionRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "effectId",
+                      "source",
+                      "predicate",
+                      "args",
+                      "value",
+                      "description",
+                      "definitionRef"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 64
+                },
+                "artifactEvaluations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "artifactId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "state": {
+                        "enum": [
+                          "SATISFIED",
+                          "UNSATISFIED",
+                          "UNKNOWN"
+                        ]
+                      },
+                      "evaluations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "evaluationId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-z][a-z0-9_-]*$"
+                            },
+                            "kind": {
+                              "enum": [
+                                "TARGET_TYPE",
+                                "PLATFORM",
+                                "REQUIRED_SERVICE",
+                                "REACHABILITY",
+                                "PREREQUISITE",
+                                "REQUIRED_PRIVILEGE",
+                                "ARTIFACT_CONDITION"
+                              ]
+                            },
+                            "field": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "predicate": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 80
+                            },
+                            "args": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80,
+                                "pattern": "^[a-z][a-z0-9_-]*$"
+                              },
+                              "minItems": 0,
+                              "maxItems": 8
+                            },
+                            "expectedValues": {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "string",
+                                  "boolean"
+                                ]
+                              },
+                              "minItems": 1,
+                              "maxItems": 32
+                            },
+                            "actualValue": {
+                              "type": [
+                                "string",
+                                "boolean",
+                                "null"
+                              ]
+                            },
+                            "state": {
+                              "enum": [
+                                "SATISFIED",
+                                "UNSATISFIED",
+                                "UNKNOWN"
+                              ]
+                            },
+                            "origin": {
+                              "enum": [
+                                "NETWORK",
+                                "SCENARIO_CONTEXT",
+                                "ATTACK_EFFECT"
+                              ]
+                            },
+                            "sourceRef": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 512
+                            },
+                            "producerNodeId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 160,
+                              "pattern": "^[a-z][a-z0-9_-]*$"
+                            },
+                            "definitionRef": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "required": [
+                            "evaluationId",
+                            "kind",
+                            "field",
+                            "predicate",
+                            "args",
+                            "expectedValues",
+                            "actualValue",
+                            "state",
+                            "origin",
+                            "sourceRef",
+                            "producerNodeId",
+                            "definitionRef",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 32
+                      }
+                    },
+                    "required": [
+                      "artifactId",
+                      "description",
+                      "state",
+                      "evaluations"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 0,
+                  "maxItems": 64
+                },
+                "referenceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "^[a-z][a-z0-9_-]*$"
+                  },
+                  "minItems": 1,
+                  "maxItems": 32
+                }
+              },
+              "required": [
+                "nodeId",
+                "attackDefinitionId",
+                "attackDefinitionSchemaVersion",
+                "state",
+                "bindings",
+                "evaluations",
+                "effects",
+                "artifactEvaluations",
+                "referenceIds"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "edgeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "type": {
+                  "const": "ENABLES"
+                },
+                "from": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "to": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "effectId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "prerequisiteEvaluationId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "matchedFact": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "enum": [
+                        "attackerInitialPrivileges",
+                        "authenticationConditions",
+                        "otherConditions"
+                      ]
+                    },
+                    "predicate": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "^[a-z][a-z0-9_-]*$"
+                    },
+                    "args": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "minItems": 1,
+                      "maxItems": 8
+                    },
+                    "value": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "predicate",
+                    "args",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                "grounds": {
+                  "type": "object",
+                  "properties": {
+                    "matchType": {
+                      "const": "EXACT_FACT_AND_VALUE"
+                    },
+                    "producerState": {
+                      "const": "SATISFIED"
+                    },
+                    "consumerState": {
+                      "const": "SATISFIED"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "matchType",
+                    "producerState",
+                    "consumerState",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "edgeId",
+                "type",
+                "from",
+                "to",
+                "effectId",
+                "prerequisiteEvaluationId",
+                "matchedFact",
+                "grounds"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 192
+          },
+          "executionConstraints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "before": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "after": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "reasonCode": {
+                  "const": "STATE_WRITE_CONFLICT"
+                },
+                "fact": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "enum": [
+                        "attackerInitialPrivileges",
+                        "authenticationConditions",
+                        "otherConditions"
+                      ]
+                    },
+                    "predicate": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "^[a-z][a-z0-9_-]*$"
+                    },
+                    "args": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "minItems": 1,
+                      "maxItems": 8
+                    },
+                    "value": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "predicate",
+                    "args",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "before",
+                "after",
+                "reasonCode",
+                "fact"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 192
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "componentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "structure": {
+                  "enum": [
+                    "SINGLE",
+                    "LINEAR",
+                    "BRANCHING",
+                    "JOIN",
+                    "MIXED"
+                  ]
+                },
+                "nodeIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-z][a-z0-9_-]*$"
+                  },
+                  "minItems": 1,
+                  "maxItems": 3
+                }
+              },
+              "required": [
+                "componentId",
+                "structure",
+                "nodeIds"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "sourcePlanOrders": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              "minItems": 1,
+              "maxItems": 3
+            },
+            "minItems": 1,
+            "maxItems": 6
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "graphId",
+          "state",
+          "structure",
+          "selectedAttackIds",
+          "rootNodeIds",
+          "leafNodeIds",
+          "nodes",
+          "edges",
+          "executionConstraints",
+          "components",
+          "sourcePlanOrders"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 6
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "category": {
+            "enum": [
+              "INVALID_INPUT",
+              "MISSING_INFORMATION",
+              "TECHNICAL_INFEASIBILITY"
+            ]
+          },
+          "state": {
+            "enum": [
+              "UNSATISFIED",
+              "UNKNOWN",
+              null
+            ]
+          },
+          "attackId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "field": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "minItems": 0,
+            "maxItems": 8
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "suggestion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "minItems": 0,
+            "maxItems": 16
+          }
+        },
+        "required": [
+          "code",
+          "category",
+          "state",
+          "attackId",
+          "field",
+          "subjects",
+          "reason",
+          "suggestion",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 192
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "status",
+    "evaluationState",
+    "scope",
+    "inputDigest",
+    "graphs",
+    "issues"
+  ],
+  "additionalProperties": false
+}

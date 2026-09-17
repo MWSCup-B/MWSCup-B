@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scenario Verification Result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "status": { "enum": ["VERIFIED", "NEEDS_REVISION", "BLOCKED"] },
+    "scope": { "const": "PRE_EVIDENCE_SCENARIO_VERIFICATION" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "attempt": {
+      "type": "object",
+      "properties": {
+        "revisionAttemptsUsed": { "type": "number" },
+        "maxRevisionAttempts": { "const": 3 }
+      },
+      "required": ["revisionAttemptsUsed", "maxRevisionAttempts"],
+      "additionalProperties": false
+    },
+    "independence": {
+      "type": "object",
+      "properties": {
+        "reviewId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "scenarioGeneratorSelfAssessmentUsed": { "const": false },
+        "technicalChecksRecomputed": { "const": true }
+      },
+      "required": ["reviewId", "scenarioGeneratorSelfAssessmentUsed", "technicalChecksRecomputed"],
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "checkId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "kind": { "enum": ["DETERMINISTIC", "SEMANTIC"] },
+          "category": { "enum": ["PHASE_5B_GATE", "ATTACK_GRAPH_RECONSTRUCTION", "ENVIRONMENT_ALIGNMENT", "GROUND_TRUTH_TRACEABILITY", "TIMELINE_CONSISTENCY", "EVIDENCE_PRODUCIBILITY", "REFERENCE_INTEGRITY", "EVIDENCE_GROUND_ALIGNMENT", "LEARNING_OBJECTIVE_ALIGNMENT", "FACT_NARRATIVE_SEPARATION", "IDENTITY_ATTRIBUTION", "INVESTIGATION_COVERAGE", "REFERENCE_CONTENT_ALIGNMENT"] },
+          "outcome": { "enum": ["PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE"] },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "sourceRefs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "minItems": 1,
+            "maxItems": 128
+          }
+        },
+        "required": ["checkId", "kind", "category", "outcome", "reason", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 13,
+      "maxItems": 13
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "issueId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "code": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "category": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "disposition": { "enum": ["REVISION", "BLOCK"] },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "targetId": { "type": ["string", "null"], "maxLength": 200 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "sourceRefs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "minItems": 1,
+            "maxItems": 128
+          }
+        },
+        "required": ["issueId", "code", "category", "disposition", "field", "targetId", "reason", "correctionHint", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "revisionFeedback": { "type": ["object", "null"], "additionalProperties": true },
+    "evidenceAgentEligible": { "type": "boolean" },
+    "evidenceAgentHandoff": { "type": ["object", "null"], "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "verificationId", "status", "scope", "scenarioId", "inputFingerprint", "attackGraphRef", "attempt", "independence", "checks", "issues", "revisionFeedback", "evidenceAgentEligible", "evidenceAgentHandoff"],
+  "additionalProperties": false
+}

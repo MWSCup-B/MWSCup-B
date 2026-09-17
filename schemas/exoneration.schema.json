@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Exoneration Finding v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "exonerationId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "defendantCharacterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "supportingEvidenceIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 2,
+      "maxItems": 64
+    },
+    "groundTruthRefs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+  },
+  "required": ["schemaVersion", "exonerationId", "defendantCharacterId", "supportingEvidenceIds", "groundTruthRefs", "reason"],
+  "additionalProperties": false
+}

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Public Game Case v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "gameCaseId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "title": { "const": "セキュリティインシデント調査" },
+    "synopsis": { "const": "取得可能な証拠と証言を確認し、主張の矛盾を指摘してください。" },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "characterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "publicRole": { "enum": ["DEFENDANT", "WITNESS", "VICTIM", "ADMINISTRATOR", "PARTICIPANT"] },
+          "publicDescription": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "required": ["characterId", "displayName", "publicRole", "publicDescription"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "detective": {
+      "type": "object",
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+              "type": { "enum": ["EMAIL", "WEB_ACCESS_LOG", "AUTHENTICATION_LOG", "APPLICATION_LOG", "DATABASE_LOG", "BROWSER_HISTORY", "DEVICE_INFORMATION", "NETWORK_LOG", "FILE_METADATA", "TESTIMONY", "DOCUMENT", "OTHER"] },
+              "publicContent": { "type": "string", "minLength": 1, "maxLength": 20000 },
+              "availability": { "const": "AVAILABLE" },
+              "displayOrder": { "type": "number" }
+            },
+            "required": ["evidenceId", "title", "type", "publicContent", "availability", "displayOrder"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 512
+        }
+      },
+      "required": ["evidence"],
+      "additionalProperties": false
+    },
+    "courtroom": {
+      "type": "object",
+      "properties": {
+        "testimonies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "testimonyEvidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "speakerCharacterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "statements": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "statementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+                    "spokenContent": { "type": "string", "minLength": 1, "maxLength": 4000 },
+                    "displayOrder": { "type": "number" }
+                  },
+                  "required": ["statementId", "spokenContent", "displayOrder"],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 64
+              },
+              "displayOrder": { "type": "number" }
+            },
+            "required": ["testimonyEvidenceId", "speakerCharacterId", "statements", "displayOrder"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 512
+        },
+        "presentableEvidenceIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "minItems": 1,
+          "maxItems": 512
+        }
+      },
+      "required": ["testimonies", "presentableEvidenceIds"],
+      "additionalProperties": false
+    },
+    "progression": { "type": "object", "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "gameCaseId", "title", "synopsis", "characters", "detective", "courtroom", "progression"],
+  "additionalProperties": false
+}

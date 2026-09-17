@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scenario Revision Feedback v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "const": "NEEDS_REVISION" },
+    "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "technicalBoundary": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "mustRemainUnchanged": { "const": true }
+      },
+      "required": ["inputDigest", "graphId", "mustRemainUnchanged"],
+      "additionalProperties": false
+    },
+    "attempt": {
+      "type": "object",
+      "properties": {
+        "revisionAttemptsUsed": { "type": "number" },
+        "maxRevisionAttempts": { "const": 3 },
+        "nextRevisionAttempt": { "type": "number" }
+      },
+      "required": ["revisionAttemptsUsed", "maxRevisionAttempts", "nextRevisionAttempt"],
+      "additionalProperties": false
+    },
+    "revisionTargets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "category": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "artifact": { "enum": ["scenarioDraft", "groundTruth", "characters", "timeline", "learningObjectives", "evidenceRequirements"] },
+          "targetId": { "type": ["string", "null"], "maxLength": 200 },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "sourceRefs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "minItems": 1,
+            "maxItems": 128
+          }
+        },
+        "required": ["code", "category", "artifact", "targetId", "field", "reason", "correctionHint", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 256
+    }
+  },
+  "required": ["schemaVersion", "status", "verificationId", "scenarioId", "technicalBoundary", "attempt", "revisionTargets"],
+  "additionalProperties": false
+}

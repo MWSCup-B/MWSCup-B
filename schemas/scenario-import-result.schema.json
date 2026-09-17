@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "External Scenario Import Result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "enum": ["VALID", "INVALID"] },
+    "valid": { "type": "boolean" },
+    "scope": { "const": "EXTERNAL_SCENARIO_IMPORT" },
+    "generationInputRef": {
+      "type": "object",
+      "properties": {
+        "generationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["generationInputId", "inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "scenarioId": { "type": ["string", "null"], "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": ["object", "null"],
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "validationStages": {
+      "type": "object",
+      "properties": {
+        "schema": { "enum": ["PASSED", "FAILED"] },
+        "consistency": { "enum": ["PASSED", "FAILED", "NOT_RUN"] }
+      },
+      "required": ["schema", "consistency"],
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        },
+        "required": ["code", "field", "reason", "correctionHint"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "feedback": { "type": ["object", "null"], "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "status", "valid", "scope", "generationInputRef", "scenarioId", "attackGraphRef", "validationStages", "errors", "feedback"],
+  "additionalProperties": false
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game Case Conversion Result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "enum": ["READY", "BLOCKED"] },
+    "ready": { "type": "boolean" },
+    "scope": { "const": "GAME_CASE_CONVERSION" },
+    "conversionInputRef": { "type": ["object", "null"], "additionalProperties": true },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "sourceRefs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "minItems": 1, "maxItems": 128 }
+        },
+        "required": ["code", "field", "reason", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 512
+    },
+    "gameCase": { "type": ["object", "null"], "additionalProperties": true },
+    "publicGameCase": { "type": ["object", "null"], "additionalProperties": true },
+    "uiIntegrationHandoff": { "type": ["object", "null"], "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "status", "ready", "scope", "conversionInputRef", "errors", "gameCase", "publicGameCase", "uiIntegrationHandoff"],
+  "additionalProperties": false
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Contradiction v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "contradictionId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "testimonyEvidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "statementRef": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "conflictingEvidenceIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "groundTruthRefs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+  },
+  "required": ["schemaVersion", "contradictionId", "testimonyEvidenceId", "statementRef", "conflictingEvidenceIds", "groundTruthRefs", "reason"],
+  "additionalProperties": false
+}

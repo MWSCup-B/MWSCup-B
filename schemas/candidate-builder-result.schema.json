@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Candidate builder result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "status": {
+      "enum": [
+        "CREATED",
+        "BLOCKED"
+      ]
+    },
+    "blocked": {
+      "type": "boolean"
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "scope": {
+      "const": "TARGET_ASSIGNMENT_ONLY"
+    },
+    "inputDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "1.0"
+          },
+          "selectedAttackIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attackId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "bindings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      },
+                      "entityId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "entityId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 16
+                }
+              },
+              "required": [
+                "attackId",
+                "bindings"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "selectedAttackIds",
+          "assignments"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 100000
+    },
+    "diagnostics": {
+      "type": "object",
+      "properties": {
+        "exploredStates": {
+          "type": "number"
+        },
+        "searchLimit": {
+          "type": "number"
+        },
+        "bindingCount": {
+          "type": "number"
+        },
+        "candidateDomainSizes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "attackId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              "binding": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              "size": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "attackId",
+              "binding",
+              "size"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 48
+        }
+      },
+      "required": [
+        "exploredStates",
+        "searchLimit",
+        "bindingCount",
+        "candidateDomainSizes"
+      ],
+      "additionalProperties": false
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "field": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "suggestion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "code",
+          "field",
+          "reason",
+          "suggestion"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 256
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "status",
+    "blocked",
+    "complete",
+    "scope",
+    "inputDigest",
+    "candidates",
+    "diagnostics",
+    "issues"
+  ],
+  "additionalProperties": false
+}

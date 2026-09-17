@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Independent Scenario Semantic Review v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "reviewId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "reviewerRole": { "const": "INDEPENDENT_VERIFICATION_REVIEWER" },
+    "subjectFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "scenarioGeneratorSelfAssessmentUsed": { "const": false },
+    "technicalFactsModified": { "const": false },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "checkId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "category": { "enum": ["EVIDENCE_GROUND_ALIGNMENT", "LEARNING_OBJECTIVE_ALIGNMENT", "FACT_NARRATIVE_SEPARATION", "IDENTITY_ATTRIBUTION", "INVESTIGATION_COVERAGE", "REFERENCE_CONTENT_ALIGNMENT"] },
+          "outcome": { "enum": ["PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE"] },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": ["string", "null"], "maxLength": 2000 },
+          "subjectRefs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "minItems": 1,
+            "maxItems": 128
+          }
+        },
+        "required": ["checkId", "category", "outcome", "field", "reason", "correctionHint", "subjectRefs", "sourceRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 6,
+      "maxItems": 6
+    }
+  },
+  "required": ["schemaVersion", "reviewId", "reviewerRole", "subjectFingerprint", "scenarioGeneratorSelfAssessmentUsed", "technicalFactsModified", "checks"],
+  "additionalProperties": false
+}

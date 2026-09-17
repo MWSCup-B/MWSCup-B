@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Requirement Set v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "evidenceRequirementSetId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "requirementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "purpose": { "enum": ["ATTACK_TRACE", "TIMELINE_PROOF", "IDENTITY_PROOF", "CONTRADICTION_PROOF", "EXONERATION_PROOF"] },
+          "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "grounds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceType": { "enum": ["ATTACK_GRAPH_ARTIFACT", "TIMELINE_EVENT", "GROUND_TRUTH_FACT", "CHARACTER"] },
+                "sourceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+                "attackNodeId": { "type": ["string", "null"], "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+              },
+              "required": ["sourceType", "sourceId", "attackNodeId"],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 32
+          },
+          "learningObjectiveIds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+            "minItems": 0,
+            "maxItems": 128
+          }
+        },
+        "required": ["requirementId", "purpose", "description", "grounds", "learningObjectiveIds"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 256
+    }
+  },
+  "required": ["schemaVersion", "evidenceRequirementSetId", "scenarioId", "attackGraphRef", "requirements"],
+  "additionalProperties": false
+}

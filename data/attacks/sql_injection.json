@@ -58,6 +58,20 @@
       ]
     }
   ],
+  "requiredRoles": [
+    {
+      "binding": "web_host",
+      "values": [
+        "web_server"
+      ]
+    },
+    {
+      "binding": "db_host",
+      "values": [
+        "database_server"
+      ]
+    }
+  ],
   "platforms": [
     {
       "binding": "web",

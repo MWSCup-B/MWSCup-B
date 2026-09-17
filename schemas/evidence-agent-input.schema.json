@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Agent Input v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "evidenceAgentInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "scenarioVerificationInput": { "type": "object", "additionalProperties": true },
+    "verificationResult": { "type": "object", "additionalProperties": true },
+    "evidenceAgentHandoff": { "type": "object", "additionalProperties": true },
+    "scenarioImportPackage": { "type": "object", "additionalProperties": true },
+    "groundTruth": { "type": "object", "additionalProperties": true },
+    "timeline": { "type": "object", "additionalProperties": true },
+    "characters": { "type": "object", "additionalProperties": true },
+    "learningObjectives": { "type": "object", "additionalProperties": true },
+    "evidenceRequirements": { "type": "object", "additionalProperties": true },
+    "attackGraph": { "type": "object", "additionalProperties": true },
+    "network": { "type": "object", "additionalProperties": true },
+    "scenarioContext": { "type": "object", "additionalProperties": true },
+    "attackDefinitions": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 1,
+      "maxItems": 256
+    }
+  },
+  "required": ["schemaVersion", "evidenceAgentInputId", "inputFingerprint", "scenarioVerificationInput", "verificationResult", "evidenceAgentHandoff", "scenarioImportPackage", "groundTruth", "timeline", "characters", "learningObjectives", "evidenceRequirements", "attackGraph", "network", "scenarioContext", "attackDefinitions"],
+  "additionalProperties": false
+}

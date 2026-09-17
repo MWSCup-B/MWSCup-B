@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Import Result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "enum": ["VALID", "INVALID", "BLOCKED"] },
+    "valid": { "type": "boolean" },
+    "scope": { "const": "EXTERNAL_EVIDENCE_IMPORT" },
+    "generationInputRef": { "type": ["object", "null"], "additionalProperties": true },
+    "scenarioId": { "type": ["string", "null"], "maxLength": 160 },
+    "attackGraphRef": { "type": ["object", "null"], "additionalProperties": true },
+    "validationStages": {
+      "type": "object",
+      "properties": {
+        "upstream": { "enum": ["PASSED", "FAILED"] },
+        "schema": { "enum": ["PASSED", "FAILED", "NOT_RUN"] },
+        "consistency": { "enum": ["PASSED", "FAILED", "NOT_RUN"] }
+      },
+      "required": ["upstream", "schema", "consistency"],
+      "additionalProperties": false
+    },
+    "errors": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "minItems": 0, "maxItems": 512 },
+    "feedback": { "type": ["object", "null"], "additionalProperties": true },
+    "evidenceSet": { "type": ["object", "null"], "additionalProperties": true },
+    "gameCaseHandoff": { "type": ["object", "null"], "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "status", "valid", "scope", "generationInputRef", "scenarioId", "attackGraphRef", "validationStages", "errors", "feedback", "evidenceSet", "gameCaseHandoff"],
+  "additionalProperties": false
+}

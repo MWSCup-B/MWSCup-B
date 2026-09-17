@@ -66,6 +66,32 @@
       ]
     }
   ],
+  "requiredRoles": [
+    {
+      "binding": "sender",
+      "values": [
+        "sender"
+      ]
+    },
+    {
+      "binding": "client",
+      "values": [
+        "workstation"
+      ]
+    },
+    {
+      "binding": "mail_host",
+      "values": [
+        "mail_server"
+      ]
+    },
+    {
+      "binding": "web_host",
+      "values": [
+        "web_server"
+      ]
+    }
+  ],
   "platforms": [
     {
       "binding": "browser",

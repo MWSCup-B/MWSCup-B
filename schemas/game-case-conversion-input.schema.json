@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game Case Conversion Input v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "conversionInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "evidenceImportResult": { "type": "object", "additionalProperties": true },
+    "gameCaseHandoff": { "type": "object", "additionalProperties": true },
+    "evidenceSet": { "type": "object", "additionalProperties": true },
+    "scenarioPackage": { "type": "object", "additionalProperties": true },
+    "characters": { "type": "object", "additionalProperties": true },
+    "timeline": { "type": "object", "additionalProperties": true },
+    "verificationResult": { "type": "object", "additionalProperties": true },
+    "progressionPlan": { "type": "object", "additionalProperties": true },
+    "contradictions": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "minItems": 1, "maxItems": 256 },
+    "exonerations": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "minItems": 1, "maxItems": 256 }
+  },
+  "required": ["schemaVersion", "conversionInputId", "inputFingerprint", "evidenceImportResult", "gameCaseHandoff", "evidenceSet", "scenarioPackage", "characters", "timeline", "verificationResult", "progressionPlan", "contradictions", "exonerations"],
+  "additionalProperties": false
+}

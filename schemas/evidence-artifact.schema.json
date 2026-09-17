@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Artifact v1 (Backend internal with public content)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "evidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "type": { "enum": ["EMAIL", "WEB_ACCESS_LOG", "AUTHENTICATION_LOG", "APPLICATION_LOG", "DATABASE_LOG", "BROWSER_HISTORY", "DEVICE_INFORMATION", "NETWORK_LOG", "FILE_METADATA", "TESTIMONY", "DOCUMENT", "OTHER"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "publicContent": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "sourceRefs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sourceType": { "enum": ["ATTACK_GRAPH_ARTIFACT", "TIMELINE_EVENT", "GROUND_TRUTH_FACT", "CHARACTER"] },
+          "sourceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "attackNodeId": { "type": ["string", "null"], "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+        },
+        "required": ["sourceType", "sourceId", "attackNodeId"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "requirementIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 256
+    },
+    "purpose": {
+      "type": "array",
+      "items": { "enum": ["ATTACK_TRACE", "TIMELINE_PROOF", "CONTRADICTION_PROOF", "EXONERATION_PROOF", "IDENTITY_PROOF"] },
+      "minItems": 1,
+      "maxItems": 5
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "origin": { "const": "EXTERNAL_USER_CODEX" },
+        "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "attackGraphRef": {
+          "type": "object",
+          "properties": {
+            "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+            "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+          },
+          "required": ["inputDigest", "graphId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["origin", "verificationId", "scenarioId", "attackGraphRef"],
+      "additionalProperties": false
+    },
+    "visibility": { "const": "PLAYER_OBTAINABLE" },
+    "integrity": {
+      "type": "object",
+      "properties": {
+        "algorithm": { "const": "SHA-256" },
+        "publicContentDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+      },
+      "required": ["algorithm", "publicContentDigest"],
+      "additionalProperties": false
+    },
+    "testimony": {
+      "type": ["object", "null"],
+      "properties": {
+        "witnessCharacterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "statementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "spokenContent": { "type": "string", "minLength": 1, "maxLength": 4000 },
+              "technicalAssessment": { "enum": ["CONSISTENT", "CONTRADICTED", "UNVERIFIED"] },
+              "groundTruthRefs": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+                "minItems": 0,
+                "maxItems": 64
+              },
+              "contradictionCandidate": { "type": "boolean" }
+            },
+            "required": ["statementId", "spokenContent", "technicalAssessment", "groundTruthRefs", "contradictionCandidate"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 64
+        }
+      },
+      "required": ["witnessCharacterId", "statements"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "evidenceId", "type", "title", "publicContent", "sourceRefs", "requirementIds", "purpose", "provenance", "visibility", "integrity", "testimony"],
+  "additionalProperties": false
+}

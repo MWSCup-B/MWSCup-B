@@ -1,6 +1,19 @@
 import { readFile } from 'node:fs/promises';
 
-const names = ['attack-definition', 'network', 'scenario-context', 'candidate'];
+const names = ['attack-definition', 'network', 'scenario-context', 'candidate',
+  'attack-graph', 'attack-graph-result', 'candidate-selection', 'candidate-builder-result',
+  'scenario-draft', 'ground-truth', 'character', 'timeline', 'learning-objective',
+  'evidence-requirement', 'scenario-validation-result', 'scenario-generation-input',
+  'scenario-import-package', 'scenario-validation-feedback', 'scenario-import-result',
+  'scenario-verification-input', 'scenario-verification-review', 'scenario-verification-result',
+  'scenario-revision-feedback', 'evidence-agent-handoff', 'evidence-agent-input',
+  'evidence-artifact', 'evidence-set', 'evidence-generation-input', 'evidence-import-package',
+  'evidence-import-result', 'evidence-validation-feedback', 'contradiction', 'exoneration',
+  'game-case-handoff', 'game-progression-plan', 'game-progression', 'public-game-progression',
+  'game-case-conversion-input', 'game-case', 'public-game-case',
+  'game-case-result', 'ui-integration-handoff', 'game-make-result', 'evaluation-handoff',
+  'game-evaluation-input', 'game-evaluation-result', 'orchestrator-input-validation-result',
+  'orchestrator-result'];
 const schemas = new Map(await Promise.all(names.map(async name => [name,
   JSON.parse(await readFile(new URL(`../../schemas/${name}.schema.json`, import.meta.url), 'utf8')),
 ])));
@@ -51,7 +64,10 @@ function validate(value, schema, path) {
       if (!Object.hasOwn(value, key)) fail('MISSING_FIELD', `${path}.${key}`, '必須フィールドがありません。');
     }
     for (const key of Object.keys(value)) {
-      if (!Object.hasOwn(schema.properties ?? {}, key)) fail('UNKNOWN_FIELD', `${path}.${key}`, '未定義のフィールドです。');
+      if (!Object.hasOwn(schema.properties ?? {}, key)) {
+        if (schema.additionalProperties === false) fail('UNKNOWN_FIELD', `${path}.${key}`, '未定義のフィールドです。');
+        continue;
+      }
       validate(value[key], schema.properties[key], `${path}.${key}`);
     }
   }

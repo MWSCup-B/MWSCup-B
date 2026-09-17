@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "1.0",
+  "nodes": [
+    {
+      "id": "sender-host",
+      "type": "host",
+      "roles": [
+        "sender"
+      ],
+      "os": "linux",
+      "trustZone": "external"
+    },
+    {
+      "id": "client-host",
+      "type": "host",
+      "roles": [
+        "workstation"
+      ],
+      "os": "windows",
+      "trustZone": "internal"
+    },
+    {
+      "id": "mail-host",
+      "type": "host",
+      "roles": [
+        "mail_server"
+      ],
+      "os": "linux",
+      "trustZone": "internal"
+    },
+    {
+      "id": "web-host",
+      "type": "host",
+      "roles": [
+        "web_server"
+      ],
+      "os": "linux",
+      "trustZone": "internal"
+    },
+    {
+      "id": "db-host",
+      "type": "host",
+      "roles": [
+        "database_server"
+      ],
+      "os": "linux",
+      "trustZone": "internal"
+    }
+  ],
+  "services": [
+    {
+      "id": "browser-service",
+      "nodeId": "client-host",
+      "type": "web_browser",
+      "platform": "browser"
+    },
+    {
+      "id": "email-service",
+      "nodeId": "mail-host",
+      "type": "email",
+      "platform": "email"
+    },
+    {
+      "id": "web-service",
+      "nodeId": "web-host",
+      "type": "web_application",
+      "platform": "web"
+    },
+    {
+      "id": "db-service",
+      "nodeId": "db-host",
+      "type": "sql_database",
+      "platform": "sql"
+    }
+  ],
+  "trustZones": [
+    {
+      "id": "external",
+      "label": "合成fixture：外部"
+    },
+    {
+      "id": "internal",
+      "label": "合成fixture：内部"
+    }
+  ],
+  "connections": [
+    {
+      "from": "sender-host",
+      "to": "mail-host"
+    },
+    {
+      "from": "sender-host",
+      "to": "web-host"
+    },
+    {
+      "from": "client-host",
+      "to": "mail-host"
+    },
+    {
+      "from": "client-host",
+      "to": "web-host"
+    },
+    {
+      "from": "web-host",
+      "to": "db-host"
+    }
+  ],
+  "reachability": [
+    {
+      "from": "sender-host",
+      "toService": "email-service",
+      "value": true
+    },
+    {
+      "from": "sender-host",
+      "toService": "web-service",
+      "value": true
+    },
+    {
+      "from": "client-host",
+      "toService": "email-service",
+      "value": true
+    },
+    {
+      "from": "client-host",
+      "toService": "web-service",
+      "value": true
+    },
+    {
+      "from": "web-host",
+      "toService": "db-service",
+      "value": true
+    }
+  ]
+}

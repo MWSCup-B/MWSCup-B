@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Internal Game Case v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "gameCaseId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "evidenceSetId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "title": { "const": "セキュリティインシデント調査" },
+    "synopsis": { "const": "取得可能な証拠と証言を確認し、主張の矛盾を指摘してください。" },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "characterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "publicRole": { "enum": ["DEFENDANT", "WITNESS", "VICTIM", "ADMINISTRATOR", "PARTICIPANT"] },
+          "publicDescription": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "required": ["characterId", "displayName", "publicRole", "publicDescription"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "detective": {
+      "type": "object",
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+              "type": { "enum": ["EMAIL", "WEB_ACCESS_LOG", "AUTHENTICATION_LOG", "APPLICATION_LOG", "DATABASE_LOG", "BROWSER_HISTORY", "DEVICE_INFORMATION", "NETWORK_LOG", "FILE_METADATA", "TESTIMONY", "DOCUMENT", "OTHER"] },
+              "publicContent": { "type": "string", "minLength": 1, "maxLength": 20000 },
+              "availability": { "const": "AVAILABLE" },
+              "displayOrder": { "type": "number" }
+            },
+            "required": ["evidenceId", "title", "type", "publicContent", "availability", "displayOrder"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 512
+        }
+      },
+      "required": ["evidence"],
+      "additionalProperties": false
+    },
+    "courtroom": {
+      "type": "object",
+      "properties": {
+        "testimonies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "testimonyEvidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "speakerCharacterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "statements": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "statementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+                    "spokenContent": { "type": "string", "minLength": 1, "maxLength": 4000 },
+                    "displayOrder": { "type": "number" }
+                  },
+                  "required": ["statementId", "spokenContent", "displayOrder"],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 64
+              },
+              "displayOrder": { "type": "number" }
+            },
+            "required": ["testimonyEvidenceId", "speakerCharacterId", "statements", "displayOrder"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 512
+        },
+        "presentableEvidenceIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "minItems": 1,
+          "maxItems": 512
+        }
+      },
+      "required": ["testimonies", "presentableEvidenceIds"],
+      "additionalProperties": false
+    },
+    "progression": { "type": "object", "additionalProperties": true },
+    "judgment": {
+      "type": "object",
+      "properties": {
+        "judgmentRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ruleId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "targetStatementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "acceptedEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 64 },
+              "matchMode": { "const": "ANY_PRESENTED" },
+              "contradictionRef": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "exonerationRef": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "successOutcome": { "const": "CONTRADICTION_ESTABLISHED" },
+              "failureOutcome": { "const": "CONTRADICTION_NOT_ESTABLISHED" }
+            },
+            "required": ["ruleId", "targetStatementId", "acceptedEvidenceIds", "matchMode", "contradictionRef", "exonerationRef", "successOutcome", "failureOutcome"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 256
+        }
+      },
+      "required": ["judgmentRules"],
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "conversionInputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "scenarioPackageFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "evidenceSetFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "progressionPlanFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "gameCaseHandoffId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "timelineId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "characterSetId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["conversionInputFingerprint", "scenarioPackageFingerprint", "evidenceSetFingerprint", "progressionPlanFingerprint", "gameCaseHandoffId", "timelineId", "characterSetId"],
+      "additionalProperties": false
+    },
+    "fingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+  },
+  "required": ["schemaVersion", "gameCaseId", "scenarioId", "verificationId", "evidenceSetId", "attackGraphRef", "title", "synopsis", "characters", "detective", "courtroom", "progression", "judgment", "provenance", "fingerprint"],
+  "additionalProperties": false
+}

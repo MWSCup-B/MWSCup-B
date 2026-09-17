@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Validated Evidence Set v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "evidenceSetId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "evidenceArtifacts": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "requirementCoverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "requirementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "evidenceIds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+            "minItems": 1,
+            "maxItems": 512
+          }
+        },
+        "required": ["requirementId", "evidenceIds"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 256
+    },
+    "contradictionRefs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "contradictions": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "exonerationRefs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "exonerations": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "fingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+  },
+  "required": ["schemaVersion", "evidenceSetId", "scenarioId", "verificationId", "attackGraphRef", "evidenceArtifacts", "requirementCoverage", "contradictionRefs", "contradictions", "exonerationRefs", "exonerations", "fingerprint"],
+  "additionalProperties": false
+}

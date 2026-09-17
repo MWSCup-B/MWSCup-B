@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "External Scenario Import Package v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "generationInputRef": {
+      "type": "object",
+      "properties": {
+        "generationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["generationInputId", "inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "scenarioDraft": { "type": "object", "additionalProperties": true },
+    "groundTruth": { "type": "object", "additionalProperties": true },
+    "characters": { "type": "object", "additionalProperties": true },
+    "timeline": { "type": "object", "additionalProperties": true },
+    "learningObjectives": { "type": "object", "additionalProperties": true },
+    "evidenceRequirements": { "type": "object", "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "generationInputRef", "scenarioDraft", "groundTruth", "characters", "timeline", "learningObjectives", "evidenceRequirements"],
+  "additionalProperties": false
+}

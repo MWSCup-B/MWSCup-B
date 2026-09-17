@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "External Evidence Import Package v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "generationInputRef": {
+      "type": "object",
+      "properties": {
+        "evidenceGenerationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "verificationId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["evidenceGenerationInputId", "inputFingerprint", "verificationId"],
+      "additionalProperties": false
+    },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "evidenceArtifacts": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "contradictions": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "exonerations": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 0,
+      "maxItems": 256
+    }
+  },
+  "required": ["schemaVersion", "generationInputRef", "scenarioId", "attackGraphRef", "evidenceArtifacts", "contradictions", "exonerations"],
+  "additionalProperties": false
+}

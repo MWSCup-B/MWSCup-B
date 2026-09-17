@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game Make Result v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "enum": ["BUILT", "BLOCKED"] },
+    "built": { "type": "boolean" },
+    "buildId": { "type": ["string", "null"], "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "buildFingerprint": { "type": ["string", "null"], "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "gameCaseId": { "type": ["string", "null"], "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        },
+        "required": ["code", "field", "reason"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 256
+    },
+    "evaluationHandoff": { "type": ["object", "null"], "additionalProperties": true }
+  },
+  "required": ["schemaVersion", "status", "built", "buildId", "buildFingerprint", "gameCaseId", "errors", "evaluationHandoff"],
+  "additionalProperties": false
+}

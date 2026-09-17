@@ -88,6 +88,38 @@
       "minItems": 0,
       "maxItems": 256
     },
+    "requiredRoles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "minItems": 1,
+            "maxItems": 32
+          }
+        },
+        "required": [
+          "binding",
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 256
+    },
     "platforms": {
       "type": "array",
       "items": {

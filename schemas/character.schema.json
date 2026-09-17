@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Character Set v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "characterSetId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "attackGraphRef": {
+      "type": "object",
+      "properties": {
+        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["inputDigest", "graphId"],
+      "additionalProperties": false
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "characterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "provenance": { "enum": ["USER_PROVIDED", "AI_GENERATED_SYNTHETIC"] },
+          "roles": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+            "minItems": 1,
+            "maxItems": 32
+          },
+          "bindingRefs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attackNodeId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+                "bindingName": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+                "entityId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" }
+              },
+              "required": ["attackNodeId", "bindingName", "entityId"],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 48
+          }
+        },
+        "required": ["characterId", "displayName", "provenance", "roles", "bindingRefs"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 64
+    }
+  },
+  "required": ["schemaVersion", "characterSetId", "scenarioId", "attackGraphRef", "characters"],
+  "additionalProperties": false
+}

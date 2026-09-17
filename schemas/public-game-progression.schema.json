@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Public Game Progression v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "initialState": { "const": "TITLE" },
+    "initialCourt": {
+      "type": "object",
+      "properties": {
+        "prosecutionStatements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "statementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "speakerCharacterId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "spokenContent": { "type": "string", "minLength": 1, "maxLength": 4000 },
+              "displayOrder": { "type": "number" }
+            },
+            "required": ["statementId", "speakerCharacterId", "spokenContent", "displayOrder"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 512
+        },
+        "presentedEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 512 },
+        "speakerCharacterIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 64 },
+        "publicRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "attributionStatus": { "const": "ALLEGATION_ONLY" },
+        "nextState": { "const": "INVESTIGATION" }
+      },
+      "required": ["prosecutionStatements", "presentedEvidenceIds", "speakerCharacterIds", "publicRuling", "attributionStatus", "nextState"],
+      "additionalProperties": false
+    },
+    "investigation": {
+      "type": "object",
+      "properties": {
+        "availableEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 512 },
+        "returnToCourtCondition": { "enum": ["AT_LEAST_ONE_EVIDENCE_COLLECTED", "ALL_REQUIRED_EVIDENCE_COLLECTED"] }
+      },
+      "required": ["availableEvidenceIds", "returnToCourtCondition"],
+      "additionalProperties": false
+    },
+    "retrialCourt": {
+      "type": "object",
+      "properties": {
+        "testimonies": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "minItems": 1, "maxItems": 512 },
+        "presentableEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 512 }
+      },
+      "required": ["testimonies", "presentableEvidenceIds"],
+      "additionalProperties": false
+    },
+    "objection": {
+      "type": "object",
+      "properties": {
+        "action": { "const": "OBJECTION" },
+        "requiredInputs": { "type": "array", "items": { "enum": ["statementId", "evidenceId"] }, "minItems": 2, "maxItems": 2 }
+      },
+      "required": ["action", "requiredInputs"],
+      "additionalProperties": false
+    },
+    "retry": {
+      "type": "object",
+      "properties": {
+        "state": { "const": "GUILTY_RETRY" },
+        "nextState": { "const": "INVESTIGATION" },
+        "publicFailureFeedback": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      },
+      "required": ["state", "nextState", "publicFailureFeedback"],
+      "additionalProperties": false
+    },
+    "outcomes": {
+      "type": "object",
+      "properties": {
+        "acquitted": {
+          "type": "object",
+          "properties": {
+            "state": { "const": "ACQUITTED" },
+            "publicRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
+            "publicExplanation": { "type": "string", "minLength": 1, "maxLength": 2000 }
+          },
+          "required": ["state", "publicRuling", "publicExplanation"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["acquitted"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "initialState", "initialCourt", "investigation", "retrialCourt", "objection", "retry", "outcomes"],
+  "additionalProperties": false
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scenario Verification Input v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "verificationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "inputFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "attempt": {
+      "type": "object",
+      "properties": {
+        "revisionAttemptsUsed": { "type": "number" },
+        "maxRevisionAttempts": { "const": 3 }
+      },
+      "required": ["revisionAttemptsUsed", "maxRevisionAttempts"],
+      "additionalProperties": false
+    },
+    "generationInput": { "type": "object", "additionalProperties": true },
+    "importResult": { "type": "object", "additionalProperties": true },
+    "scenarioPackage": { "type": "object", "additionalProperties": true },
+    "referenceMaterials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "materialId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "attackDefinitionId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "referenceId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "url": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "availability": { "enum": ["METADATA_ONLY", "CONTENT_AVAILABLE"] },
+          "content": { "type": ["string", "null"], "maxLength": 50000 }
+        },
+        "required": ["materialId", "attackDefinitionId", "referenceId", "title", "url", "availability", "content"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 96
+    },
+    "allowedReviewRefs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+      "minItems": 1,
+      "maxItems": 4096
+    }
+  },
+  "required": ["schemaVersion", "verificationInputId", "inputFingerprint", "attempt", "generationInput", "importResult", "scenarioPackage", "referenceMaterials", "allowedReviewRefs"],
+  "additionalProperties": false
+}

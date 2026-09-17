@@ -6,7 +6,7 @@ import { createAppServer } from '../server/server.js';
 import { groundTruth } from '../server/dummy-case.js';
 
 async function setup(t) {
-  const server = createAppServer();
+  const server = createAppServer({ mode: 'FIXTURE' });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => new Promise(resolve => {
@@ -62,7 +62,39 @@ test('静的配信を限定しバックエンド・テスト・設定を公開�
   for (const path of ['/server/dummy-case.js', '/server/game.js', '/package.json', '/AGENTS.md', '/tests/server.test.js', '/%2e%2e%2fserver%2fdummy-case.js', '/.git/config', '/app.js.map',
     '/server/generation/evaluator.js', '/schemas/scenario-context.schema.json', '/data/attacks/phishing.json',
     '/data/attacks/reflected_xss.json', '/data/attacks/sql_injection.json',
-    '/tests/fixtures/attack-catalog/scenario-context.json', '/scenario-context.json', '/network.json']) {
+    '/tests/fixtures/attack-catalog/scenario-context.json', '/scenario-context.json', '/network.json',
+    '/schemas/attack-graph.schema.json', '/schemas/attack-graph-result.schema.json',
+    '/server/generation/attack-graph.js', '/schemas/scenario-draft.schema.json',
+    '/schemas/ground-truth.schema.json', '/schemas/character.schema.json', '/schemas/timeline.schema.json',
+    '/schemas/learning-objective.schema.json', '/schemas/evidence-requirement.schema.json',
+    '/schemas/scenario-validation-result.schema.json', '/server/generation/scenario-validator.js',
+    '/schemas/scenario-generation-input.schema.json', '/schemas/scenario-import-package.schema.json',
+    '/schemas/scenario-validation-feedback.schema.json', '/schemas/scenario-import-result.schema.json',
+    '/server/generation/scenario-interface.js', '/prompts/scenario-generation-v1.md',
+    '/schemas/scenario-verification-input.schema.json', '/schemas/scenario-verification-review.schema.json',
+    '/schemas/scenario-verification-result.schema.json', '/schemas/scenario-revision-feedback.schema.json',
+    '/schemas/evidence-agent-handoff.schema.json', '/server/generation/scenario-verifier.js',
+    '/prompts/scenario-verification-v1.md', '/schemas/evidence-agent-input.schema.json',
+    '/schemas/evidence-artifact.schema.json', '/schemas/evidence-set.schema.json',
+    '/schemas/evidence-generation-input.schema.json', '/schemas/evidence-import-package.schema.json',
+    '/schemas/evidence-import-result.schema.json', '/schemas/evidence-validation-feedback.schema.json',
+    '/schemas/contradiction.schema.json', '/schemas/exoneration.schema.json',
+    '/schemas/game-case-handoff.schema.json', '/server/generation/evidence-interface.js',
+    '/server/generation/evidence-validator.js', '/prompts/evidence-generation-v1.md',
+    '/schemas/game-case-conversion-input.schema.json', '/schemas/game-case.schema.json',
+    '/schemas/public-game-case.schema.json', '/schemas/game-case-result.schema.json',
+    '/schemas/game-progression.schema.json', '/schemas/game-progression-plan.schema.json',
+    '/schemas/public-game-progression.schema.json',
+    '/schemas/ui-integration-handoff.schema.json', '/server/generation/game-case-converter.js',
+    '/server/generation/game-case-validator.js', '/schemas/game-make-result.schema.json',
+    '/schemas/evaluation-handoff.schema.json', '/schemas/game-evaluation-input.schema.json',
+    '/schemas/game-evaluation-result.schema.json',
+    '/schemas/orchestrator-input-validation-result.schema.json', '/schemas/orchestrator-result.schema.json',
+    '/server/generation/game-make.js', '/server/generated-game.js',
+    '/server/generation/game-evaluator.js', '/server/generation/orchestrator.js',
+    '/server/author-service.js', '/data/examples/network.json',
+    '/data/examples/scenario-context.json', '/author', '/author.js',
+    '/game-case.json', '/api/game-case']) {
     const response = await fetch(base + path);
     assert.equal(response.status, 404, path);
     noSecrets(await response.text());

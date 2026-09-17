@@ -25,10 +25,11 @@ export function validateDefinition(definition) {
       fail('INVALID_BINDING', field, '割当て変数の参照または種類が不正です。');
     }
   };
-  for (const group of ['targetTypes', 'platforms', 'requiredServices']) {
-    for (const item of definition[group]) {
+  for (const group of ['targetTypes', 'platforms', 'requiredServices', 'requiredRoles']) {
+    for (const item of definition[group] ?? []) {
       requireBinding(item.binding, group === 'requiredServices' ? 'service' : null, group);
       if (group === 'requiredServices') requireBinding(item.node, 'node', group);
+      if (group === 'requiredRoles') requireBinding(item.binding, 'node', group);
       if (group === 'platforms' && bindings.get(item.binding) === 'entity') {
         fail('INVALID_BINDING', group, 'platformsにはnodeまたはserviceを指定してください。');
       }

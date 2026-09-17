@@ -1,91 +1,147 @@
-# インシデント調査ゲーム — Phase 1
+# セキュリティインシデント調査ゲーム
 
-AGENTS.mdと利用者が指定したPhase 1の範囲に基づく、ローカルWebゲームの骨格です。
-HTML / CSS / JavaScript / Node.jsを使用し、外部依存ライブラリはありません。
+セキュリティインシデントを題材に、被告人に不利な主張を技術証拠で検証し、法廷で矛盾を指摘するローカルWebゲームです。HTML、CSS、JavaScript、Node.js 22以上で動作し、外部依存ライブラリはありません。
 
-## 起動
+制作画面はAttack Definition、Network、Scenario ContextからAttack Graphを構築します。Scenario、独立Verification Review、Evidenceの文章生成は利用者自身のCodexで行い、Backendは返却されたJSONを既存SchemaとValidatorで検証します。Game Case変換、Game Make、独立Evaluation、Orchestratorの全ゲートを通過した場合だけ、生成ゲームをブラウザでプレイできます。
 
-Node.js 22以上のWSL2環境で、リポジトリのルートから実行します。
+## MVPの起動と利用手順
 
-```sh
-npm start
+1. WSLでリポジトリへ移動します。
+
+   ```sh
+   cd /home/shu/MWSCup
+   ```
+
+2. サーバーを起動します。`npm start`は制作向け`AUTHOR` modeで`127.0.0.1:3000`を使用します。
+
+   ```sh
+   npm start
+   ```
+
+3. Windowsのブラウザで`http://localhost:3000`を開きます。制作画面の直接URLは`http://localhost:3000/author`です。
+4. Attack Catalogから攻撃を1～3件選び、Network JSONとScenario Context JSONを入力して「Scenario生成準備」を押します。
+5. 表示されたScenario PromptとGeneration Input JSONを同じCodex作業へ渡します。
+6. Codexが返したScenario Import Package JSONを貼り付けるかJSONファイルから読み込みます。
+7. 表示されたVerification PromptとVerification Inputを、Scenario生成とは分離したCodex作業へ渡します。返却されたScenario Verification Review JSONをImportし、`VERIFIED`を確認します。
+8. 表示されたEvidence PromptとGeneration Input JSONをCodexへ渡します。
+9. Codexが返したEvidence Import Package JSONを貼り付けるかJSONファイルから読み込みます。
+10. 画面に表示されたEvidence、Testimony、Statement IDを参照し、Game Progression Plan JSONを入力します。配置や正解対応は本文から自動推測されず、`maxCourtAttempts`も明示が必要です。
+11. 「GameをBuildしてEvaluation」を押します。`ACCEPTED`になった場合だけ「ゲームをプレイ」が有効になります。
+
+Prompt/Inputは画面からコピーでき、Generation InputはJSONファイルとして保存できます。ブラウザやBackendがCodex、OpenAI、その他のLLM APIを自動実行することはありません。
+
+制作セッションと生成ゲームはNode.jsのメモリだけに保存します。制作セッションは最終操作から4時間、プレイヤーセッションは1時間で失効し、サーバー再起動ですべて失われます。
+
+## 制作フローとゲート
+
+```text
+Attack / Network / Scenario Context
+→ Candidate Builder → Combination Validator → Attack Graph
+→ WAITING_EXTERNAL_SCENARIO → Scenario Import
+→ WAITING_EXTERNAL_REVIEW → Independent Verification → VERIFIED
+→ WAITING_EXTERNAL_EVIDENCE → Evidence Import → EVIDENCE_READY
+→ explicit Game Progression Plan → Game Case → Game Make
+→ Independent Evaluation → ACCEPTED → Play
 ```
 
-Windows側のブラウザで `http://localhost:3000` を開きます。
-サーバーは `127.0.0.1:3000` で待ち受けます。終了は `Ctrl+C` です。
-依存ライブラリのインストールは不要です。
+- Scenario Importの`VALID`と独立Verificationの`VERIFIED`は別状態です。Scenario Generator自身の自己評価をReviewとして利用できません。
+- 複数のCandidate / Attack Graphはすべて候補として表示し、制作ユーザがCodexへ渡した1件を明示選択します。
+- `UNKNOWN`や`UNSATISFIED`を成立済みにせず、成立するCandidateがない場合はPromptを生成しません。
+- Evidence Import後のGame Progression Planは既存IDへの参照だけで構成します。Evidence本文からInitial Court配置、Objection rule、retry上限を推測しません。
+- 途中のゲートが失敗した場合、後続成果物は生成せず、上流を変更した場合は下流成果物を再利用しません。
 
-## 操作
+## ゲーム進行
 
-1. タイトルで「ゲーム開始」を押す。
-2. 探偵パートで証拠候補を取得し、内容を確認する。
-3. 1件以上取得して「法廷パートへ」を押す。
-4. 証言を確認し、所持証拠を1件選んで提示する。
-5. 結果画面で指摘の成否を確認する。
+Generated Gameの進行は次のとおりです。
 
-提示1回で結果へ進みます。ページを再読み込みするとタイトルに戻ります。
-進行はBackendのメモリだけで管理し、永続保存しません。
-セッションは最終操作から1時間で失効し、次のAPI操作時に削除します。
-メモリ使用量を制限するため、保持するセッションは最大1000件です。
+```text
+TITLE → INITIAL_COURT → INVESTIGATION → RETRIAL_COURT → OBJECTION
+OBJECTION成功 → ACQUITTED
+OBJECTION失敗 → GUILTY_RETRY → INVESTIGATION
+試行上限到達 → BLOCKED
+```
 
-## ダミーデータと公開境界
+1. タイトルで事件を開始する。
+2. 第1法廷で検察側の主張、提示証拠、暫定判断を確認する。
+3. 探偵パートで公開されたEvidenceを取得する。
+4. 第2法廷で矛盾するstatementと取得済みEvidenceを1件ずつ選ぶ。
+5. 「異議あり！！」を実行する。
+6. 正解なら無罪、不正解なら探偵パートへ戻る。Planで明示された試行上限に達すると停止する。
 
-- ダミーは資料の存在について証言と証拠を照合する操作確認用です。
-- 実際の攻撃、ネットワーク構成、事件、無罪判定は実装していません。
-- 架空の資料・証言者の主張・プレイヤーの推論は画面で区別します。技術的事実を示すダミーは含めていません。
-- Ground Truthと正解IDは `server/dummy-case.js` に保持し、Backendだけが判定します。
-- HTTP配信対象は `/`、`/app.js`、`/style.css` の3つに限定します。
-- APIは公開フィールドだけを組み立て、結果には成否だけを含めます。
-- プレイヤーがサーバーソースを読める開発環境は秘密保持の対象にはできません。Backendファイルをプレイヤー用静的配布物に含めないでください。
-- 証拠・証言は `textContent` で描画し、HTMLやコードとして実行しません。
+第1法廷の人物帰属は`ALLEGATION_ONLY`です。アカウント、端末、IP等の記録を、操作人物の確定事実として表示しません。
 
-`POST /api/start` は空のJSONオブジェクトを受け取り、ゲーム状態と一時トークンを返します。
-`POST /api/action` はそのトークンをBearer認証ヘッダーで受け取り、`collect` / `courtroom` / `present` を処理します。
-取得・提示には `evidenceId` を指定します。本文はJSONオブジェクトで4096バイト以内です。
-トークンはページのメモリ内だけで保持します。
+## 実行モード
+
+通常のMVP制作は環境変数なしの`AUTHOR` modeを使用します。
+
+既に作成したPhase 8.1の`READY` Game Case Result JSONを直接確認する場合は、workspace内の非公開パスを指定します。
+
+```sh
+GAME_MODE=GENERATED GAME_CASE_PATH=private/game-case-result.json npm start
+```
+
+Phase 1回帰確認だけに固定fixtureを使用します。
+
+```sh
+GAME_MODE=FIXTURE npm start
+```
+
+Generated ModeまたはAuthor Modeで不正・未完成な成果物をdummy fixtureへフォールバックしません。`public/`配下のJSONはGenerated Modeの入力に指定できません。
+
+## APIと公開境界
+
+Author APIは`AUTHOR` modeだけで公開します。
+
+- `POST /api/author/start`
+- `POST /api/author/prepare-scenario`
+- `POST /api/author/import-scenario`
+- `POST /api/author/import-review`
+- `POST /api/author/prepare-evidence`
+- `POST /api/author/import-evidence`
+- `POST /api/author/build`
+- `GET /api/author/status`
+
+Player APIは既存の`POST /api/start`と`POST /api/action`を維持します。Author ModeのPlayer開始には、`ACCEPTED`後に発行された推測困難なPlay URLの`playId`が必要です。Author tokenとPlayer tokenは別セッションで、相互利用できません。
+
+Player応答と画面はPublic Game Caseだけから構築します。Ground Truth、Internal Judgment、正解対応、`requiredForCourtIds`、Contradiction／Exoneration内部参照、Attack Graph、provenance、sourceRefs、fingerprint、Verification Result、Validation Feedbackを返しません。文字列は`textContent`で描画し、Evidenceや外部JSON内のHTML、script、URL、command、prompt風の文章を実行しません。
+
+Author JSON requestとファイル入力は2 MiBに制限し、Schema、型、未知field、危険なprototype keyを検証します。Player APIのrequest上限は4 KiBです。同一Originとlocalhost Hostだけを受理します。
+
+## 実装済みパイプライン
+
+| Phase | 実装 |
+| --- | --- |
+| 2 | Attack Definition、Network、Scenario Context、3値評価、Combination Validator |
+| 3 | 因果根拠付きAttack Graph。一本道、分岐、合流、並列、独立nodeを保持 |
+| 4 | Target Assignment / Candidate Builder。静的domain縮約、全候補探索、100,000状態上限 |
+| 5A / 5B | Scenario Contract、Provider非依存の外部Scenario生成、Import、Feedback |
+| 6 | Attack Graph再構築を含むDeterministic Verificationと独立意味レビュー |
+| 7 | 外部Evidence生成、Evidence Artifact／Set、Contradiction、Exoneration検証 |
+| 8 / 8.1 | Internal／Public Game Case変換、Judgment、明示Game Progression Plan |
+| 9 | Generated Game Loader、既存UI接続、Backend Judgment、retry、Game Make Result |
+| 10 | 正常・失敗・上限経路、解答可能性、情報漏えい、操作性の独立Evaluation |
+| 11 | ゲート順序、主要状態、外部待機、fingerprint、差し戻し、下流無効化を管理するOrchestrator |
+| MVP | Author UI、手動Codex搬送、Import、Build、Evaluation、Playを一連に統合 |
+
+データ形式、状態、公開境界の詳細は[生成データ仕様](docs/generation-data.md)を参照してください。
 
 ## テスト
 
 ```sh
 npm test
+git diff --check
 ```
 
-進行、成否、未取得証拠の拒否、操作順序、セッション分離、入力検証、静的配信の制限、公開応答への内部情報混入を検証します。
+テストにはPhase 1からの回帰、全JSON Schema、正常・異常E2E、Author API、Generated HTTP playthrough、セッション分離、公開境界、AGENTS.md Complianceを含みます。実LLM APIや第三者システムへ通信しません。
 
-ブラウザでの確認手順：
+## 現在残る未実装項目
 
-- 上記の操作をたどり、各画面と証拠の内容が表示されることを確認する。
-- 証拠未取得時には法廷へ進めず、未選択時には提示できないことを確認する。
-- 再読み込みして別の証拠を提示し、異なる結果になることを確認する。
-- キーボードのTab、Enter、ラジオボタンの矢印キーで操作する。
-- 開発者ツールで、Backendのソースや正解IDが応答に含まれないことを確認する。
+- 制作セッション、生成成果物、ゲームセッションのDB永続保存
+- ユーザ認証、アカウント、権限、プロジェクト共有、共同編集
+- 外部Codexとの搬送やProvider API呼出しの自動化
+- Network構成図用の視覚エディタ
+- 決定論的検査では判定できない教材文章の最終的な人間レビュー
+- 本番向けクラウド配布、秘密管理、監査ログ、運用監視
+- Unity対応
 
-## 未実装・未決定
-
-本格的なAI生成、6エージェントの工程管理、技術検証、複雑な判定、永続保存は未実装です。
-本番の事件、教材、無罪の論証条件は未決定です。
-この骨格のテスト合格は、AGENTS.mdのVerification / Evaluationゲート合格を意味しません。
-
-## Phase 2：生成前検証基盤
-
-`schemas/`と`server/generation/`に、バージョン付きJSONの構造検証と、
-対象割当てが明示された攻撃候補の成立条件検証を追加しています。
-ネットワーク構成とシナリオ条件を分離し、SATISFIED / UNSATISFIED / UNKNOWNで評価します。
-前段効果を使う依存関係、分岐・並列・合流、ログの観測条件も検証します。
-攻撃IDや攻撃固有の条件名によるコード分岐はありません。
-
-Phase 1のゲーム・画面・APIは従来どおりです。生成前検証結果は公開APIに含めません。
-`data/attacks/`に、承認された範囲の初期3定義を登録しています。
-
-| ID | 初期対応範囲 |
-| --- | --- |
-| `phishing` | メール内リンクへの誘導と対象リクエストの送信 |
-| `reflected_xss` | 反射されたスクリプトのブラウザ実行 |
-| `sql_injection` | Webアプリ経由でのDBクエリの改変・実行 |
-
-定義に成立条件・効果・観測条件・一次資料を保持し、アプリケーションコードに攻撃別分岐を追加していません。
-対象の自動割当て、事件生成、独立技術検証、工程管理は未実装です。
-今回の実装範囲は候補検証基盤と初期カタログまでです。ゲーム生成全体の完成や検証ゲート合格を意味しません。
-
-データ形式と制約は [docs/generation-data.md](docs/generation-data.md) を参照してください。
-追加の検証テストも `npm test` で実行できます。
+Fixture Modeは回帰テスト専用です。Author／Generated Modeと暗黙に混在しません。
