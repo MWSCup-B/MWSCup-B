@@ -7,8 +7,11 @@ import { createGame, playerView, act, GameError } from './game.js';
 import { buildGeneratedGame } from './generation/game-make.js';
 import { actGenerated, createGeneratedGame, generatedPlayerView } from './generated-game.js';
 import { authorBootstrap, authorView, buildAuthorGame, createAuthorSession,
+  buildAuthorXssPrototype,
   importAuthorEvidence, importAuthorReview, importAuthorScenario, prepareEvidence,
-  prepareScenario } from './author-service.js';
+  prepareScenario, prepareXssScenario, previewAuthorProgression } from './author-service.js';
+import { actXssPrototype, createXssPrototypeGame, xssPrototypePlayerView }
+  from './xss-prototype.js';
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -16,12 +19,28 @@ const assets = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/author', ['author.html', 'text/html; charset=utf-8']],
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
+  ['/author-builder.js', ['author-builder.js', 'text/javascript; charset=utf-8']],
+  ['/visual-assets.js', ['visual-assets.js', 'text/javascript; charset=utf-8']],
 ]);
+for (const path of [
+  'backgrounds/intro.svg', 'backgrounds/courtroom.svg', 'backgrounds/investigation.svg',
+  'characters/defense-neutral.svg', 'characters/defense-thinking.svg',
+  'characters/defense-confident.svg', 'characters/prosecutor-neutral.svg',
+  'characters/prosecutor-confident.svg', 'characters/prosecutor-surprised.svg',
+  'characters/judge-neutral.svg', 'effects/objection.svg',
+  'networks/network-a.svg', 'networks/network-b.svg', 'networks/network-c.svg',
+  'networks/network-d.svg',
+]) assets.set(`/assets/${path}`, [`assets/${path}`, 'image/svg+xml; charset=utf-8']);
 const generatedActionFields = new Map([
   ['begin', ['action']], ['continue', ['action']],
   ['investigate', ['action', 'targetId', 'investigationActionId']],
   ['collect', ['action', 'evidenceId']], ['retrial', ['action']],
   ['objection', ['action', 'statementId', 'evidenceId']], ['retry', ['action']],
+]);
+const xssActionFields = new Map([
+  ['begin', ['action']], ['next-dialogue', ['action']],
+  ['investigate', ['action', 'choiceId']], ['court', ['action']],
+  ['present-evidence', ['action', 'evidenceId']], ['next-round', ['action']], ['finish', ['action']],
 ]);
 
 export function createAppServer({ mode, gameCaseResult = null } = {}) {
@@ -38,7 +57,7 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
     try {
       if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.host || '')) {
         throw new GameError('INVALID_HOST', 'host', 'ローカルホストから接続してください。', 403);
@@ -54,7 +73,8 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
       }
       const asset = assets.get(pathname);
       if (req.method === 'GET' && asset) {
-        if ((pathname === '/author' || pathname === '/author.js') && mode !== 'AUTHOR') {
+        if ((pathname === '/author' || pathname === '/author.js'
+          || pathname === '/author-builder.js') && mode !== 'AUTHOR') {
           throw new GameError('NOT_FOUND', 'path', '対象が見つかりません。', 404);
         }
         const data = await readFile(new URL(`../public/${asset[0]}`, import.meta.url));
@@ -87,8 +107,13 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
         const { token, record } = requireAuthorSession(req, authorSessions);
         let author;
         if (pathname === '/api/author/prepare-scenario') {
-          validateFields(body, ['selectedAttackIds', 'network', 'scenarioContext']);
-          author = prepareScenario(record.session, body);
+          if (Object.hasOwn(body, 'networkId') || Object.hasOwn(body, 'difficulty')) {
+            validateFields(body, ['networkId', 'difficulty']);
+            author = prepareXssScenario(record.session, body);
+          } else {
+            validateFields(body, ['selectedAttackIds', 'network', 'scenarioContext']);
+            author = prepareScenario(record.session, body);
+          }
         } else if (pathname === '/api/author/import-scenario') {
           validateFields(body, ['optionId', 'scenarioPackage']);
           author = importAuthorScenario(record.session, body);
@@ -100,11 +125,27 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
         } else if (pathname === '/api/author/import-evidence') {
           validateFields(body, ['evidencePackage']);
           author = importAuthorEvidence(record.session, body.evidencePackage);
+        } else if (pathname === '/api/author/preview-progression') {
+          validateFields(body, ['progressionPlan']);
+          const preview = previewAuthorProgression(record.session, body.progressionPlan);
+          record.updatedAt = now;
+          sendJson(res, 200, { preview, author: authorView(record.session) });
+          return;
         } else if (pathname === '/api/author/build') {
           validateFields(body, ['progressionPlan']);
           if (record.session.playId) playableGames.delete(record.session.playId);
           author = buildAuthorGame(record.session, body.progressionPlan);
           if (record.session.workflow?.currentState === 'ACCEPTED' && record.session.runtime) {
+            const playId = randomBytes(24).toString('hex');
+            record.session.playId = playId;
+            playableGames.set(playId, { runtime: record.session.runtime, ownerToken: token });
+            author = authorView(record.session);
+          }
+        } else if (pathname === '/api/author/build-xss-prototype') {
+          validateFields(body, []);
+          if (record.session.playId) playableGames.delete(record.session.playId);
+          author = buildAuthorXssPrototype(record.session);
+          if (record.session.workflowState === 'ACCEPTED' && record.session.runtime) {
             const playId = randomBytes(24).toString('hex');
             record.session.playId = playId;
             playableGames.set(playId, { runtime: record.session.runtime, ownerToken: token });
@@ -134,12 +175,16 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
             throw new GameError('ACCEPTED_GAME_REQUIRED', 'playId',
               'ACCEPTEDになった制作セッションのPlay URLを使用してください。', 409);
           }
-          sessionRuntime = playableGames.get(body.playId).runtime; sessionMode = 'GENERATED';
+          sessionRuntime = playableGames.get(body.playId).runtime;
+          sessionMode = sessionRuntime.mode === 'XSS_PROTOTYPE' ? 'XSS_PROTOTYPE' : 'GENERATED';
         }
-        const game = sessionMode === 'GENERATED' ? createGeneratedGame(sessionRuntime) : createGame();
+        const game = sessionMode === 'GENERATED' ? createGeneratedGame(sessionRuntime)
+          : sessionMode === 'XSS_PROTOTYPE' ? createXssPrototypeGame(sessionRuntime) : createGame();
         sessions.set(token, { game, runtime: sessionRuntime, mode: sessionMode, updatedAt: now });
         sendJson(res, 200, { token, game: sessionMode === 'GENERATED'
-          ? generatedPlayerView(game, sessionRuntime) : playerView(game) });
+          ? generatedPlayerView(game, sessionRuntime)
+          : sessionMode === 'XSS_PROTOTYPE' ? xssPrototypePlayerView(game, sessionRuntime)
+            : playerView(game) });
         return;
       }
       const authorization = req.headers.authorization || '';
@@ -147,13 +192,17 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
       const session = sessions.get(token);
       if (!session) throw new GameError('SESSION_REQUIRED', 'session', 'ページを再読み込みしてゲームを開始してください。', 401);
       validateFields(body, session.mode === 'GENERATED'
-        ? (generatedActionFields.get(body.action) ?? ['action']) : ['action', 'evidenceId']);
+        ? (generatedActionFields.get(body.action) ?? ['action'])
+        : session.mode === 'XSS_PROTOTYPE'
+          ? (xssActionFields.get(body.action) ?? ['action']) : ['action', 'evidenceId']);
       if (typeof body.action !== 'string') {
         throw new GameError('INVALID_ACTION', 'action', '操作を指定してください。');
       }
       const game = session.mode === 'GENERATED'
         ? actGenerated(session.game, session.runtime, body)
-        : act(session.game, body.action, body.evidenceId);
+        : session.mode === 'XSS_PROTOTYPE'
+          ? actXssPrototype(session.game, session.runtime, body)
+          : act(session.game, body.action, body.evidenceId);
       session.updatedAt = now;
       sendJson(res, 200, { game });
     } catch (error) {

@@ -17,6 +17,8 @@ import { advanceWorkflow, createOrchestrator, WORKFLOW_GATES }
 import { digest } from './generation/evidence-validator.js';
 import { DEFAULT_INVESTIGATION_ACTIONS } from './generation/investigation-validator.js';
 import { ValidationError } from './generation/schema.js';
+import { publicXssNetworks, xssTechnicalSelection } from './xss-networks.js';
+import { buildXssPrototype, evaluateXssPrototype } from './xss-prototype.js';
 
 const [catalog, exampleNetwork, exampleContext] = await Promise.all([
   loadCatalog(),
@@ -55,7 +57,7 @@ function clearAfter(session, stage) {
   });
   if (order.indexOf(stage) <= order.indexOf('EVIDENCE_IMPORTED')) Object.assign(session, {
     progressionPlan: null, gameCaseResult: null, gameMakeResult: null,
-    evaluationResult: null, runtime: null, workflow: null, playId: null,
+    evaluationResult: null, prototypeEvaluation: null, runtime: null, workflow: null, playId: null,
   });
 }
 
@@ -67,12 +69,19 @@ export function createAuthorSession() {
     verificationInput: null, verificationResult: null, evidenceGenerationInput: null,
     evidencePackage: null, evidenceImportResult: null, progressionPlan: null,
     gameCaseResult: null, gameMakeResult: null, evaluationResult: null,
+    prototypeSelection: null, prototypeEvaluation: null,
     workflow: null, runtime: null, playId: null };
 }
 
 export function authorBootstrap() {
   return { attacks: catalog.map(item => ({ id: item.id, label: item.label,
     category: item.category, description: item.description })),
+  prototype: { attack: { id: 'reflected_xss', label: 'Cross-Site Scripting (XSS)' },
+    networks: publicXssNetworks(), difficulties: [
+      { difficulty: 1, label: '★1', requiredEvidenceCount: 1 },
+      { difficulty: 2, label: '★2', requiredEvidenceCount: 2 },
+      { difficulty: 3, label: '★3', requiredEvidenceCount: 3 },
+    ] },
   examples: { network: structuredClone(exampleNetwork),
     scenarioContext: structuredClone(exampleContext) } };
 }
@@ -83,6 +92,8 @@ function planReferences(session) {
   const generationInput = session.selectedOption?.generationInput;
   const graph = generationInput?.technicalInput.attackGraph;
   const network = generationInput?.technicalInput.network;
+  const characterNames = new Map((session.scenarioPackage?.characters.characters ?? [])
+    .map(item => [item.characterId, item.displayName]));
   return {
     investigationActions: structuredClone(DEFAULT_INVESTIGATION_ACTIONS),
     completedActionIdFormat: 'completed_<targetId>__<actionId>',
@@ -102,14 +113,20 @@ function planReferences(session) {
         sourceId: item.evidenceId, details: { type: item.type, title: item.title } })),
     ],
     evidence: set.evidenceArtifacts.map(item => ({ evidenceId: item.evidenceId,
-      type: item.type, title: item.title, visibility: item.visibility })),
+      type: item.type, title: item.title, visibility: item.visibility,
+      purpose: [...item.purpose], publicContent: structuredClone(item.publicContent) })),
     testimonies: set.evidenceArtifacts.filter(item => item.type === 'TESTIMONY').map(item => ({
       testimonyEvidenceId: item.evidenceId,
       witnessCharacterId: item.testimony.witnessCharacterId,
+      witnessDisplayName: characterNames.get(item.testimony.witnessCharacterId)
+        ?? item.testimony.witnessCharacterId,
       statementIds: item.testimony.statements.map(statement => statement.statementId) })),
     statements: set.evidenceArtifacts.filter(item => item.type === 'TESTIMONY')
       .flatMap(item => item.testimony.statements.map(statement => ({
         testimonyEvidenceId: item.evidenceId, statementId: statement.statementId,
+        witnessCharacterId: item.testimony.witnessCharacterId,
+        speakerDisplayName: characterNames.get(item.testimony.witnessCharacterId)
+          ?? item.testimony.witnessCharacterId,
         spokenContent: statement.spokenContent }))),
     contradictions: structuredClone(set.contradictions),
     exonerations: structuredClone(set.exonerations),
@@ -148,6 +165,21 @@ export function authorView(session) {
     evidencePrompt: session.evidenceGenerationInput ? EVIDENCE_PROMPT_TEMPLATE : null,
     evidenceGenerationInput: structuredClone(session.evidenceGenerationInput),
     evidenceImportResult: structuredClone(session.evidenceImportResult),
+    prototypeSelection: session.prototypeSelection ? {
+      schemaVersion: '1.0', attackType: session.prototypeSelection.attackType,
+      selectedNetworkId: session.prototypeSelection.selectedNetworkId,
+      difficulty: session.prototypeSelection.difficulty,
+      requiredEvidenceCount: session.prototypeSelection.requiredEvidenceCount,
+    } : null,
+    prototypeGenerationBrief: session.prototypeSelection && session.scenarioOptions.length ? {
+      attackType: session.prototypeSelection.attackType,
+      selectedNetworkId: session.prototypeSelection.selectedNetworkId,
+      selectedNetworkDefinition: structuredClone(session.prototypeSelection.selectedNetworkDefinition),
+      difficulty: session.prototypeSelection.difficulty,
+      technicalConstraints: structuredClone(session.prototypeSelection.technicalConstraints),
+      scenarioGenerationInput: structuredClone(session.scenarioOptions[0].generationInput),
+    } : null,
+    prototypeEvaluation: structuredClone(session.prototypeEvaluation),
     progressionPlanTemplate: planTemplate(session), progressionReferences: planReferences(session),
     progressionPlan: structuredClone(session.progressionPlan),
     gameCaseStatus: session.gameCaseResult?.status ?? null,
@@ -155,6 +187,17 @@ export function authorView(session) {
     evaluationResult: structuredClone(session.evaluationResult),
     orchestrator: structuredClone(session.workflow),
     playUrl: session.playId ? `/?game=${session.playId}` : null };
+}
+
+export function prepareXssScenario(session, { networkId, difficulty }) {
+  const selection = xssTechnicalSelection(networkId, difficulty);
+  if (!selection) return failed(session, { code: 'INVALID_XSS_SELECTION',
+    field: 'networkId,difficulty', reason: 'Network A～Dと難易度★1～3を選択してください。',
+    correctionHint: '表示されたNetwork CardとDifficultyだけを使用してください。' });
+  const view = prepareScenario(session, { selectedAttackIds: ['reflected_xss'],
+    network: selection.network, scenarioContext: selection.scenarioContext });
+  if (session.scenarioOptions.length) session.prototypeSelection = selection;
+  return session.scenarioOptions.length ? authorView(session) : view;
 }
 
 function failed(session, error, state = 'NEEDS_REVISION') {
@@ -309,6 +352,39 @@ function buildPlan(session, draft) {
   return buildGameProgressionPlan(draft);
 }
 
+function conversionInput(session, progressionPlan) {
+  const set = session.evidenceImportResult.evidenceSet;
+  return buildGameCaseConversionInput({
+    evidenceImportResult: session.evidenceImportResult,
+    gameCaseHandoff: session.evidenceImportResult.gameCaseHandoff,
+    evidenceSet: set, scenarioPackage: session.scenarioPackage,
+    characters: session.scenarioPackage.characters, timeline: session.scenarioPackage.timeline,
+    verificationResult: session.verificationResult, progressionPlan,
+    scenarioGenerationInput: session.selectedOption.generationInput,
+    contradictions: set.contradictions, exonerations: set.exonerations });
+}
+
+export function previewAuthorProgression(session, progressionPlanDraft) {
+  if (session.evidenceImportResult?.status !== 'VALID') return {
+    status: 'INVALID', progressionPlan: null, issues: [normalizedIssue({
+      code: 'EVIDENCE_NOT_VALID', field: 'evidenceImportResult.status',
+      reason: 'VALIDなEvidence Import Resultが必要です。',
+      correctionHint: 'Evidence JSONを修正し、再Importしてください。' })],
+  };
+  try {
+    const progressionPlan = buildPlan(session, progressionPlanDraft);
+    const result = convertGameCase(conversionInput(session, progressionPlan));
+    if (result.status !== 'READY') return { status: 'INVALID', progressionPlan,
+      issues: result.errors.map(normalizedIssue) };
+    return { status: 'VALID', progressionPlan, issues: [] };
+  } catch (error) {
+    if (!(error instanceof ValidationError)) throw error;
+    return { status: 'INVALID', progressionPlan: null,
+      issues: [normalizedIssue({ code: error.code, field: error.field, reason: error.message,
+        correctionHint: 'Builderの該当入力と表示された参照候補を確認してください。' })] };
+  }
+}
+
 function replayWorkflow(session, courtAttemptLimit) {
   const values = {
     INPUT_VALIDATION: session.inputValidationArtifact,
@@ -339,15 +415,7 @@ export function buildAuthorGame(session, progressionPlanDraft) {
     const progressionPlan = buildPlan(session, progressionPlanDraft);
     session.progressionPlan = progressionPlan;
     const set = session.evidenceImportResult.evidenceSet;
-    const conversionInput = buildGameCaseConversionInput({
-      evidenceImportResult: session.evidenceImportResult,
-      gameCaseHandoff: session.evidenceImportResult.gameCaseHandoff,
-      evidenceSet: set, scenarioPackage: session.scenarioPackage,
-      characters: session.scenarioPackage.characters, timeline: session.scenarioPackage.timeline,
-      verificationResult: session.verificationResult, progressionPlan,
-      scenarioGenerationInput: session.selectedOption.generationInput,
-      contradictions: set.contradictions, exonerations: set.exonerations });
-    session.gameCaseResult = convertGameCase(conversionInput);
+    session.gameCaseResult = convertGameCase(conversionInput(session, progressionPlan));
     const built = buildGeneratedGame(session.gameCaseResult);
     session.gameMakeResult = built.gameMakeResult; session.runtime = built.runtime;
     if (session.gameCaseResult.status !== 'READY' || session.gameMakeResult.status !== 'BUILT') {
@@ -372,5 +440,31 @@ export function buildAuthorGame(session, progressionPlanDraft) {
     return failed(session, { code: error.code, field: error.field, reason: error.message,
       correctionHint: '表示されたEvidence、Testimony、Statement IDだけを使い、必須値を明示してください。' },
     'BLOCKED');
+  }
+}
+
+export function buildAuthorXssPrototype(session) {
+  if (!session.prototypeSelection) return failed(session, { code: 'XSS_SELECTION_REQUIRED',
+    field: 'prototypeSelection', reason: '固定NetworkとDifficultyが選択されていません。',
+    correctionHint: '最初の画面からXSSプロトタイプ生成をやり直してください。' }, 'BLOCKED');
+  if (session.verificationResult?.status !== 'VERIFIED') return failed(session, {
+    code: 'SCENARIO_NOT_VERIFIED', field: 'verificationResult.status',
+    reason: 'VERIFIEDなScenarioだけがXSSプロトタイプBuildへ進めます。',
+    correctionHint: '独立Verification Reviewを通過させてください。' }, 'BLOCKED');
+  try {
+    session.runtime = buildXssPrototype({ selection: session.prototypeSelection,
+      verificationResult: session.verificationResult });
+    session.prototypeEvaluation = evaluateXssPrototype(session.runtime);
+    session.evaluationResult = session.prototypeEvaluation;
+    session.workflowState = session.prototypeEvaluation.status === 'ACCEPTED' ? 'ACCEPTED' : 'BLOCKED';
+    session.stage = session.workflowState;
+    session.issues = session.prototypeEvaluation.issues.map(code => normalizedIssue({ code,
+      field: 'prototype', reason: 'XSSプロトタイプ評価に失敗しました。',
+      correctionHint: '固定Networkと検証済みScenarioの整合性を確認してください。' }));
+    if (session.workflowState !== 'ACCEPTED') session.runtime = null;
+    return authorView(session);
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    return failed(session, error, 'BLOCKED');
   }
 }

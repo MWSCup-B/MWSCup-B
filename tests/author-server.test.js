@@ -76,6 +76,11 @@ async function acceptedAuthor(post) {
       acquittalRuling: '被告人を無罪とします。',
       acquittalExplanation: '取得した記録により、人物を断定する主張は維持できません。',
       failureFeedback: 'この証拠では、この主張を崩せません。' } };
+  const preview = await post('/api/author/preview-progression', { progressionPlan }, token);
+  assert.equal(preview.response.status, 200);
+  assert.equal(preview.data.preview.status, 'VALID');
+  assert.match(preview.data.preview.progressionPlan.fingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(preview.data.author.progressionPlan, null);
   result = await post('/api/author/build', { progressionPlan }, token);
   return { token, author: result.data.author };
 }
@@ -84,7 +89,7 @@ test('npm start用AUTHOR modeで/authorへアクセスしCatalogを取得でき�
   const { base, post } = await setup(t);
   const root = await fetch(base + '/', { redirect: 'manual' });
   assert.equal(root.status, 302); assert.equal(root.headers.get('location'), '/author');
-  for (const path of ['/author', '/author.js', '/style.css']) {
+  for (const path of ['/author', '/author.js', '/author-builder.js', '/style.css']) {
     const response = await fetch(base + path); assert.equal(response.status, 200);
   }
   const started = await post('/api/author/start', {});

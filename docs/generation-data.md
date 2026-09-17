@@ -20,6 +20,27 @@ Phase 2のBackend部品は、対象を割り当てた攻撃候補の成立条件
 これらのデータと検証結果はAuthor APIだけが制作工程で扱います。Player API・Player画面には接続しません。
 Ground Truthは引き続きBackendとAuthor制作セッションだけで保持し、Player側へ公開しません。
 
+## XSSプロトタイプ入力と実行境界
+
+通常Author UIは`reflected_xss`だけを選択済みとして扱い、`network-a`～`network-d`とDifficulty 1～3を受け取ります。`server/xss-networks.js`は、表示用のsubnet・node・IP・log source定義と、既存`network.schema.json`／`scenario-context.schema.json`へ渡す技術入力を分離して保持します。表示用IP等を既存Network Contractへ未知fieldとして混入させません。
+
+Scenario GeneratorへのAuthor handoffは次をまとめて表示します。
+
+- `attackType: reflected_xss`
+- `selectedNetworkId`
+- `selectedNetworkDefinition`
+- `difficulty`
+- `technicalConstraints`
+- 既存Schema準拠の`scenarioGenerationInput`
+
+Scenario Import PackageとIndependent Verificationの既存Contract、再生成、`VERIFIED` gateは変更しません。XSSゲーム化は`VERIFIED`後だけ実行できます。
+
+XSS Prototype runtimeは従来の単一`RETRIAL_COURT`契約を変更せず、別のScene Stateとして`INTRO`、`INITIAL_COURT`、`INVESTIGATION`、`COURT_EVIDENCE_ROUND`、`ACQUITTED`を持ちます。Difficulty値とEvidence Chain長は必ず一致させます。各Roundは固定Networkに存在するnodeとlog sourceを参照します。
+
+Synthetic Logとgrep風4択は文字列データです。選択結果は事前構築した内部classificationと照合するだけで、shell、grep、filesystem、SSH、HTTP、実端末、実ブラウザ履歴を呼び出しません。Player projectionからclassification、正解Evidence列、Verification結果、Ground Truthを除外します。XSS payload風文字列は`textContent`で表示し、HTMLとして解釈しません。
+
+Visual Assetは`public/assets/`の独自SVGで、背景、人物のrole/expression、Network図、異議演出をAsset ID経由で参照します。Game Logicにファイルpathを埋め込まず、`public/visual-assets.js`が将来のPNG／WebP差し替え境界です。
+
 ## network.json
 
 - `nodes`：`id`、`type`、`roles`、`os`、`trustZone`。
@@ -1225,7 +1246,8 @@ Target名、Action名、Result、Evidence公開本文は未信頼文字列とし
 
 ### Author UI
 
-Evidence Import後の参照一覧に次を追加する。
+Evidence Import後のGame Progression Plan設定は、JSON textareaではなく既存Contractの入力支援層である
+`Game Progression Plan Builder`で行う。Builderは次のAuthor専用参照を選択肢として表示する。
 
 - 8種類のInvestigation Action ID
 - Network node / service ID
@@ -1234,8 +1256,15 @@ Evidence Import後の参照一覧に次を追加する。
 - Evidence Artifact ID
 - 完了Action ID形式
 
-制作ユーザはGame Progression Plan JSONの`investigationTargets`、`initialAvailableTargetIds`、
-`evidenceDiscoveryRules`を明示入力する。BackendとAuthor UIはEvidence本文からRuleを生成または補完しない。
+制作ユーザはInitial Court、Investigation Target、Targetで利用可能なAction、Discovery Rule、prerequisite、unlock、
+Retrial Court、既存Judgment由来のObjection、Retry PolicyをGUIで明示選択する。Frontendはこの状態から
+`game-progression-plan.schema.json`と同じ既存fieldを持つdraftを生成する。`POST /api/author/preview-progression`は
+sessionを変更せず、既存`buildGameProgressionPlan`とGame Case Converterを用いてSchema、参照、到達可能性、Judgment整合性を
+検証し、`planId`と`fingerprint`を含む完全なPlanを返す。JSONは既定で閉じた開発・研究用Previewにのみ表示し、通常は編集しない。
+
+BuilderはDiscovery Rule未設定のInvestigation Evidence／法廷必須Evidenceと、初期Targetから到達不能なTarget／Evidenceを
+入力欄の近くへ表示する。最終判定は既存Backend Validatorが行う。BackendとAuthor UIはEvidence本文からRule、Target、Action、
+正解対応を生成または補完しない。
 
 ### Independent Evaluation
 
@@ -1260,24 +1289,24 @@ Scenario、Verification、Evidence、Game Case、UI Build、Evaluation、fingerp
 
 ## MVP Author Workflow
 
-`/author`は既存契約を次の15工程として接続する。外部Codexは手動で使用し、BackendはProvider、Model、API key、
-自動再生成を持たない。
+`/author`は既存15工程を次の8つのWizard sceneへまとめる。現在sceneだけを通常表示し、完了済み、現在、未到達を
+進捗表示で区別する。未完了sceneは飛ばせず、「戻る」で到達済みの前工程へ移動できる。外部Codexは手動で使用し、
+BackendはProvider、Model、API key、自動再生成を持たない。
 
-1. Attack / Network / Scenario Context入力
-2. Scenario Generation Prompt/Input生成
-3. 外部CodexでScenario生成
-4. Scenario Import
-5. Independent Verification Prompt/Input生成
-6. Scenario生成とは分離した外部CodexでReview生成
-7. Scenario Verification Review Import
-8. `VERIFIED`確認
-9. Evidence Generation Prompt/Input生成
-10. 外部CodexでEvidence生成
-11. Evidence Import
-12. Game Progression Plan入力
-13. Game Case / Game Make
-14. Independent Evaluation
-15. `ACCEPTED`時だけPlay URL発行
+1. Attack / Network / Scenario Context
+2. Scenario Generation
+3. Scenario Import
+4. Independent Verification
+5. Evidence Generation
+6. Evidence Import
+7. Game Progression Plan Builder
+8. Game Case / Game Make / Independent Evaluation / Play
+
+Step 7のBuilderはInitial Court、Investigation、Retrial Court、Objection、Retry Policyの5セクションを持つ。
+SpeakerはTestimonyの既存`witnessCharacterId`に対応する表示名であり、技術Evidenceから新しいTestimonyへ変換しない。
+Objection候補は既存Contradictionのstatement／conflicting Evidenceと、それを支持する既存Exonerationの組合せだけから導出する。
+上流のAttack、Network、Contextを画面上で変更した時点でFrontendは既存PreviewとPlay導線を無効化し、再送信時には
+Author Serviceの既存下流無効化処理がScenario以降の成果物を破棄する。
 
 ### Author Serviceと候補選択
 
@@ -1289,9 +1318,9 @@ Scenario Importが`VALID`でもEvidence工程へは進めない。既存Phase 6 
 `scenario-verification-review.schema.json`準拠の独立ReviewをImportする。Reviewの
 `scenarioGeneratorSelfAssessmentUsed`がtrue、review不在、fingerprint不一致、参照不正の場合は`VERIFIED`にしない。
 
-Evidence Importが`VALID`になった後、利用可能なEvidence ID、Testimony Evidence ID、Statement ID、既存Contradiction、
-Exonerationを参照一覧として表示する。Game Progression Planの配置とObjection ruleは制作ユーザが既存IDで明示する。
-Author Serviceは本文を意味解析せず、`maxCourtAttempts`も補完しない。Plan Schemaと既存Game Case Validatorが参照切れ、
+Evidence Importが`VALID`になった後、利用可能なEvidence、Testimony、Statement、既存Contradiction／Exoneration、
+Investigation source／ActionをBuilder候補として表示する。Game Progression Planの配置とObjection ruleは制作ユーザが
+候補から明示選択する。Author Serviceは本文を意味解析せず、`maxCourtAttempts`も補完しない。Plan Schemaと既存Game Case Validatorが参照切れ、
 別Scenario混入、取得不能・提示不能Evidence、不整合なstatement/evidence対応を拒否する。
 
 ### Orchestrator接続

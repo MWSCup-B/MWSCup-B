@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { authorBootstrap, buildAuthorGame, createAuthorSession, importAuthorEvidence,
-  importAuthorReview, importAuthorScenario, prepareEvidence, prepareScenario }
+  importAuthorReview, importAuthorScenario, prepareEvidence, prepareScenario,
+  previewAuthorProgression }
   from '../server/author-service.js';
 import { verifiedScenarioFixture, semanticReview } from './helpers/verified-scenario.js';
 import { phase7Fixture } from './helpers/phase7-evidence.js';
@@ -160,6 +161,22 @@ test('Evidence JSONの正常Importと不正Importを区別する', () => {
   assert.ok(view.progressionReferences.statements.length);
   assert.equal(view.progressionReferences.investigationActions.length, 8);
   assert.ok(view.progressionReferences.investigationSourceNodes.length);
+  assert.ok(view.progressionReferences.evidence[0].publicContent);
+  assert.ok(view.progressionReferences.statements[0].speakerDisplayName);
+});
+
+test('Builder Previewは既存Validatorで完全なPlanを生成しSessionを変更しない', () => {
+  const { session } = evidenceReady(); const before = structuredClone(session);
+  const result = previewAuthorProgression(session, planDraft(session));
+  assert.equal(result.status, 'VALID');
+  assert.match(result.progressionPlan.planId, /^progression_/);
+  assert.match(result.progressionPlan.fingerprint, /^[a-f0-9]{64}$/);
+  assert.deepEqual(session, before);
+  const invalid = planDraft(session); invalid.retryPolicy.maxCourtAttempts = 0;
+  const rejected = previewAuthorProgression(session, invalid);
+  assert.equal(rejected.status, 'INVALID');
+  assert.ok(rejected.issues.length);
+  assert.deepEqual(session, before);
 });
 
 test('VALID Evidenceと明示PlanからACCEPTEDまでBuildする', () => {
@@ -170,6 +187,19 @@ test('VALID Evidenceと明示PlanからACCEPTEDまでBuildする', () => {
   assert.equal(view.evaluationResult.status, 'ACCEPTED');
   assert.equal(view.orchestrator.currentState, 'ACCEPTED');
   assert.ok(session.runtime);
+});
+
+test('上流入力を再準備すると既存の下流成果物を無効化する', () => {
+  const { session, fixture } = evidenceReady();
+  assert.equal(buildAuthorGame(session, planDraft(session)).currentState, 'ACCEPTED');
+  const technical = fixture.generationInput.technicalInput;
+  const view = prepareScenario(session, {
+    selectedAttackIds: fixture.generationInput.selectedAttackIds,
+    network: technical.network, scenarioContext: technical.scenarioContext });
+  assert.equal(view.currentState, 'DRAFT');
+  assert.equal(view.progressionPlan, null);
+  assert.equal(view.evaluationResult, null);
+  assert.equal(view.playUrl, null);
 });
 
 test('PlanのID不整合・maxCourtAttempts未指定とINVALID EvidenceからBuildできない', () => {
@@ -186,14 +216,23 @@ test('PlanのID不整合・maxCourtAttempts未指定とINVALID EvidenceからBui
 });
 
 test('制作UIはCatalog動的描画・file読込・textContent安全描画を使用する', async () => {
-  const [source, service] = await Promise.all([
+  const [source, builderSource, html, service] = await Promise.all([
     readFile(new URL('../public/author.js', import.meta.url), 'utf8'),
+    readFile(new URL('../public/author-builder.js', import.meta.url), 'utf8'),
+    readFile(new URL('../public/author.html', import.meta.url), 'utf8'),
     readFile(new URL('../server/author-service.js', import.meta.url), 'utf8'),
   ]);
   assert.match(source, /bootstrap\.attacks/);
   assert.match(source, /file\.text\(\)/);
   assert.match(source, /textContent/);
+  assert.match(source, /finally \{ busy = false; renderBusy\(false\); render\(\); \}/);
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
   assert.doesNotMatch(source, /phishing|reflected_xss|sql_injection/);
+  assert.match(html, /Game Progression Plan Builder/);
+  assert.match(html, /data-wizard-step="7"/);
+  assert.match(html, /詳細設定：JSONを表示/);
+  assert.equal((html.match(/accept="application\/json,text\/plain,\.json,\.txt"/g) ?? []).length, 3);
+  assert.doesNotMatch(html, /id="progression-json"/);
+  assert.doesNotMatch(`${source}\n${builderSource}`, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
   assert.doesNotMatch(service, /fetch\(|https\.request|api\.openai|OPENAI_API_KEY/);
 });

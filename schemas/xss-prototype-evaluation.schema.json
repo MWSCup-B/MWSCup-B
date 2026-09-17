@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XSS Prototype Evaluation v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "enum": ["ACCEPTED", "REJECTED"] },
+    "issues": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "maxItems": 64
+    },
+    "checks": {
+      "type": "object",
+      "properties": {
+        "xssValid": { "type": "boolean" },
+        "networkValid": { "type": "boolean" },
+        "difficultyMatchesEvidence": { "type": "boolean" },
+        "evidenceChainReachable": { "type": "boolean" },
+        "publicBoundarySafe": { "type": "boolean" }
+      },
+      "required": ["xssValid", "networkValid", "difficultyMatchesEvidence", "evidenceChainReachable", "publicBoundarySafe"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "status", "issues", "checks"],
+  "additionalProperties": false
+}

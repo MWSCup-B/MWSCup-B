@@ -1,3 +1,5 @@
+import { assetPath } from './visual-assets.js';
+
 const screen = document.querySelector('#screen');
 const errorBox = document.querySelector('#error');
 let token = null;
@@ -169,6 +171,114 @@ function renderGenerated() {
   title.focus();
 }
 
+function imageAsset(assetId, alt, className) {
+  const node = document.createElement('img'); node.src = assetPath(assetId);
+  node.alt = alt; if (className) node.className = className; return node;
+}
+
+function prototypeScene(backgroundAssetId) {
+  screen.className = 'prototype-scene scene-enter';
+  const path = assetPath(backgroundAssetId);
+  if (path) screen.style.backgroundImage = `linear-gradient(rgba(8, 15, 31, .30), rgba(8, 15, 31, .72)), url("${path}")`;
+}
+
+function character(role, expression, active) {
+  const roleKey = role.toLowerCase();
+  const assetId = game.assets.characters[roleKey]?.[expression]
+    ?? game.assets.characters[roleKey]?.neutral;
+  const node = element('figure', undefined, `court-character ${roleKey}${active ? ' active' : ''}`);
+  node.append(imageAsset(assetId, `${role} ${expression}`), element('figcaption', role));
+  return node;
+}
+
+function renderPrototypeCourt() {
+  prototypeScene(game.backgroundAssetId);
+  const dialogue = game.dialogue;
+  const stage = element('div', undefined, 'court-stage');
+  stage.append(character('PROSECUTOR', dialogue.speaker === 'PROSECUTOR' ? dialogue.expression : 'neutral', dialogue.speaker === 'PROSECUTOR'),
+    character('JUDGE', 'neutral', dialogue.speaker === 'JUDGE'),
+    character('DEFENSE', dialogue.speaker === 'DEFENSE' ? dialogue.expression : 'neutral', dialogue.speaker === 'DEFENSE'));
+  const box = element('div', undefined, 'dialogue-box');
+  box.append(element('strong', dialogue.speaker), element('p', dialogue.text),
+    button(game.hasNextDialogue ? '次へ' : '調査へ', () => action('next-dialogue')));
+  screen.append(element('h1', 'Initial Court'), stage, box);
+}
+
+function renderPrototypeInvestigation() {
+  prototypeScene(game.backgroundAssetId);
+  screen.append(element('h1', `Investigation — Round ${game.currentRound} / ${game.requiredEvidenceCount}`));
+  const layout = element('div', undefined, 'investigation-layout');
+  const network = element('div', undefined, 'network-viewer card');
+  const diagram = document.createElement('img'); diagram.src = game.network.diagramPath;
+  diagram.alt = `${game.network.displayName}の構成図。現在の調査対象は${game.investigationTarget.displayName}`;
+  const nodeMap = element('div', undefined, 'network-node-map');
+  game.network.nodes.forEach(node => nodeMap.append(element('span',
+    `${node.displayName}\n${node.ip}`, node.id === game.highlightedNodeId ? 'highlighted' : '')));
+  network.append(element('h2', game.network.displayName), diagram, nodeMap,
+    element('p', `調査中: ${game.investigationTarget.displayName} / ${game.investigationTarget.sourceName}`, 'node-highlight-label'));
+  const logs = element('div', undefined, 'log-panel'); logs.append(element('h2', 'Synthetic Log Viewer'));
+  const pre = element('pre', game.syntheticLog.join('\n'), 'synthetic-log'); logs.append(pre);
+  const choices = element('div', undefined, 'investigation-choices');
+  game.choices.forEach((choice, index) => choices.append(button(
+    `${String.fromCharCode(65 + index)}  ${choice.label}`,
+    () => action('investigate', { choiceId: choice.choiceId }))));
+  logs.append(element('p', '表示コマンドはゲーム内Simulationです。実行されません。', 'kind'), choices);
+  layout.append(network, logs); screen.append(layout);
+  if (game.investigationResult) {
+    const result = element('div', undefined, `investigation-result ${game.investigationResult.success ? 'success' : 'failure'}`);
+    result.append(element('strong', game.investigationResult.success ? 'Evidence発見' : '調査結果'),
+      element('p', game.investigationResult.publicMessage));
+    if (game.investigationResult.acquiredEvidence) result.append(evidenceCard(game.investigationResult.acquiredEvidence));
+    screen.append(result);
+  }
+  if (game.canReturnToCourt) screen.append(button('Court Evidence Roundへ', () => action('court')));
+}
+
+function renderPrototypeEvidenceRound() {
+  prototypeScene(game.backgroundAssetId);
+  screen.append(element('h1', `Court Evidence Round ${game.currentRound}`));
+  const stage = element('div', undefined, 'court-stage');
+  stage.append(character('PROSECUTOR', game.courtResult?.success ? 'surprised' : 'confident', true),
+    character('JUDGE', 'neutral', false), character('DEFENSE', game.courtResult?.success ? 'confident' : 'thinking', Boolean(game.courtResult?.success)));
+  screen.append(stage, element('p', game.prosecutionDialogue, 'dialogue-box'));
+  if (!game.courtResult) {
+    const evidence = element('div', undefined, 'evidence-grid');
+    game.presentableEvidence.forEach(item => {
+      const card = evidenceCard(item); card.append(button('このEvidenceを提示',
+        () => action('present-evidence', { evidenceId: item.evidenceId })));
+      evidence.append(card);
+    }); screen.append(evidence);
+  } else {
+    if (game.courtResult.objection) screen.append(imageAsset(game.courtResult.effectAssetId,
+      '異議あり', 'objection-effect'));
+    const dialogue = element('div', undefined, 'dialogue-box');
+    game.courtResult.defenseDialogue.forEach(line => dialogue.append(element('p', line)));
+    dialogue.append(element('p', game.courtResult.prosecutorDialogue));
+    if (game.courtResult.hasNextRound) dialogue.append(button('追加調査へ', () => action('next-round')));
+    if (game.courtResult.finishAvailable) dialogue.append(button('判決へ', () => action('finish')));
+    screen.append(dialogue);
+  }
+}
+
+function renderXssPrototype() {
+  if (game.currentScene === 'INTRO') {
+    prototypeScene(game.backgroundAssetId);
+    const panel = element('div', undefined, 'intro-panel');
+    panel.append(element('h1', 'Incident Brief'), element('p', game.publicSummary.incident),
+      element('p', `被告人が疑われた理由：${game.publicSummary.suspicion}`),
+      element('p', `罪状：${game.publicSummary.charge}`), button('裁判へ', () => action('begin')));
+    screen.append(panel);
+  } else if (game.currentScene === 'INITIAL_COURT') renderPrototypeCourt();
+  else if (game.currentScene === 'INVESTIGATION') renderPrototypeInvestigation();
+  else if (game.currentScene === 'COURT_EVIDENCE_ROUND') renderPrototypeEvidenceRound();
+  else if (game.currentScene === 'ACQUITTED') {
+    prototypeScene(game.backgroundAssetId);
+    const panel = element('div', undefined, 'clear-panel');
+    panel.append(character('JUDGE', 'neutral', true), element('p', game.judgeDialogue),
+      element('h1', 'ACQUITTED'), element('strong', game.gameClear)); screen.append(panel);
+  }
+}
+
 function renderFixture() {
   const titles = { detective: '探偵パート', courtroom: '法廷パート', result: '結果' };
   const title = element('h1', titles[game.phase]);
@@ -193,6 +303,7 @@ function renderFixture() {
 
 function render() {
   screen.replaceChildren();
+  screen.className = ''; screen.style.backgroundImage = '';
   if (!game) {
     const title = element('h1', 'インシデント調査ゲーム');
     title.id = 'screen-title'; title.tabIndex = -1;
@@ -200,7 +311,8 @@ function render() {
       button('ゲーム開始', () => request('/api/start', playId ? { playId } : {})));
     title.focus(); return;
   }
-  if (game.mode === 'GENERATED') renderGenerated();
+  if (game.mode === 'XSS_PROTOTYPE') renderXssPrototype();
+  else if (game.mode === 'GENERATED') renderGenerated();
   else renderFixture();
 }
 

@@ -93,7 +93,7 @@ test('静的配信を限定しバックエンド・テスト・設定を公開�
     '/server/generation/game-make.js', '/server/generated-game.js',
     '/server/generation/game-evaluator.js', '/server/generation/orchestrator.js',
     '/server/author-service.js', '/data/examples/network.json',
-    '/data/examples/scenario-context.json', '/author', '/author.js',
+    '/data/examples/scenario-context.json', '/author', '/author.js', '/author-builder.js',
     '/game-case.json', '/api/game-case']) {
     const response = await fetch(base + path);
     assert.equal(response.status, 404, path);

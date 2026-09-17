@@ -2,7 +2,7 @@
 
 セキュリティインシデントを題材に、被告人に不利な主張を技術証拠で検証し、法廷で矛盾を指摘するローカルWebゲームです。探偵パートでは調査対象と調査方法を選び、合成データ上の調査結果からEvidenceを発見・取得します。HTML、CSS、JavaScript、Node.js 22以上で動作し、外部依存ライブラリはありません。
 
-制作画面はAttack Definition、Network、Scenario ContextからAttack Graphを構築します。Scenario、独立Verification Review、Evidenceの文章生成は利用者自身のCodexで行い、Backendは返却されたJSONを既存SchemaとValidatorで検証します。Game Case変換、Game Make、独立Evaluation、Orchestratorの全ゲートを通過した場合だけ、生成ゲームをブラウザでプレイできます。
+現在の通常制作フローはXSSプロトタイプです。攻撃は`reflected_xss`に固定し、4種類の固定Networkと難易度★1～3だけをGUIで選択します。Network JSON、Scenario Context JSON、Game Progression JSONは通常画面では入力しません。Scenarioと独立Verification Reviewは利用者自身のCodexで生成し、Backendは既存SchemaとValidatorで検証します。従来のPhase 1～12制作パイプラインはDeveloper Modeとして維持しています。
 
 ## MVPの起動と利用手順
 
@@ -19,14 +19,12 @@
    ```
 
 3. Windowsのブラウザで`http://localhost:3000`を開きます。制作画面の直接URLは`http://localhost:3000/author`です。
-4. Attack Catalogから攻撃を1～3件選び、Network JSONとScenario Context JSONを入力して「Scenario生成準備」を押します。
-5. 表示されたScenario PromptとGeneration Input JSONを同じCodex作業へ渡します。
-6. Codexが返したScenario Import Package JSONを貼り付けるかJSONファイルから読み込みます。
+4. 固定AttackのXSSを確認し、Network A～DとDifficulty ★1～3を選んで「Scenario生成準備」を押します。
+5. 表示されたScenario PromptとGeneration Inputを同じCodex作業へ渡します。入力には`attackType`、`selectedNetworkId`、固定Network定義、`difficulty`、技術制約、既存Schema準拠のScenario Generation Inputが含まれます。
+6. Codexが返したScenario Import Package JSONを貼り付けるか、JSON内容を保持する`.json`／`.txt`ファイルから読み込みます。
 7. 表示されたVerification PromptとVerification Inputを、Scenario生成とは分離したCodex作業へ渡します。返却されたScenario Verification Review JSONをImportし、`VERIFIED`を確認します。
-8. 表示されたEvidence PromptとGeneration Input JSONをCodexへ渡します。
-9. Codexが返したEvidence Import Package JSONを貼り付けるかJSONファイルから読み込みます。
-10. 画面に表示されたEvidence、Testimony、Statement、Network／Attack Graph source、Investigation Action IDを参照し、Game Progression Plan JSONを入力します。PlanにはInvestigation TargetとEvidence Discovery Ruleも明示します。Evidence本文からTarget／Actionを推測せず、`maxCourtAttempts`も補完しません。
-11. 「GameをBuildしてEvaluation」を押します。`ACCEPTED`になった場合だけ「ゲームをプレイ」が有効になります。
+8. `VERIFIED`後に「XSSゲームをBuildしてEvaluation」を押します。XSS Investigation Agentが固定NetworkとDifficultyから1～3段の合成Evidence Chainを構成します。
+9. `ACCEPTED`になった場合だけ「ゲームをプレイ」が有効になります。
 
 Prompt/Inputは画面からコピーでき、Generation InputはJSONファイルとして保存できます。ブラウザやBackendがCodex、OpenAI、その他のLLM APIを自動実行することはありません。
 
@@ -35,25 +33,38 @@ Prompt/Inputは画面からコピーでき、Generation InputはJSONファイル
 ## 制作フローとゲート
 
 ```text
-Attack / Network / Scenario Context
+XSS + Fixed Network A-D + Difficulty 1-3
 → Candidate Builder → Combination Validator → Attack Graph
 → WAITING_EXTERNAL_SCENARIO → Scenario Import
 → WAITING_EXTERNAL_REVIEW → Independent Verification → VERIFIED
-→ WAITING_EXTERNAL_EVIDENCE → Evidence Import → EVIDENCE_READY
-→ explicit Game Progression / Investigation Plan → Game Case → Game Make
-→ Independent Evaluation → ACCEPTED → Play
+→ XSS Investigation Agent → Synthetic Evidence Chain
+→ XSS Prototype Evaluation → ACCEPTED → Play
 ```
+
+Developer Modeでは、従来のEvidence Import、Game Progression GUI Builder、Game Case、Game Make、Evaluation、Orchestratorの経路も引き続き利用できます。既存Contractと状態の意味は変更していません。
 
 - Scenario Importの`VALID`と独立Verificationの`VERIFIED`は別状態です。Scenario Generator自身の自己評価をReviewとして利用できません。
 - 複数のCandidate / Attack Graphはすべて候補として表示し、制作ユーザがCodexへ渡した1件を明示選択します。
 - `UNKNOWN`や`UNSATISFIED`を成立済みにせず、成立するCandidateがない場合はPromptを生成しません。
-- Evidence Import後のGame Progression Planは既存IDへの参照だけで構成します。Evidence本文からInitial Court配置、Objection rule、Investigation Target／Action／Discovery Rule、retry上限を推測しません。
+- Evidence Import後のGame Progression PlanはGUIで選択した既存IDへの参照だけからFrontendが構成します。Evidence本文からInitial Court配置、Objection rule、Investigation Target／Action／Discovery Rule、retry上限を推測しません。生成JSONは閉じた「詳細設定：JSONを表示」で開発・研究用に確認できますが、直接編集しません。
 - `PLAYER_OBTAINABLE`なInvestigation Evidenceには明示的なDiscovery Ruleが必要です。開始Targetから到達不能、prerequisite循環、存在しないNetwork／Scenario／Evidence参照がある場合はGame Case変換前に停止します。
 - 途中のゲートが失敗した場合、後続成果物は生成せず、上流を変更した場合は下流成果物を再利用しません。
 
-## ゲーム進行
+## XSSプロトタイプのゲーム進行
 
-Generated Gameの進行は次のとおりです。
+通常制作で生成されるXSSプロトタイプの進行は次のとおりです。
+
+```text
+INTRO → INITIAL_COURT → INVESTIGATION
+      → Synthetic Log → grep風4択 → Evidence取得
+      → COURT_EVIDENCE_ROUND
+正解Evidence → OBJECTION → 次RoundまたはACQUITTED → GAME CLEAR
+不正解Evidence → 同じRoundのINVESTIGATION
+```
+
+Difficulty ★1／★2／★3は、それぞれ必要EvidenceとCourt Roundが1／2／3件です。grep風の選択肢は表示文字列を使う内部Simulationであり、実際のgrep、shell、ファイル、OS、ネットワーク、ブラウザ履歴へアクセスしません。ログもすべて合成データです。
+
+従来のGenerated Game進行はDeveloper Mode向けに維持しています。
 
 ```text
 TITLE → INITIAL_COURT → INVESTIGATION
@@ -105,7 +116,9 @@ Author APIは`AUTHOR` modeだけで公開します。
 - `POST /api/author/import-review`
 - `POST /api/author/prepare-evidence`
 - `POST /api/author/import-evidence`
+- `POST /api/author/preview-progression`
 - `POST /api/author/build`
+- `POST /api/author/build-xss-prototype`
 - `GET /api/author/status`
 
 Player APIは既存の`POST /api/start`と`POST /api/action`を維持します。Author ModeのPlayer開始には、`ACCEPTED`後に発行された推測困難なPlay URLの`playId`が必要です。Author tokenとPlayer tokenは別セッションで、相互利用できません。
@@ -139,7 +152,8 @@ Author JSON requestとファイル入力は2 MiBに制限し、Schema、型、�
 | 10 | 正常・失敗・上限経路、解答可能性、情報漏えい、操作性の独立Evaluation |
 | 11 | ゲート順序、主要状態、外部待機、fingerprint、差し戻し、下流無効化を管理するOrchestrator |
 | 12 | Target + ActionによるEvidence Discovery、prerequisite／unlock、UNKNOWN／DISCOVERED／COLLECTED、到達可能性検査、Author／Player UI |
-| MVP | Author UI、手動Codex搬送、Import、Build、Evaluation、Playを一連に統合 |
+| XSS Prototype | XSS固定、Network A～D、Difficulty、独立Verification、Synthetic Log、4択調査、1～3 Evidence Chain、複数Court Round、SVG/CSS Scene UI |
+| MVP | 通常5画面Wizard。Developer Modeには従来8画面WizardとGame Progression GUI Builderを維持 |
 
 データ形式、状態、公開境界の詳細は[生成データ仕様](docs/generation-data.md)を参照してください。
 
@@ -152,15 +166,16 @@ git diff --check
 
 テストにはPhase 1からの回帰、全JSON Schema、正常・異常E2E、Author API、Generated HTTP playthrough、セッション分離、公開境界、AGENTS.md Complianceを含みます。実LLM APIや第三者システムへ通信しません。
 
-## Phase 12のブラウザ確認
+## XSSプロトタイプのブラウザ確認
 
 1. `npm start`を実行し、`http://localhost:3000/author`を開きます。
-2. Scenario、Verification、Evidence Importまで進めます。
-3. Progression参照一覧でEvidence ID、Investigation Action ID、Network／Attack Graph source IDを確認します。
-4. Plan JSONへ`investigationTargets`、`initialAvailableTargetIds`、`evidenceDiscoveryRules`を明示し、Build／Evaluationを実行します。
-5. `ACCEPTED`後に「ゲームをプレイ」を開き、第1法廷から探偵パートへ進みます。
-6. Targetを選び、表示されたActionを実行します。Result表示後、発見済みEvidenceだけに「証拠品として登録」が表示されることを確認します。
-7. Evidenceを取得して第2法廷へ進み、取得済みEvidenceだけが選択可能であることを確認します。
+2. Network Card A～DとDifficulty ★1～3を選択し、Network JSONが通常表示されないことを確認します。
+3. Scenario ImportとIndependent Verificationを行い、`VERIFIED`にします。差し戻し時はScenarioを再生成できます。
+4. XSSゲームをBuildし、`ACCEPTED`後に「ゲームをプレイ」を開きます。
+5. INTRO、INITIAL_COURT、INVESTIGATION、COURT_EVIDENCE_ROUNDのうち現在Sceneだけが表示されることを確認します。
+6. Network図の強調対象、Synthetic Log、4択を確認します。正解調査でEvidenceが取得され、不正解調査では正解情報が表示されないことを確認します。
+7. Courtで誤ったEvidenceを選ぶと「異議あり」が出ず同じRoundへ戻り、正しいEvidenceだけで異議演出が出ることを確認します。
+8. 選択Difficultyと同数のRound後、`ACQUITTED`と`GAME CLEAR`を確認します。
 
 Action実行はすべてゲーム内シミュレーションです。ブラウザやBackendがshell、実ファイル、SSH、HTTP、実ログ、パケット取得を実行することはありません。
 

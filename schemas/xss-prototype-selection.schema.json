@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XSS Prototype Selection v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "attackType": { "const": "reflected_xss" },
+    "selectedNetworkId": { "enum": ["network-a", "network-b", "network-c", "network-d"] },
+    "difficulty": { "type": "number", "enum": [1, 2, 3] },
+    "requiredEvidenceCount": { "type": "number", "enum": [1, 2, 3] }
+  },
+  "required": ["schemaVersion", "attackType", "selectedNetworkId", "difficulty", "requiredEvidenceCount"],
+  "additionalProperties": false
+}

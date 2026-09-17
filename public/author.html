@@ -19,22 +19,29 @@
         <span>現在工程: <span id="stage-state">INPUT</span></span>
       </div>
       <div id="author-errors" role="alert"></div>
+      <p id="operation-status" class="operation-status" role="status" aria-live="polite"></p>
+      <nav id="wizard-progress" class="wizard-progress" aria-label="制作進捗"></nav>
     </section>
 
-    <section class="step" id="step-input">
-      <h2>Step 1 — Attack / Network / Scenario Context</h2>
-      <p class="next-action">攻撃を1～3件選び、NetworkとScenario Contextを確認してScenario生成準備を実行します。</p>
-      <fieldset><legend>Attack Selection</legend><div id="attack-list"></div></fieldset>
-      <label for="network-json">Network JSON</label>
-      <textarea id="network-json" rows="16" spellcheck="false"></textarea>
-      <label for="context-json">Scenario Context JSON</label>
-      <textarea id="context-json" rows="16" spellcheck="false"></textarea>
+    <section class="step wizard-scene" id="step-input" data-wizard-step="0">
+      <h2>Step 1 — XSS / Network / Difficulty</h2>
+      <p class="next-action">攻撃はCross-Site Scriptingに固定されています。NetworkとDifficultyを選択してください。</p>
+      <div class="fixed-attack"><strong>Attack</strong><span>Cross-Site Scripting (reflected_xss)</span></div>
+      <fieldset><legend>Network Selection</legend><div id="prototype-network-list" class="network-card-grid"></div></fieldset>
+      <fieldset><legend>Difficulty</legend><div id="prototype-difficulty-list" class="difficulty-options"></div></fieldset>
+      <details id="developer-inputs"><summary>Developer Mode：従来JSON入力を表示</summary>
+        <fieldset><legend>Attack Selection</legend><div id="attack-list"></div></fieldset>
+        <label for="network-json">Network JSON</label>
+        <textarea id="network-json" rows="16" spellcheck="false"></textarea>
+        <label for="context-json">Scenario Context JSON</label>
+        <textarea id="context-json" rows="16" spellcheck="false"></textarea>
+      </details>
       <button id="prepare-scenario" type="button">Scenario生成準備</button>
       <pre id="prepare-result" class="output" aria-label="生成前Validation結果"></pre>
     </section>
 
-    <section class="step" id="step-scenario-generation">
-      <h2>Step 2–3 — Scenarioを外部Codexで生成</h2>
+    <section class="step wizard-scene" id="step-scenario-generation" data-wizard-step="1" hidden>
+      <h2>Step 2 — Scenario Generation</h2>
       <p class="next-action">候補を選択し、PromptとGeneration Inputを同じCodex作業へ渡してください。</p>
       <label for="scenario-option">Candidate / Attack Graph</label>
       <select id="scenario-option"></select>
@@ -49,17 +56,17 @@
       <textarea id="scenario-input" rows="14" readonly></textarea>
     </section>
 
-    <section class="step" id="step-scenario-import">
-      <h2>Step 4 — Scenario JSON Import</h2>
+    <section class="step wizard-scene" id="step-scenario-import" data-wizard-step="2" hidden>
+      <h2>Step 3 — Scenario Import</h2>
       <p class="next-action">Codexが返したScenario Import Package JSONを貼り付けるか、JSONファイルを読み込みます。</p>
-      <input id="scenario-file" type="file" accept="application/json,.json">
+      <input id="scenario-file" type="file" accept="application/json,text/plain,.json,.txt">
       <textarea id="scenario-json" rows="16" spellcheck="false"></textarea>
       <button id="import-scenario" type="button">ScenarioをImport</button>
       <pre id="scenario-result" class="output"></pre>
     </section>
 
-    <section class="step" id="step-verification">
-      <h2>Step 5–8 — Independent Verification Review</h2>
+    <section class="step wizard-scene" id="step-verification" data-wizard-step="3" hidden>
+      <h2>Step 4 — Independent Verification</h2>
       <p class="next-action">Scenario生成とは分離したCodex作業へVerification Prompt/Inputを渡し、Review JSONを戻してください。</p>
       <div class="button-row">
         <button type="button" data-copy="verification-prompt">Promptをコピー</button>
@@ -71,16 +78,19 @@
       <label for="verification-input">Verification Input</label>
       <textarea id="verification-input" rows="14" readonly></textarea>
       <label for="review-json">Scenario Verification Review JSON</label>
-      <input id="review-file" type="file" accept="application/json,.json">
+      <input id="review-file" type="file" accept="application/json,text/plain,.json,.txt">
       <textarea id="review-json" rows="14" spellcheck="false"></textarea>
-      <button id="import-review" type="button">Independent ReviewをImport</button>
+      <div class="button-row">
+        <button id="import-review" type="button">Independent ReviewをImport</button>
+        <button id="prepare-evidence" type="button">Evidence生成準備</button>
+        <button id="build-xss-prototype" type="button">検証済みScenarioからXSSゲームをBuild</button>
+      </div>
       <pre id="verification-result" class="output"></pre>
-      <button id="prepare-evidence" type="button">Evidence生成準備</button>
     </section>
 
-    <section class="step" id="step-evidence">
-      <h2>Step 9–11 — Evidenceを外部Codexで生成・Import</h2>
-      <p class="next-action">VERIFIED後に表示されるPrompt/InputをCodexへ渡し、Evidence Import Packageを戻してください。</p>
+    <section class="step wizard-scene" id="step-evidence-generation" data-wizard-step="4" hidden>
+      <h2>Step 5 — Evidence Generation</h2>
+      <p class="next-action">VERIFIEDなScenarioから生成されたPrompt/Inputを外部Codexへ渡します。</p>
       <div class="button-row">
         <button type="button" data-copy="evidence-prompt">Promptをコピー</button>
         <button type="button" data-copy="evidence-input">Input JSONをコピー</button>
@@ -90,29 +100,116 @@
       <textarea id="evidence-prompt" rows="10" readonly></textarea>
       <label for="evidence-input">Evidence Generation Input</label>
       <textarea id="evidence-input" rows="14" readonly></textarea>
+    </section>
+
+    <section class="step wizard-scene" id="step-evidence-import" data-wizard-step="5" hidden>
+      <h2>Step 6 — Evidence Import</h2>
+      <p class="next-action">外部Codexが返したEvidence Import Package JSONをImportします。</p>
       <label for="evidence-json">Evidence Import Package JSON</label>
-      <input id="evidence-file" type="file" accept="application/json,.json">
+      <input id="evidence-file" type="file" accept="application/json,text/plain,.json,.txt">
       <textarea id="evidence-json" rows="16" spellcheck="false"></textarea>
       <button id="import-evidence" type="button">EvidenceをImport</button>
       <pre id="evidence-result" class="output"></pre>
     </section>
 
-    <section class="step" id="step-progression">
-      <h2>Step 12 — Game Progression Plan</h2>
-      <p class="next-action">一覧に存在するEvidence、Target元、Action IDだけを使い、Investigation TargetとEvidence Discovery Ruleを明示してください。本文からの自動推測やmaxCourtAttemptsの補完は行いません。</p>
-      <h3>利用可能なEvidence / Testimony / Statement / Investigation ID</h3>
-      <pre id="progression-references" class="output"></pre>
-      <label for="progression-json">Game Progression Plan JSON</label>
-      <textarea id="progression-json" rows="20" spellcheck="false"></textarea>
+    <section class="step wizard-scene" id="step-progression" data-wizard-step="6" hidden>
+      <h2>Step 7 — Game Progression Plan Builder</h2>
+      <p class="next-action">表示された候補を選択すると、既存Schema準拠のPlan JSONを内部生成します。本文からIDや正解を推測しません。</p>
+      <div id="builder-validation" class="validation-summary" role="alert"></div>
+
+      <section class="builder-section" aria-labelledby="initial-court-heading">
+        <h3 id="initial-court-heading">1. Initial Court</h3>
+        <fieldset><legend>提示するEvidence</legend><div id="initial-evidence-options" class="option-list"></div></fieldset>
+        <fieldset><legend>提示するStatement</legend><div id="initial-statement-options" class="option-list"></div></fieldset>
+        <label for="initial-ruling">公開判定文</label>
+        <textarea id="initial-ruling" rows="4" maxlength="1000"></textarea>
+        <div id="initial-errors" class="field-errors"></div>
+      </section>
+
+      <section class="builder-section" aria-labelledby="investigation-heading">
+        <h3 id="investigation-heading">2. Investigation</h3>
+        <fieldset><legend>調査で発見可能にするEvidence</legend><div id="investigation-evidence-options" class="option-list"></div></fieldset>
+        <div class="builder-card">
+          <h4>Investigation Target</h4>
+          <div class="form-grid">
+            <label for="target-id">Target ID<input id="target-id" maxlength="160" pattern="[a-z][a-z0-9_-]*"></label>
+            <label for="target-type">Target Type<select id="target-type"></select></label>
+            <label for="target-display-name">公開名<input id="target-display-name" maxlength="200"></label>
+            <label for="target-source">Source<select id="target-source"></select></label>
+          </div>
+          <label for="target-description">説明</label>
+          <textarea id="target-description" rows="3" maxlength="1000"></textarea>
+          <fieldset><legend>利用可能Action</legend><div id="target-actions" class="option-list compact"></div></fieldset>
+          <label class="inline-option"><input id="target-initial" type="checkbox">初期状態から調査可能</label>
+          <div class="button-row"><button id="save-target" type="button">Targetを追加</button><button id="cancel-target" class="secondary" type="button" hidden>編集を取消</button></div>
+          <div id="target-errors" class="field-errors"></div>
+        </div>
+        <div id="target-list" class="builder-list" aria-label="作成済みTarget"></div>
+
+        <div class="builder-card">
+          <h4>Evidence Discovery Rule</h4>
+          <div class="form-grid">
+            <label for="rule-target">Target<select id="rule-target"></select></label>
+            <label for="rule-action">Action<select id="rule-action"></select></label>
+            <label for="rule-evidence">発見Evidence<select id="rule-evidence"></select></label>
+          </div>
+          <fieldset><legend>Prerequisite Evidence</legend><div id="rule-prerequisite-evidence" class="option-list compact"></div></fieldset>
+          <fieldset><legend>Prerequisite Action</legend><div id="rule-prerequisite-actions" class="option-list compact"></div></fieldset>
+          <fieldset><legend>Unlock Target</legend><div id="rule-unlock-targets" class="option-list compact"></div></fieldset>
+          <label for="rule-public-message">Public Result</label><textarea id="rule-public-message" rows="3" maxlength="2000"></textarea>
+          <label for="rule-next-hints">Next Hints（1行1件）</label><textarea id="rule-next-hints" rows="3"></textarea>
+          <label class="inline-option"><input id="rule-repeatable" type="checkbox">繰り返し実行時にも結果を返す</label>
+          <div class="button-row"><button id="save-rule" type="button">Discovery Ruleを追加</button><button id="cancel-rule" class="secondary" type="button" hidden>編集を取消</button></div>
+          <div id="rule-errors" class="field-errors"></div>
+        </div>
+        <div id="rule-list" class="builder-list" aria-label="作成済みDiscovery Rule"></div>
+        <div id="investigation-errors" class="field-errors"></div>
+      </section>
+
+      <section class="builder-section" aria-labelledby="retrial-heading">
+        <h3 id="retrial-heading">3. Retrial Court</h3>
+        <fieldset><legend>使用するTestimony / Statement</legend><div id="retrial-statement-options" class="option-list"></div></fieldset>
+        <h4>Statementで提示可能なEvidence</h4><div id="retrial-presentation-summary" class="builder-list"></div>
+        <label for="return-condition">Investigationから戻る条件</label>
+        <select id="return-condition"><option value="AT_LEAST_ONE_EVIDENCE_COLLECTED">Evidenceを1件以上収集</option><option value="ALL_REQUIRED_EVIDENCE_COLLECTED">必須Evidenceをすべて収集</option></select>
+        <div id="retrial-errors" class="field-errors"></div>
+      </section>
+
+      <section class="builder-section" aria-labelledby="objection-heading">
+        <h3 id="objection-heading">4. Objection</h3>
+        <p>既存Contradiction／Exonerationに一致する組合せだけを選択できます。matchModeは既存仕様の <code>ANY_PRESENTED</code> です。</p>
+        <div id="objection-options" class="option-list"></div><div id="objection-errors" class="field-errors"></div>
+      </section>
+
+      <section class="builder-section" aria-labelledby="retry-heading">
+        <h3 id="retry-heading">5. Retry Policy</h3>
+        <label for="max-court-attempts">最大挑戦回数</label><input id="max-court-attempts" type="number" min="1" step="1" value="3">
+        <dl class="fixed-values"><dt>失敗時</dt><dd>RETURN_TO_INVESTIGATION</dd><dt>上限到達時</dt><dd>BLOCKED</dd></dl>
+        <label for="acquittal-ruling">公開する無罪判決文</label><textarea id="acquittal-ruling" rows="3" maxlength="1000"></textarea>
+        <label for="acquittal-explanation">公開する無罪説明</label><textarea id="acquittal-explanation" rows="4" maxlength="2000"></textarea>
+        <label for="failure-feedback">失敗時の公開Feedback</label><textarea id="failure-feedback" rows="3" maxlength="1000"></textarea>
+        <div id="retry-errors" class="field-errors"></div>
+      </section>
+
+      <button id="validate-progression" type="button">Planを検証</button>
+      <details id="progression-details"><summary>詳細設定：JSONを表示</summary><pre id="progression-preview" class="output" aria-label="自動生成Game Progression Plan JSON"></pre></details>
     </section>
 
-    <section class="step" id="step-build">
-      <h2>Step 13–15 — Game Build / Evaluation / Play</h2>
-      <p class="next-action">Planを検証し、Game Case、Game Make、独立Evaluation、Orchestratorを順に実行します。</p>
+    <section class="step wizard-scene" id="step-build" data-wizard-step="7" hidden>
+      <h2>Step 8 — Build / Evaluation / Play</h2>
+      <p class="next-action">検証済みPlanでGame Case、Game Make、独立Evaluation、Orchestratorを順に実行します。</p>
       <button id="build-game" type="button">GameをBuildしてEvaluation</button>
+      <button id="build-xss-prototype-final" type="button">XSSゲームをBuildしてEvaluation</button>
       <pre id="build-result" class="output"></pre>
       <a id="play-game" class="button-link" hidden>ゲームをプレイ</a>
     </section>
+
+    <nav class="wizard-navigation" aria-label="工程移動">
+      <button id="wizard-back" class="secondary" type="button">戻る</button>
+      <span id="wizard-position"></span>
+      <span id="wizard-requirement" role="status" aria-live="polite"></span>
+      <button id="wizard-next" type="button">次へ</button>
+    </nav>
   </main>
 </body>
 </html>
