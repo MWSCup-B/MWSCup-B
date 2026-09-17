@@ -18,6 +18,7 @@ import {
   validateUiIntegrationHandoff,
 } from '../server/generation/game-case-validator.js';
 import { phase7Fixture } from './helpers/phase7-evidence.js';
+import { investigationFixtureDesign } from './helpers/ready-game-case.js';
 
 function conversionInput() {
   const fixture = phase7Fixture();
@@ -28,6 +29,7 @@ function conversionInput() {
     initialCourtEvidenceIds: ['evidence_technical_b'],
     initialCourtStatementIds: ['statement_seen_operation'],
     investigationEvidenceIds: ['evidence_technical_a', 'evidence_technical_b', 'evidence_testimony'],
+    ...investigationFixtureDesign(),
     retrialStatementIds: ['statement_seen_operation', 'statement_checked_time'],
     returnToCourtCondition: 'ALL_REQUIRED_EVIDENCE_COLLECTED',
     objectionRules: [{ objectionRuleId: 'objection_seen_operation',
@@ -48,7 +50,7 @@ function conversionInput() {
     gameCaseHandoff: fixture.gameCaseHandoff, evidenceSet: fixture.evidenceSet,
     scenarioPackage: fixture.scenarioPackage, characters: fixture.scenarioPackage.characters,
     timeline: fixture.scenarioPackage.timeline, verificationResult: fixture.verificationResult,
-    progressionPlan,
+    progressionPlan, scenarioGenerationInput: fixture.generationInput,
     contradictions: fixture.contradictions, exonerations: fixture.exonerations });
   return { fixture, progressionPlan, input };
 }
@@ -255,7 +257,7 @@ test('Public Game CaseへのGround Truth・内部ID漏えいを検出する', ()
   for (const leaked of [input.scenarioPackage.groundTruth.groundTruthId,
     input.verificationResult.verificationId, input.evidenceSet.attackGraphRef.graphId]) {
     const publicCase = structuredClone(result.publicGameCase);
-    publicCase.detective.evidence[0].publicContent += leaked;
+    publicCase.detective.investigationActions[0].description += leaked;
     assert.throws(() => validatePublicGameCase(publicCase, input),
       { code: 'PUBLIC_GAME_CASE_INTERNAL_ID_LEAK' });
   }
@@ -286,7 +288,7 @@ test('通常プレイで公開statementと取得可能Evidenceから少なくと
   const { result } = readyBundle();
   const statements = new Set(result.publicGameCase.courtroom.testimonies
     .flatMap(item => item.statements.map(statement => statement.statementId)));
-  const available = new Set(result.publicGameCase.detective.evidence
+  const available = new Set(result.gameCase.detective.evidence
     .filter(item => item.availability === 'AVAILABLE').map(item => item.evidenceId));
   assert.ok(result.gameCase.judgment.judgmentRules.some(rule => statements.has(rule.targetStatementId)
     && rule.acceptedEvidenceIds.some(id => available.has(id)
@@ -440,11 +442,11 @@ test('Initial Courtの公開構造へGround Truthや人物確定情報を追加�
   assert.throws(() => validateGameCase(internal), { code: 'UNSUPPORTED_VERSION' });
 });
 
-test('Progression変換でもPhase 7 Evidence publicContentを改変しない', () => {
+test('Internal Game CaseでもPhase 7 Evidence publicContentを改変しない', () => {
   const { fixture, result } = readyBundle();
   const originals = new Map(fixture.evidenceSet.evidenceArtifacts
     .map(item => [item.evidenceId, item.publicContent]));
-  for (const item of result.publicGameCase.detective.evidence) {
+  for (const item of result.gameCase.detective.evidence) {
     assert.equal(item.publicContent, originals.get(item.evidenceId));
   }
 });

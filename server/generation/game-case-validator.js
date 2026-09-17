@@ -1,6 +1,10 @@
 import { digest, sameValues, validateEvidenceImportResult, validateEvidenceSet,
   validateGameCaseHandoff } from './evidence-validator.js';
 import { validateScenarioVerificationResult } from './scenario-verifier.js';
+import { validateScenarioGenerationInput } from './scenario-interface.js';
+import { publicInvestigationAction,
+  validateInvestigationDefinitions, validateInvestigationDesign }
+  from './investigation-validator.js';
 import { fail, validateDocument } from './schema.js';
 
 export const GAME_CASE_TITLE = 'セキュリティインシデント調査';
@@ -33,7 +37,8 @@ const sorted = values => [...values].sort();
 function graphRefs(input) {
   return [input.evidenceSet.attackGraphRef, input.gameCaseHandoff.attackGraphRef,
     input.verificationResult.attackGraphRef, input.scenarioPackage.scenarioDraft.attackGraphRef,
-    input.characters.attackGraphRef, input.timeline.attackGraphRef, input.progressionPlan.attackGraphRef];
+    input.characters.attackGraphRef, input.timeline.attackGraphRef, input.progressionPlan.attackGraphRef,
+    input.scenarioGenerationInput.attackGraphRef];
 }
 
 export function progressionPlanCore(plan) {
@@ -42,6 +47,10 @@ export function progressionPlanCore(plan) {
     initialCourtEvidenceIds: plan.initialCourtEvidenceIds,
     initialCourtStatementIds: plan.initialCourtStatementIds,
     investigationEvidenceIds: plan.investigationEvidenceIds,
+    investigationActions: plan.investigationActions,
+    investigationTargets: plan.investigationTargets,
+    evidenceDiscoveryRules: plan.evidenceDiscoveryRules,
+    initialAvailableTargetIds: plan.initialAvailableTargetIds,
     retrialStatementIds: plan.retrialStatementIds,
     returnToCourtCondition: plan.returnToCourtCondition,
     objectionRules: plan.objectionRules, retryPolicy: plan.retryPolicy,
@@ -50,6 +59,7 @@ export function progressionPlanCore(plan) {
 
 export function validateGameProgressionPlan(plan) {
   validateDocument('game-progression-plan', plan);
+  validateInvestigationDefinitions(plan);
   for (const [field, values] of [['initialCourtEvidenceIds', plan.initialCourtEvidenceIds],
     ['initialCourtStatementIds', plan.initialCourtStatementIds],
     ['investigationEvidenceIds', plan.investigationEvidenceIds],
@@ -80,6 +90,7 @@ export function conversionInputCore(input) {
     evidenceSet: input.evidenceSet, scenarioPackage: input.scenarioPackage,
     characters: input.characters, timeline: input.timeline,
     verificationResult: input.verificationResult, progressionPlan: input.progressionPlan,
+    scenarioGenerationInput: input.scenarioGenerationInput,
     contradictions: input.contradictions, exonerations: input.exonerations,
   };
 }
@@ -169,6 +180,14 @@ function validateProgressionPlanReferences(input) {
     fail('FAILURE_FEEDBACK_LEAKS_ANSWER', 'game-progression-plan.publicMessages.failureFeedback',
       '失敗Feedbackに正解statementまたはEvidence IDを含めることはできません。');
   }
+  const investigationMessages = plan.evidenceDiscoveryRules.flatMap(rule =>
+    [rule.discoveryResult.publicMessage, ...rule.discoveryResult.nextHints]);
+  if (investigationMessages.some(message => answerIds.some(id => message.includes(id))
+    || /正解|correct answer/i.test(message))) {
+    fail('INVESTIGATION_RESULT_LEAKS_ANSWER',
+      'game-progression-plan.evidenceDiscoveryRules.discoveryResult',
+      '公開Investigation Resultまたはhintに法廷の正解を含めることはできません。');
+  }
 }
 
 export function validateGameCaseConversionInput(input) {
@@ -177,6 +196,7 @@ export function validateGameCaseConversionInput(input) {
   validateEvidenceSet(input.evidenceSet);
   validateGameCaseHandoff(input.gameCaseHandoff, input.evidenceSet);
   validateScenarioVerificationResult(input.verificationResult);
+  validateScenarioGenerationInput(input.scenarioGenerationInput);
   validateDocument('scenario-import-package', input.scenarioPackage);
   validateDocument('character', input.characters);
   validateDocument('timeline', input.timeline);
@@ -202,6 +222,11 @@ export function validateGameCaseConversionInput(input) {
   if (input.verificationResult.evidenceAgentHandoff.scenarioPackageFingerprint !== digest(input.scenarioPackage)) {
     fail('SCENARIO_PACKAGE_MODIFIED', 'game-case-conversion-input.scenarioPackage',
       'Phase 6 VERIFIED後にScenario Packageが変更されています。');
+  }
+  if (!sameValues(input.scenarioGenerationInput.attackGraphRef, draft.attackGraphRef)
+    || input.scenarioGenerationInput.generationInputId !== input.scenarioPackage.generationInputRef.generationInputId) {
+    fail('SCENARIO_GENERATION_INPUT_MISMATCH', 'game-case-conversion-input.scenarioGenerationInput',
+      'Scenario Generation InputがVERIFIED Scenario Packageの生成元と一致しません。');
   }
   const scenarioIds = [input.evidenceSet.scenarioId, input.gameCaseHandoff.scenarioId,
     input.verificationResult.scenarioId, draft.scenarioId, input.characters.scenarioId,
@@ -273,6 +298,7 @@ export function validateGameCaseConversionInput(input) {
     || !input.gameCaseHandoff.eligibleForGameCaseGeneration) fail('GAME_CASE_HANDOFF_NOT_READY',
     'game-case-conversion-input.gameCaseHandoff.state', 'EVIDENCE_READYなHandoffだけを変換できます。');
   validateProgressionPlanReferences(input);
+  validateInvestigationDesign(input);
   const expectedFingerprint = digest(conversionInputCore(input));
   if (input.inputFingerprint !== expectedFingerprint
     || input.conversionInputId !== `game_case_input_${expectedFingerprint.slice(0, 20)}`) {
@@ -359,7 +385,8 @@ export function deriveGameCaseParts(input) {
       publicRuling: input.progressionPlan.publicMessages.initialRuling,
       attributionStatus: 'ALLEGATION_ONLY', nextState: 'INVESTIGATION' },
     investigation: { availableEvidenceIds: [...input.progressionPlan.investigationEvidenceIds],
-      collectedEvidenceIds: [],
+      initialAvailableTargetIds: [...input.progressionPlan.initialAvailableTargetIds],
+      completedInvestigationActions: [], discoveredEvidenceIds: [], collectedEvidenceIds: [],
       requiredForCourtIds: [...new Set(judgmentRules.flatMap(item => item.acceptedEvidenceIds))],
       returnToCourtCondition: input.progressionPlan.returnToCourtCondition },
     retrialCourt: { testimonies: structuredClone(testimonies),
@@ -376,7 +403,11 @@ export function deriveGameCaseParts(input) {
     guiltyRetry: { state: 'GUILTY_RETRY',
       publicRuling: input.progressionPlan.publicMessages.failureFeedback,
       nextState: 'INVESTIGATION' } } };
-  return { characters, detective: { evidence }, courtroom: { testimonies, presentableEvidenceIds },
+  return { characters, detective: { evidence,
+    investigationActions: structuredClone(input.progressionPlan.investigationActions),
+    investigationTargets: structuredClone(input.progressionPlan.investigationTargets),
+    evidenceDiscoveryRules: structuredClone(input.progressionPlan.evidenceDiscoveryRules) },
+    courtroom: { testimonies, presentableEvidenceIds },
     progression, judgment: { judgmentRules } };
 }
 
@@ -392,7 +423,7 @@ export function gameCaseCore(gameCase) {
 function projectPublicProgression(progression) {
   return { schemaVersion: '1.0', initialState: progression.initialState,
     initialCourt: structuredClone(progression.initialCourt),
-    investigation: { availableEvidenceIds: [...progression.investigation.availableEvidenceIds],
+    investigation: { actionRequired: true, evidenceDiscoveryRequired: true,
       returnToCourtCondition: progression.investigation.returnToCourtCondition },
     retrialCourt: structuredClone(progression.retrialCourt),
     objection: { action: progression.objection.action,
@@ -405,7 +436,8 @@ function projectPublicProgression(progression) {
 export function projectPublicGameCase(gameCase) {
   return { schemaVersion: '1.0', gameCaseId: gameCase.gameCaseId, title: gameCase.title,
     synopsis: gameCase.synopsis, characters: structuredClone(gameCase.characters),
-    detective: structuredClone(gameCase.detective), courtroom: structuredClone(gameCase.courtroom),
+    detective: { investigationActions: gameCase.detective.investigationActions.map(publicInvestigationAction) },
+    courtroom: structuredClone(gameCase.courtroom),
     progression: projectPublicProgression(gameCase.progression) };
 }
 
@@ -422,6 +454,10 @@ export function validateGameCase(gameCase) {
   validateDocument('game-progression', gameCase.progression);
   unique(gameCase.characters, item => item.characterId, 'game-case.characters.characterId');
   unique(gameCase.detective.evidence, item => item.evidenceId, 'game-case.detective.evidence.evidenceId');
+  validateInvestigationDefinitions({ investigationActions: gameCase.detective.investigationActions,
+    investigationTargets: gameCase.detective.investigationTargets,
+    evidenceDiscoveryRules: gameCase.detective.evidenceDiscoveryRules,
+    initialAvailableTargetIds: gameCase.progression.investigation.initialAvailableTargetIds });
   unique(gameCase.courtroom.testimonies, item => item.testimonyEvidenceId,
     'game-case.courtroom.testimonies.testimonyEvidenceId');
   unique(gameCase.courtroom.presentableEvidenceIds, item => item, 'game-case.courtroom.presentableEvidenceIds');
@@ -442,7 +478,9 @@ export function validateGameCase(gameCase) {
   if (!sameValues(gameCase.progression.investigation.availableEvidenceIds,
     gameCase.detective.evidence.map(item => item.evidenceId))) fail('INVESTIGATION_EVIDENCE_MISMATCH',
     'game-case.progression.investigation.availableEvidenceIds', 'Investigation Evidence一覧がDetective Partと一致しません。');
-  if (gameCase.progression.investigation.collectedEvidenceIds.length
+  if (gameCase.progression.investigation.completedInvestigationActions.length
+    || gameCase.progression.investigation.discoveredEvidenceIds.length
+    || gameCase.progression.investigation.collectedEvidenceIds.length
     || gameCase.progression.retryState.previouslyPresentedStatementId !== null
     || gameCase.progression.retryState.previouslyPresentedEvidenceId !== null
     || gameCase.progression.retryState.attemptCount !== 0) fail('INVALID_PROGRESSION_INITIAL_STATE',
@@ -468,7 +506,7 @@ function walkKeys(value, visitor) {
 export function validatePublicGameCase(publicGameCase, input = null) {
   validateDocument('public-game-case', publicGameCase);
   validateDocument('public-game-progression', publicGameCase.progression);
-  const forbidden = /^(groundTruth|verificationResult|sourceRefs|provenance|fingerprint|progressionFingerprint|contradictionRef|exonerationRef|judgment|attackGraphRef|requirementIds|technicalAssessment|groundTruthRefs|acceptedEvidenceIds|requiredForCourtIds|retryPolicy)$/i;
+  const forbidden = /^(groundTruth|verificationResult|sourceRefs|sourceNodeRef|provenance|fingerprint|progressionFingerprint|contradictionRef|exonerationRef|judgment|attackGraphRef|requirementIds|technicalAssessment|groundTruthRefs|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|initiallyAvailable|retryPolicy)$/i;
   walkKeys(publicGameCase, key => {
     if (forbidden.test(key)) fail('PUBLIC_GAME_CASE_INTERNAL_FIELD', `public-game-case.${key}`,
       'Public Game CaseにBackend内部フィールドが含まれています。');
@@ -505,6 +543,7 @@ export function validateGameCaseBundle({ input, gameCase, publicGameCase }) {
   const statementIds = new Set(gameCase.courtroom.testimonies
     .flatMap(item => item.statements.map(statement => statement.statementId)));
   const available = new Set(gameCase.progression.investigation.availableEvidenceIds);
+  const discoverable = new Set(gameCase.detective.evidenceDiscoveryRules.map(item => item.evidenceId));
   const presentable = new Set(gameCase.progression.retrialCourt.presentableEvidenceIds);
   const required = new Set(gameCase.progression.investigation.requiredForCourtIds);
   let solvable = false;
@@ -514,7 +553,7 @@ export function validateGameCaseBundle({ input, gameCase, publicGameCase }) {
     for (const id of rule.acceptedEvidenceIds) {
       if (!evidenceById.has(id)) fail('BROKEN_EVIDENCE_REFERENCE',
         `game-case.judgment.${rule.ruleId}.acceptedEvidenceIds`, 'Judgment ruleが存在しないEvidenceを要求しています。');
-      if (!available.has(id) || !presentable.has(id)
+      if (!available.has(id) || !discoverable.has(id) || !presentable.has(id)
         || evidenceById.get(id).visibility !== 'PLAYER_OBTAINABLE') fail('UNOBTAINABLE_JUDGMENT_EVIDENCE',
         `game-case.judgment.${rule.ruleId}.acceptedEvidenceIds`,
         'Judgment ruleがInvestigationで取得しRetrial Courtで提示できないEvidenceを要求しています。');

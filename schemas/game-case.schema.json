@@ -55,9 +55,27 @@
           },
           "minItems": 1,
           "maxItems": 512
+        },
+        "investigationActions": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true },
+          "minItems": 8,
+          "maxItems": 64
+        },
+        "investigationTargets": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true },
+          "minItems": 1,
+          "maxItems": 128
+        },
+        "evidenceDiscoveryRules": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true },
+          "minItems": 1,
+          "maxItems": 512
         }
       },
-      "required": ["evidence"],
+      "required": ["evidence", "investigationActions", "investigationTargets", "evidenceDiscoveryRules"],
       "additionalProperties": false
     },
     "courtroom": {

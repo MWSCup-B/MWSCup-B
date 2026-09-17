@@ -14,9 +14,10 @@
     "timeline": { "type": "object", "additionalProperties": true },
     "verificationResult": { "type": "object", "additionalProperties": true },
     "progressionPlan": { "type": "object", "additionalProperties": true },
+    "scenarioGenerationInput": { "type": "object", "additionalProperties": true },
     "contradictions": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "minItems": 1, "maxItems": 256 },
     "exonerations": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "minItems": 1, "maxItems": 256 }
   },
-  "required": ["schemaVersion", "conversionInputId", "inputFingerprint", "evidenceImportResult", "gameCaseHandoff", "evidenceSet", "scenarioPackage", "characters", "timeline", "verificationResult", "progressionPlan", "contradictions", "exonerations"],
+  "required": ["schemaVersion", "conversionInputId", "inputFingerprint", "evidenceImportResult", "gameCaseHandoff", "evidenceSet", "scenarioPackage", "characters", "timeline", "verificationResult", "progressionPlan", "scenarioGenerationInput", "contradictions", "exonerations"],
   "additionalProperties": false
 }

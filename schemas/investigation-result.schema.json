@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Public Investigation Result v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "targetId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "investigationActionId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "publicMessage": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "discovered": { "type": "boolean" },
+    "discoveredEvidenceIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 0,
+      "maxItems": 512
+    },
+    "unlockedTargetIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 0,
+      "maxItems": 128
+    },
+    "nextHints": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 500 },
+      "minItems": 0,
+      "maxItems": 64
+    }
+  },
+  "required": ["schemaVersion", "targetId", "investigationActionId", "publicMessage", "discovered", "discoveredEvidenceIds", "unlockedTargetIds", "nextHints"],
+  "additionalProperties": false
+}

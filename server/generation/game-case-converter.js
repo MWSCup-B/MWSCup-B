@@ -21,9 +21,11 @@ function inputRef(input) {
 
 export function buildGameProgressionPlan({ scenarioId, evidenceSetId, attackGraphRef,
   initialCourtEvidenceIds, initialCourtStatementIds, investigationEvidenceIds,
+  investigationActions, investigationTargets, evidenceDiscoveryRules, initialAvailableTargetIds,
   retrialStatementIds, returnToCourtCondition, objectionRules, retryPolicy, publicMessages }) {
   const core = structuredClone({ scenarioId, evidenceSetId, attackGraphRef,
     initialCourtEvidenceIds, initialCourtStatementIds, investigationEvidenceIds,
+    investigationActions, investigationTargets, evidenceDiscoveryRules, initialAvailableTargetIds,
     retrialStatementIds, returnToCourtCondition, objectionRules, retryPolicy, publicMessages });
   const fingerprint = digest(core);
   return validateGameProgressionPlan({ schemaVersion: '1.0',
@@ -32,9 +34,10 @@ export function buildGameProgressionPlan({ scenarioId, evidenceSetId, attackGrap
 
 export function buildGameCaseConversionInput({ evidenceImportResult, gameCaseHandoff, evidenceSet,
   scenarioPackage, characters, timeline, verificationResult, progressionPlan,
-  contradictions, exonerations }) {
+  scenarioGenerationInput, contradictions, exonerations }) {
   const core = structuredClone({ evidenceImportResult, gameCaseHandoff, evidenceSet, scenarioPackage,
-    characters, timeline, verificationResult, progressionPlan, contradictions, exonerations });
+    characters, timeline, verificationResult, progressionPlan, scenarioGenerationInput,
+    contradictions, exonerations });
   const inputFingerprint = digest(core);
   return validateGameCaseConversionInput({ schemaVersion: '1.0',
     conversionInputId: `game_case_input_${inputFingerprint.slice(0, 20)}`, inputFingerprint, ...core });

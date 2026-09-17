@@ -1,11 +1,16 @@
 import { evaluateObjection } from './generation/game-case-validator.js';
+import { investigationCompletionId, publicInvestigationTarget, validateInvestigationResult }
+  from './generation/investigation-validator.js';
 import { GameError } from './game.js';
 
 export function createGeneratedGame(runtime) {
   if (!runtime || runtime.mode !== 'GENERATED') throw new GameError('GAME_BUILD_BLOCKED',
     'game', 'Generated Game Caseを開始できません。', 503);
   return { gameCaseId: runtime.gameCase.gameCaseId, currentState: 'TITLE',
-    collectedEvidenceIds: [], selectedStatementId: null, attemptCount: 0,
+    availableInvestigationTargets:
+      [...runtime.gameCase.progression.investigation.initialAvailableTargetIds],
+    completedInvestigationActions: [], discoveredEvidenceIds: [], collectedEvidenceIds: [],
+    lastInvestigationResult: null, selectedStatementId: null, attemptCount: 0,
     previousAttempts: [], result: null };
 }
 
@@ -13,8 +18,8 @@ function characterMap(publicCase) {
   return new Map(publicCase.characters.map(item => [item.characterId, item]));
 }
 
-function evidenceMap(publicCase) {
-  return new Map(publicCase.detective.evidence.map(item => [item.evidenceId, item]));
+function evidenceMap(internalCase) {
+  return new Map(internalCase.detective.evidence.map(item => [item.evidenceId, item]));
 }
 
 function publicEvidence(item) {
@@ -25,7 +30,8 @@ function publicEvidence(item) {
 export function generatedPlayerView(session, runtime) {
   const publicCase = runtime.publicGameCase;
   const characters = characterMap(publicCase);
-  const evidence = evidenceMap(publicCase);
+  const evidence = evidenceMap(runtime.gameCase);
+  const evidenceItems = runtime.gameCase.detective.evidence;
   const base = { mode: 'GENERATED', gameCaseId: publicCase.gameCaseId,
     currentState: session.currentState, title: publicCase.title, synopsis: publicCase.synopsis,
     attemptCount: session.attemptCount, result: session.result };
@@ -39,20 +45,33 @@ export function generatedPlayerView(session, runtime) {
       publicRuling: court.publicRuling, attributionStatus: court.attributionStatus } };
   }
   if (session.currentState === 'INVESTIGATION') {
-    const allowed = new Set(publicCase.progression.investigation.availableEvidenceIds);
+    const availableTargets = new Set(session.availableInvestigationTargets);
+    const completedActions = new Set(session.completedInvestigationActions);
+    const discovered = new Set(session.discoveredEvidenceIds);
     const collected = new Set(session.collectedEvidenceIds);
+    const actions = new Map(publicCase.detective.investigationActions
+      .map(item => [item.actionId, item]));
     return { ...base,
-      evidenceCandidates: publicCase.detective.evidence.filter(item => allowed.has(item.evidenceId))
-        .map(item => ({ evidenceId: item.evidenceId, title: item.title, type: item.type,
-          collected: collected.has(item.evidenceId) })),
-      collectedEvidence: publicCase.detective.evidence
-        .filter(item => collected.has(item.evidenceId)).map(publicEvidence) };
+      investigationTargets: runtime.gameCase.detective.investigationTargets
+        .filter(item => availableTargets.has(item.targetId)).map(publicInvestigationTarget).map(item => ({
+          targetId: item.targetId, targetType: item.targetType, displayName: item.displayName,
+          description: item.description, availableActions: item.availableActionIds.map(actionId => ({
+            ...actions.get(actionId), completed: completedActions.has(
+              investigationCompletionId(item.targetId, actionId)),
+          })),
+        })),
+      lastInvestigationResult: structuredClone(session.lastInvestigationResult),
+      discoveredEvidence: evidenceItems.filter(item => discovered.has(item.evidenceId))
+        .map(item => ({ ...publicEvidence(item),
+          discoveryState: collected.has(item.evidenceId) ? 'COLLECTED' : 'DISCOVERED' })),
+      collectedEvidence: evidenceItems.filter(item => collected.has(item.evidenceId))
+        .map(publicEvidence) };
   }
   if (session.currentState === 'RETRIAL_COURT') {
     const collected = new Set(session.collectedEvidenceIds);
     return { ...base, testimonies: publicCase.progression.retrialCourt.testimonies.map(testimony => ({
       ...testimony, speaker: characters.get(testimony.speakerCharacterId) })),
-    presentableEvidence: publicCase.detective.evidence.filter(item => collected.has(item.evidenceId)
+    presentableEvidence: evidenceItems.filter(item => collected.has(item.evidenceId)
       && publicCase.progression.retrialCourt.presentableEvidenceIds.includes(item.evidenceId))
       .map(publicEvidence) };
   }
@@ -70,18 +89,66 @@ function requireState(session, state) {
     '現在の状態では実行できない操作です。', 409);
 }
 
-export function actGenerated(session, runtime, { action, evidenceId, statementId }) {
+export function actGenerated(session, runtime, { action, evidenceId, statementId,
+  targetId, investigationActionId }) {
   const publicCase = runtime.publicGameCase;
   const internal = runtime.gameCase;
   if (action === 'begin') {
     requireState(session, 'TITLE'); session.currentState = 'INITIAL_COURT';
   } else if (action === 'continue') {
     requireState(session, 'INITIAL_COURT'); session.currentState = 'INVESTIGATION';
+  } else if (action === 'investigate') {
+    requireState(session, 'INVESTIGATION');
+    const target = internal.detective.investigationTargets.find(item => item.targetId === targetId);
+    if (typeof targetId !== 'string' || !target
+      || !session.availableInvestigationTargets.includes(targetId)) {
+      throw new GameError('UNKNOWN_INVESTIGATION_TARGET', 'targetId',
+        '現在調査可能な対象を選んでください。');
+    }
+    const investigationAction = internal.detective.investigationActions
+      .find(item => item.actionId === investigationActionId);
+    if (typeof investigationActionId !== 'string' || !investigationAction
+      || !target.availableActionIds.includes(investigationActionId)
+      || !investigationAction.allowedTargetTypes.includes(target.targetType)) {
+      throw new GameError('INVESTIGATION_ACTION_NOT_AVAILABLE', 'investigationActionId',
+        'この対象で利用可能な調査方法を選んでください。');
+    }
+    const discovered = new Set(session.discoveredEvidenceIds);
+    const completed = new Set(session.completedInvestigationActions);
+    const matching = internal.detective.evidenceDiscoveryRules.filter(rule =>
+      rule.targetId === targetId && rule.actionId === investigationActionId
+      && rule.prerequisites.requiredEvidenceIds.every(id => discovered.has(id))
+      && rule.prerequisites.requiredCompletedActionIds.every(id => completed.has(id))
+      && (rule.repeatable || !discovered.has(rule.evidenceId)));
+    const completionId = investigationCompletionId(targetId, investigationActionId);
+    if (!completed.has(completionId)) session.completedInvestigationActions.push(completionId);
+    const newEvidenceIds = [];
+    const unlockedTargetIds = [];
+    const nextHints = [];
+    for (const rule of matching) {
+      if (!discovered.has(rule.evidenceId)) {
+        discovered.add(rule.evidenceId); session.discoveredEvidenceIds.push(rule.evidenceId);
+        newEvidenceIds.push(rule.evidenceId);
+      }
+      for (const id of rule.discoveryResult.unlockedTargetIds) {
+        if (!session.availableInvestigationTargets.includes(id)) {
+          session.availableInvestigationTargets.push(id); unlockedTargetIds.push(id);
+        }
+      }
+      nextHints.push(...rule.discoveryResult.nextHints);
+    }
+    const messages = matching.map(rule => rule.discoveryResult.publicMessage);
+    const result = validateInvestigationResult({ schemaVersion: '1.0', targetId,
+      investigationActionId,
+      publicMessage: messages.length ? messages.join('\n') : '新しいEvidenceは見つかりませんでした。',
+      discovered: newEvidenceIds.length > 0, discoveredEvidenceIds: newEvidenceIds,
+      unlockedTargetIds, nextHints: [...new Set(nextHints)] });
+    session.lastInvestigationResult = result;
   } else if (action === 'collect') {
     requireState(session, 'INVESTIGATION');
-    if (typeof evidenceId !== 'string'
-      || !publicCase.progression.investigation.availableEvidenceIds.includes(evidenceId)) {
-      throw new GameError('UNKNOWN_EVIDENCE', 'evidenceId', '調査可能な証拠を選んでください。');
+    if (typeof evidenceId !== 'string' || !session.discoveredEvidenceIds.includes(evidenceId)) {
+      throw new GameError('EVIDENCE_NOT_DISCOVERED', 'evidenceId',
+        '調査で発見済みのEvidenceだけを証拠品として取得できます。');
     }
     if (!session.collectedEvidenceIds.includes(evidenceId)) session.collectedEvidenceIds.push(evidenceId);
   } else if (action === 'retrial') {

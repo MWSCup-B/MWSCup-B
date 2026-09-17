@@ -19,7 +19,7 @@ test('独立Evaluationが正常・再試行・試行上限経路を通してACCE
   const result = evaluateGame(input);
   assert.equal(result.status, 'ACCEPTED');
   assert.equal(result.accepted, true);
-  assert.equal(result.checks.length, 8);
+  assert.equal(result.checks.length, 10);
   assert.ok(result.checks.every(item => item.status === 'PASS'));
   assert.equal(validateGameEvaluationResult(result), result);
 });
@@ -70,6 +70,7 @@ test('EvaluationはGenerator自己評価を入力せず独立した経路評価�
   assert.equal(Object.hasOwn(input, 'generatorEvaluation'), false);
   const categories = evaluateGame(input).checks.map(item => item.category);
   assert.deepEqual(categories, ['UPSTREAM_INTEGRITY', 'NORMAL_PLAYTHROUGH',
-    'RETRY_PLAYTHROUGH', 'LIMIT_PLAYTHROUGH', 'SOLVABILITY',
+    'RETRY_PLAYTHROUGH', 'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY',
+    'INVESTIGATION_DISCLOSURE', 'SOLVABILITY',
     'BRUTE_FORCE_RESISTANCE', 'INFORMATION_DISCLOSURE', 'USABILITY']);
 });

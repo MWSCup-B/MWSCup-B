@@ -17,6 +17,12 @@ const assets = new Map([
   ['/author', ['author.html', 'text/html; charset=utf-8']],
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
 ]);
+const generatedActionFields = new Map([
+  ['begin', ['action']], ['continue', ['action']],
+  ['investigate', ['action', 'targetId', 'investigationActionId']],
+  ['collect', ['action', 'evidenceId']], ['retrial', ['action']],
+  ['objection', ['action', 'statementId', 'evidenceId']], ['retry', ['action']],
+]);
 
 export function createAppServer({ mode, gameCaseResult = null } = {}) {
   if (!['FIXTURE', 'GENERATED', 'AUTHOR'].includes(mode)) {
@@ -141,7 +147,7 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
       const session = sessions.get(token);
       if (!session) throw new GameError('SESSION_REQUIRED', 'session', 'ページを再読み込みしてゲームを開始してください。', 401);
       validateFields(body, session.mode === 'GENERATED'
-        ? ['action', 'evidenceId', 'statementId'] : ['action', 'evidenceId']);
+        ? (generatedActionFields.get(body.action) ?? ['action']) : ['action', 'evidenceId']);
       if (typeof body.action !== 'string') {
         throw new GameError('INVALID_ACTION', 'action', '操作を指定してください。');
       }

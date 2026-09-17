@@ -36,10 +36,11 @@
     "investigation": {
       "type": "object",
       "properties": {
-        "availableEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 512 },
+        "actionRequired": { "const": true },
+        "evidenceDiscoveryRequired": { "const": true },
         "returnToCourtCondition": { "enum": ["AT_LEAST_ONE_EVIDENCE_COLLECTED", "ALL_REQUIRED_EVIDENCE_COLLECTED"] }
       },
-      "required": ["availableEvidenceIds", "returnToCourtCondition"],
+      "required": ["actionRequired", "evidenceDiscoveryRequired", "returnToCourtCondition"],
       "additionalProperties": false
     },
     "retrialCourt": {

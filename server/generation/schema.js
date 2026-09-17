@@ -13,7 +13,8 @@ const names = ['attack-definition', 'network', 'scenario-context', 'candidate',
   'game-case-conversion-input', 'game-case', 'public-game-case',
   'game-case-result', 'ui-integration-handoff', 'game-make-result', 'evaluation-handoff',
   'game-evaluation-input', 'game-evaluation-result', 'orchestrator-input-validation-result',
-  'orchestrator-result'];
+  'orchestrator-result', 'investigation-action', 'investigation-target',
+  'evidence-discovery-rule', 'investigation-result'];
 const schemas = new Map(await Promise.all(names.map(async name => [name,
   JSON.parse(await readFile(new URL(`../../schemas/${name}.schema.json`, import.meta.url), 'utf8')),
 ])));

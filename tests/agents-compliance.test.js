@@ -8,7 +8,7 @@ import { advanceWorkflow, createOrchestrator } from '../server/generation/orches
 import { digest } from '../server/generation/evidence-validator.js';
 import { readyGameCaseFixture } from './helpers/ready-game-case.js';
 
-const forbiddenPublic = /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|contradictionRef|exonerationRef|attackGraphRef|provenance|fingerprint|sourceRefs|requirementIds/i;
+const forbiddenPublic = /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|sourceNodeRef|contradictionRef|exonerationRef|attackGraphRef|provenance|fingerprint|sourceRefs|requirementIds/i;
 
 test('Ground Truth先行と技術fact・架空人物・証言・推論のデータ分離を維持する', () => {
   const fixture = readyGameCaseFixture();
@@ -85,4 +85,3 @@ test('Gate failure後続禁止と上流fingerprint拘束を適用する', () => 
   assert.equal(workflow.currentState, 'BLOCKED');
   assert.deepEqual(workflow.completedGates, []);
 });
-

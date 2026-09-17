@@ -26,26 +26,24 @@
     "detective": {
       "type": "object",
       "properties": {
-        "evidence": {
+        "investigationActions": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "evidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
-              "title": { "type": "string", "minLength": 1, "maxLength": 300 },
-              "type": { "enum": ["EMAIL", "WEB_ACCESS_LOG", "AUTHENTICATION_LOG", "APPLICATION_LOG", "DATABASE_LOG", "BROWSER_HISTORY", "DEVICE_INFORMATION", "NETWORK_LOG", "FILE_METADATA", "TESTIMONY", "DOCUMENT", "OTHER"] },
-              "publicContent": { "type": "string", "minLength": 1, "maxLength": 20000 },
-              "availability": { "const": "AVAILABLE" },
-              "displayOrder": { "type": "number" }
+              "actionId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "actionType": { "enum": ["AUDIT_LOG", "INSPECT_DEVICE", "CHECK_EMAIL", "CHECK_BROWSER_HISTORY", "INSPECT_FILE", "ANALYZE_NETWORK_LOG", "REVIEW_AUTH_LOG", "CHECK_CONFIGURATION"] },
+              "displayName": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "description": { "type": "string", "minLength": 1, "maxLength": 1000 }
             },
-            "required": ["evidenceId", "title", "type", "publicContent", "availability", "displayOrder"],
+            "required": ["actionId", "actionType", "displayName", "description"],
             "additionalProperties": false
           },
-          "minItems": 1,
-          "maxItems": 512
+          "minItems": 8,
+          "maxItems": 64
         }
       },
-      "required": ["evidence"],
+      "required": ["investigationActions"],
       "additionalProperties": false
     },
     "courtroom": {

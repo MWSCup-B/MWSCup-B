@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Investigation Target v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "targetId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "targetType": { "enum": ["ENDPOINT", "SERVER", "MAILBOX", "LOG_SOURCE", "NETWORK_DEVICE", "FILE_SYSTEM", "BROWSER", "APPLICATION"] },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "sourceNodeRef": {
+      "type": "object",
+      "properties": {
+        "sourceType": { "enum": ["NETWORK_NODE", "NETWORK_SERVICE", "ATTACK_GRAPH_NODE", "ATTACK_GRAPH_ARTIFACT", "TIMELINE_EVENT", "EVIDENCE_ARTIFACT"] },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "required": ["sourceType", "sourceId"],
+      "additionalProperties": false
+    },
+    "availableActionIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "initiallyAvailable": { "type": "boolean" }
+  },
+  "required": ["schemaVersion", "targetId", "targetType", "displayName", "description", "sourceNodeRef", "availableActionIds", "initiallyAvailable"],
+  "additionalProperties": false
+}

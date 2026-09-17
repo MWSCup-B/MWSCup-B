@@ -13,7 +13,7 @@
       "items": {
         "type": "object",
         "properties": {
-          "category": { "enum": ["UPSTREAM_INTEGRITY", "NORMAL_PLAYTHROUGH", "RETRY_PLAYTHROUGH", "LIMIT_PLAYTHROUGH", "SOLVABILITY", "BRUTE_FORCE_RESISTANCE", "INFORMATION_DISCLOSURE", "USABILITY"] },
+          "category": { "enum": ["UPSTREAM_INTEGRITY", "NORMAL_PLAYTHROUGH", "RETRY_PLAYTHROUGH", "LIMIT_PLAYTHROUGH", "INVESTIGATION_REACHABILITY", "INVESTIGATION_DISCLOSURE", "SOLVABILITY", "BRUTE_FORCE_RESISTANCE", "INFORMATION_DISCLOSURE", "USABILITY"] },
           "status": { "enum": ["PASS", "FAIL"] },
           "sourceRefs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "minItems": 1, "maxItems": 128 }
         },

@@ -15,6 +15,7 @@ import { buildGameEvaluationInput, evaluateGame } from './generation/game-evalua
 import { advanceWorkflow, createOrchestrator, WORKFLOW_GATES }
   from './generation/orchestrator.js';
 import { digest } from './generation/evidence-validator.js';
+import { DEFAULT_INVESTIGATION_ACTIONS } from './generation/investigation-validator.js';
 import { ValidationError } from './generation/schema.js';
 
 const [catalog, exampleNetwork, exampleContext] = await Promise.all([
@@ -25,6 +26,8 @@ const [catalog, exampleNetwork, exampleContext] = await Promise.all([
 
 const planFields = ['schemaVersion', 'scenarioId', 'evidenceSetId', 'attackGraphRef',
   'initialCourtEvidenceIds', 'initialCourtStatementIds', 'investigationEvidenceIds',
+  'investigationActions', 'investigationTargets', 'evidenceDiscoveryRules',
+  'initialAvailableTargetIds',
   'retrialStatementIds', 'returnToCourtCondition', 'objectionRules', 'retryPolicy',
   'publicMessages'];
 
@@ -77,7 +80,27 @@ export function authorBootstrap() {
 function planReferences(session) {
   const set = session.evidenceImportResult?.evidenceSet;
   if (!set) return null;
+  const generationInput = session.selectedOption?.generationInput;
+  const graph = generationInput?.technicalInput.attackGraph;
+  const network = generationInput?.technicalInput.network;
   return {
+    investigationActions: structuredClone(DEFAULT_INVESTIGATION_ACTIONS),
+    completedActionIdFormat: 'completed_<targetId>__<actionId>',
+    investigationSourceNodes: [
+      ...(network?.nodes ?? []).map(item => ({ sourceType: 'NETWORK_NODE',
+        sourceId: item.id, details: { type: item.type, roles: item.roles, os: item.os } })),
+      ...(network?.services ?? []).map(item => ({ sourceType: 'NETWORK_SERVICE',
+        sourceId: item.id, details: { nodeId: item.nodeId, type: item.type, platform: item.platform } })),
+      ...(graph?.nodes ?? []).map(item => ({ sourceType: 'ATTACK_GRAPH_NODE',
+        sourceId: item.nodeId, details: { attackDefinitionId: item.attackDefinitionId } })),
+      ...(graph?.nodes ?? []).flatMap(node => node.artifactEvaluations.map(item => ({
+        sourceType: 'ATTACK_GRAPH_ARTIFACT', sourceId: item.artifactId,
+        details: { attackNodeId: node.nodeId, state: item.state } }))),
+      ...(session.scenarioPackage?.timeline.events ?? []).map(item => ({ sourceType: 'TIMELINE_EVENT',
+        sourceId: item.eventId, details: { attackNodeId: item.attackNodeId } })),
+      ...set.evidenceArtifacts.map(item => ({ sourceType: 'EVIDENCE_ARTIFACT',
+        sourceId: item.evidenceId, details: { type: item.type, title: item.title } })),
+    ],
     evidence: set.evidenceArtifacts.map(item => ({ evidenceId: item.evidenceId,
       type: item.type, title: item.title, visibility: item.visibility })),
     testimonies: set.evidenceArtifacts.filter(item => item.type === 'TESTIMONY').map(item => ({
@@ -100,6 +123,8 @@ function planTemplate(session) {
     evidenceSetId: set.evidenceSetId, attackGraphRef: structuredClone(set.attackGraphRef),
     initialCourtEvidenceIds: [], initialCourtStatementIds: [],
     investigationEvidenceIds: [], retrialStatementIds: [],
+    investigationActions: structuredClone(DEFAULT_INVESTIGATION_ACTIONS),
+    investigationTargets: [], evidenceDiscoveryRules: [], initialAvailableTargetIds: [],
     returnToCourtCondition: null, objectionRules: [],
     retryPolicy: { maxCourtAttempts: null, onFailure: 'RETURN_TO_INVESTIGATION',
       onLimitReached: 'BLOCKED' },
@@ -320,6 +345,7 @@ export function buildAuthorGame(session, progressionPlanDraft) {
       evidenceSet: set, scenarioPackage: session.scenarioPackage,
       characters: session.scenarioPackage.characters, timeline: session.scenarioPackage.timeline,
       verificationResult: session.verificationResult, progressionPlan,
+      scenarioGenerationInput: session.selectedOption.generationInput,
       contradictions: set.contradictions, exonerations: set.exonerations });
     session.gameCaseResult = convertGameCase(conversionInput);
     const built = buildGeneratedGame(session.gameCaseResult);

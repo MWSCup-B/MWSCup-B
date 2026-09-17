@@ -953,7 +953,7 @@ Scenario Contractに事件固有の公開title/synopsisがないため、Phase 8
 Exoneration、Judgment ruleを相互照合する。Phase 7 publicContentの完全一致、表示順、Internal/Public投影も確認する。
 
 少なくとも1つのJudgment ruleについて、対象statementがPublic Courtroomに存在し、accepted Evidenceが
-Public Detectiveで取得可能かつCourtroomで提示可能で、`CONTRADICTION_PROOF`へ追跡できることを要求する。
+明示Discovery Ruleから発見・取得可能かつCourtroomで提示可能で、`CONTRADICTION_PROOF`へ追跡できることを要求する。
 人物同一性は推測せず、ExonerationはPhase 7で検証済みの異なる複数EvidenceとGround Truthへの追跡を維持する。
 内容の構造的十分性と実プレイ相当の経路はPhase 10 Evaluation Agentでも再検証する。
 
@@ -979,6 +979,8 @@ Phase 1のHTTP、ゲームロジック、画面、CSSは変更しない。
 - Scenario、Evidence Set、Attack Graph参照と内容由来fingerprint
 - `initialCourtEvidenceIds` / `initialCourtStatementIds`
 - `investigationEvidenceIds` / `retrialStatementIds`
+- `investigationActions` / `investigationTargets` / `initialAvailableTargetIds`
+- Evidenceごとの明示的な`evidenceDiscoveryRules`
 - `returnToCourtCondition`
 - 既存ContradictionとExonerationへ追跡できる`objectionRules`
 - 明示必須の`maxCourtAttempts`、`RETURN_TO_INVESTIGATION`、上限時`BLOCKED`
@@ -1011,14 +1013,15 @@ Internal Judgment ruleと照合する。失敗時は提示したID、attempt cou
 Initial CourtはPlan指定の既存EvidenceとTESTIMONY statementだけを投影し、
 `attributionStatus: ALLEGATION_ONLY`を固定する。これは被告人が技術的実行者であるというGround Truthではない。
 
-Investigationは`PLAYER_OBTAINABLE`なEvidenceだけを持つ。正解に必要な`requiredForCourtIds`はInternalに保持し、
-Public Game Caseには公開しない。Retrial CourtはPlan指定の複数statementと、Investigationで取得可能な
+Investigationは`PLAYER_OBTAINABLE`で明示Discovery Ruleを持つEvidenceだけを扱う。正解に必要な`requiredForCourtIds`はInternalに保持し、
+Public Game Caseには公開しない。Retrial CourtはPlan指定の複数statementと、Investigationで発見・取得可能な
 非TESTIMONY Evidenceを提示対象にする。
 
 ### Public境界と解答可能性
 
-Public Game Caseへは公開Character、Evidence `publicContent`、statement本文、Initial Courtの公開判定、
-Retry Feedback、無罪判決と公開説明だけを投影する。次は公開しない。
+Public Game Caseへは公開Character、Investigation Actionの公開情報、statement本文、Initial Courtの公開判定、
+Retry Feedback、無罪判決と公開説明だけを投影する。Evidence `publicContent`はGame Case JSONへ一括公開せず、
+発見または取得後のsession viewへ必要な項目だけを動的投影する。次は公開しない。
 
 - Judgmentとaccepted Evidenceの対応
 - `requiredForCourtIds`とRetry Policy
@@ -1042,9 +1045,10 @@ Fixture ModeはPhase 1回帰用の旧進行を維持する。Generated ModeはPh
 
 `server/generation/game-make.js`は`READY` Game CaseとUI Integration Handoffを再検証し、
 Game Case、Public Game Case、Progressionのfingerprintが一致する場合だけ`BUILT`を返す。
-`server/generated-game.js`はInternal Game CaseをBackend判定専用に保持し、公開viewをPublic Game Caseから組み立てる。
+`server/generated-game.js`はInternal Game CaseをBackend判定専用に保持し、公開viewをPublic Game Caseと、
+Discovery状態に応じて許可されたEvidence公開fieldから組み立てる。
 
-Generated ModeのBackend sessionは`gameCaseId`、`currentState`、`collectedEvidenceIds`、
+Generated ModeのBackend sessionは`gameCaseId`、`currentState`、Target／Action／Discovery状態、`collectedEvidenceIds`、
 `selectedStatementId`、`attemptCount`、`previousAttempts`、`result`をプレイヤーごとに保持する。
 Objectionは明示された`statementId + evidenceId`をInternal Judgmentへ照合し、statementの暗黙選択を行わない。
 不正解は公開Feedbackだけを返してInvestigationへ戻し、Planの`maxCourtAttempts`到達時は`BLOCKED`にする。
@@ -1087,6 +1091,165 @@ INPUT_VALIDATION → CANDIDATE_BUILDER → ATTACK_GRAPH → SCENARIO_IMPORT
 Scenario revisionは最大3回で、超過時は`REVISION_LIMIT_EXCEEDED`となる。Court attemptは
 Game Progression Plan由来の上限を使用する。上流変更時は`invalidateWorkflowFrom`が対象gate以降の
 artifact referenceとfingerprintを破棄し、旧成果物の再利用を拒否する。
+
+## Phase 12：Investigation Action & Evidence Discovery
+
+Phase 12はPhase 8.1のState Machineと`statementId + evidenceId` Judgmentを維持したまま、
+`INVESTIGATION`内部を次のデータ駆動フローへ拡張する。
+
+```text
+INVESTIGATION
+→ Target選択
+→ Action選択
+→ Discovery Rule評価
+→ public Investigation Result
+→ EvidenceをDISCOVEREDへ遷移
+→ 明示的なCollection
+→ EvidenceをCOLLECTEDへ遷移
+```
+
+shell、実ファイル、SSH、HTTP、実ログ、実端末、パケット取得、ブラウザ自動操作は実行しない。
+ActionはInternal Game Case上の合成データを評価するだけである。
+
+### Investigation Action
+
+`investigation-action.schema.json`は次を必須とする。
+
+- `actionId`
+- `actionType`
+- `displayName`
+- `description`
+- `allowedTargetTypes`
+
+MVPのAction Typeは`AUDIT_LOG`、`INSPECT_DEVICE`、`CHECK_EMAIL`、
+`CHECK_BROWSER_HISTORY`、`INSPECT_FILE`、`ANALYZE_NETWORK_LOG`、
+`REVIEW_AUTH_LOG`、`CHECK_CONFIGURATION`である。BackendはAction Typeごとの処理分岐で
+Evidenceを生成せず、TargetとActionに一致するDiscovery Ruleを共通ロジックで評価する。
+
+### Investigation Target
+
+`investigation-target.schema.json`は`targetId`、`targetType`、公開名と説明、
+`sourceNodeRef`、`availableActionIds`、`initiallyAvailable`を持つ。
+`sourceNodeRef`は次の検証済み正本だけを参照できる。
+
+- Network node / service
+- Attack Graph node / observable artifact
+- Scenario Timeline event
+- Evidence Artifact
+
+Game Case Conversion InputにはVERIFIED Scenarioの生成元であるScenario Generation Inputを含め、
+NetworkとAttack Graphを再検証する。存在しない対象、別ScenarioのTarget source、Target Typeで許可されない
+Actionは`GAME_CASE_CONVERSION`より前に拒否する。
+
+### Evidence Discovery Rule
+
+`evidence-discovery-rule.schema.json`は次を明示する。
+
+- `ruleId`
+- `evidenceId`
+- `targetId`
+- `actionId`
+- `prerequisites.requiredEvidenceIds`
+- `prerequisites.requiredCompletedActionIds`
+- `discoveryResult.publicMessage`
+- `discoveryResult.unlockedTargetIds`
+- `discoveryResult.nextHints`
+- `repeatable`
+
+完了Action IDは`completed_<targetId>__<actionId>`である。Evidence本文、型、sourceRefsからTargetやActionを
+自動推測しない。`PLAYER_OBTAINABLE`かつ`investigationEvidenceIds`に明示配置されたEvidenceだけをRuleへ
+接続でき、配置された全Evidenceに少なくとも1件のRuleを要求する。
+
+### prerequisiteと到達可能性
+
+Validatorは初期Target集合から、実行可能Action、完了Action、発見Evidence、解放Targetを固定点まで評価する。
+次をGame Case変換前に拒否する。
+
+- 存在しないEvidence、Target、Action、完了Action、unlock Target参照
+- Targetで許可されないAction
+- `PLAYER_OBTAINABLE`でないEvidence
+- Discovery RuleがないInvestigation Evidence
+- prerequisiteまたはTarget unlockの循環依存
+- 初期状態から到達不能なEvidence
+- Judgmentが要求する発見・収集不能Evidence
+
+この検査は`Target → Action → Result → Evidence → Unlock`のInvestigation Graphに相当する。
+OrchestratorのGate追加や順序変更は行わず、不正設計は`GAME_CASE_CONVERSION`で`BLOCKED`にする。
+
+### Internal Game CaseとPlayer session
+
+Internal Game Caseの`detective`はEvidence公開素材に加えてAction、Target、hidden Discovery Ruleを保持する。
+初期Progressionは`initialAvailableTargetIds`を持ち、完了Action、発見Evidence、取得Evidenceは空である。
+
+Generated Player sessionは次をプレイヤーごとに保持する。
+
+- `availableInvestigationTargets`
+- `completedInvestigationActions`
+- `discoveredEvidenceIds`
+- `collectedEvidenceIds`
+- `lastInvestigationResult`
+
+Evidence状態は次のとおりである。
+
+| 状態 | Player表示 | Collection | Court提示 |
+| --- | --- | --- | --- |
+| `UNKNOWN` | ID、title、publicContentを表示しない | 不可 | 不可 |
+| `DISCOVERED` | 公開Evidenceを表示 | 可 | 不可 |
+| `COLLECTED` | 公開Evidenceを表示 | 済み | 可 |
+
+`collect`は`discoveredEvidenceIds`に存在するIDだけを受理する。Courtroomは従来どおり
+`collectedEvidenceIds`とpresentable Evidenceの積集合だけを表示し、Judgment自体は変更しない。
+
+### Player APIと公開境界
+
+既存`POST /api/action`に次を追加する。
+
+```json
+{
+  "action": "investigate",
+  "targetId": "target_web_server",
+  "investigationActionId": "action_audit_log"
+}
+```
+
+BackendはsessionのGame Case内でTarget、unlock状態、Action、Target Typeを検証し、prerequisiteを満たす
+Ruleだけを評価する。別Game Case ID、不正Target、不正Action、未解放Targetを拒否する。
+一致するRuleがない場合は正解を示さない一般的な結果を返す。
+
+`investigation-result.schema.json`で公開するのはTarget／Action ID、`publicMessage`、今回発見したEvidence ID、
+今回解放したTarget ID、公開hintだけである。Public Game CaseはActionの公開投影だけを保持する。
+TargetはInternal定義から公開fieldだけを取り出し、現在解放済みのものだけをsession responseへ動的投影する。
+Discovery Rule、sourceNodeRef、prerequisite、正解Target／Actionは含めず、DISCOVERED／COLLECTED Evidenceだけを返す。
+
+Target名、Action名、Result、Evidence公開本文は未信頼文字列として`textContent`で描画する。
+
+### Author UI
+
+Evidence Import後の参照一覧に次を追加する。
+
+- 8種類のInvestigation Action ID
+- Network node / service ID
+- Attack Graph node / artifact ID
+- Timeline event ID
+- Evidence Artifact ID
+- 完了Action ID形式
+
+制作ユーザはGame Progression Plan JSONの`investigationTargets`、`initialAvailableTargetIds`、
+`evidenceDiscoveryRules`を明示入力する。BackendとAuthor UIはEvidence本文からRuleを生成または補完しない。
+
+### Independent Evaluation
+
+Phase 10は通常経路を次の順で実操作する。
+
+```text
+TITLE → INITIAL_COURT → INVESTIGATION
+→ Target → Action → Discovery → Collection
+→ RETRIAL_COURT → OBJECTION → ACQUITTED
+```
+
+`INVESTIGATION_REACHABILITY`は全Investigation EvidenceとCourt必須Evidenceの発見可能性を再実行で確認する。
+`INVESTIGATION_DISCLOSURE`は初期Investigation viewでUNKNOWN Evidenceが非公開であることと、未発見IDの直接Collectionが
+拒否されることを確認する。既存のretry、上限、solvability、情報漏えい、UI操作検査も維持する。
 
 ## End-to-End Validation
 

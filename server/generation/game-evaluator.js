@@ -8,7 +8,8 @@ import { validateScenarioVerificationResult } from './scenario-verifier.js';
 import { ValidationError, fail, validateDocument } from './schema.js';
 
 const CATEGORIES = ['UPSTREAM_INTEGRITY', 'NORMAL_PLAYTHROUGH', 'RETRY_PLAYTHROUGH',
-  'LIMIT_PLAYTHROUGH', 'SOLVABILITY', 'BRUTE_FORCE_RESISTANCE',
+  'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY', 'INVESTIGATION_DISCLOSURE',
+  'SOLVABILITY', 'BRUTE_FORCE_RESISTANCE',
   'INFORMATION_DISCLOSURE', 'USABILITY'];
 
 const LIMITATION = '構造と再現可能な操作経路を決定論的に評価する。教材説明の教育的品質や文章の意味的十分性は、人間または独立した外部レビューで別途確認する必要がある。';
@@ -116,9 +117,33 @@ function enterInvestigation(session, runtime) {
   actGenerated(session, runtime, { action: 'continue' });
 }
 
+function discoverEvidence(session, runtime, evidenceIds) {
+  const wanted = new Set(evidenceIds);
+  const maximum = runtime.gameCase.detective.investigationTargets.length
+    * runtime.gameCase.detective.investigationActions.length * 3;
+  for (let pass = 0; pass < maximum; pass += 1) {
+    if ([...wanted].every(id => session.discoveredEvidenceIds.includes(id))) return true;
+    const before = JSON.stringify([session.availableInvestigationTargets,
+      session.completedInvestigationActions, session.discoveredEvidenceIds]);
+    for (const targetId of [...session.availableInvestigationTargets]) {
+      const target = runtime.gameCase.detective.investigationTargets
+        .find(item => item.targetId === targetId);
+      for (const investigationActionId of target.availableActionIds) {
+        actGenerated(session, runtime, { action: 'investigate', targetId, investigationActionId });
+      }
+    }
+    const after = JSON.stringify([session.availableInvestigationTargets,
+      session.completedInvestigationActions, session.discoveredEvidenceIds]);
+    if (before === after) break;
+  }
+  return [...wanted].every(id => session.discoveredEvidenceIds.includes(id));
+}
+
 function collectForCourt(session, runtime, extraIds = []) {
   const required = runtime.gameCase.progression.investigation.requiredForCourtIds;
-  for (const evidenceId of new Set([...required, ...extraIds])) {
+  const ids = [...new Set([...required, ...extraIds])];
+  if (!discoverEvidence(session, runtime, ids)) throw new Error('Evidence discovery failed');
+  for (const evidenceId of ids) {
     actGenerated(session, runtime, { action: 'collect', evidenceId });
   }
   actGenerated(session, runtime, { action: 'retrial' });
@@ -217,10 +242,47 @@ export function evaluateGame(input) {
     '誤提示を上限まで繰り返してもBLOCKEDになりません。',
     'Game ProgressionのretryPolicyをBackend sessionへ適用してください。', ['phase9:runtime']));
 
+  let investigationReachable = false;
+  try {
+    const session = createGeneratedGame(runtime); enterInvestigation(session, runtime);
+    const required = runtime.gameCase.progression.investigation.requiredForCourtIds;
+    investigationReachable = discoverEvidence(session, runtime,
+      runtime.gameCase.progression.investigation.availableEvidenceIds)
+      && required.every(id => session.discoveredEvidenceIds.includes(id));
+  } catch { investigationReachable = false; }
+  addCheck('INVESTIGATION_REACHABILITY', investigationReachable,
+    issue('INVESTIGATION_EVIDENCE_UNREACHABLE', 'INVESTIGATION_REACHABILITY',
+      'game-case.detective.evidenceDiscoveryRules',
+      'Investigation開始状態から必須Evidenceを発見できません。',
+      'Target、Action、prerequisite、unlockの循環と到達可能性を修正してください。',
+      ['phase8:investigation-design', 'phase9:runtime']));
+
+  let investigationDisclosureSafe = false;
+  try {
+    const session = createGeneratedGame(runtime); enterInvestigation(session, runtime);
+    const initial = generatedPlayerView(session, runtime);
+    const firstEvidence = runtime.gameCase.progression.investigation.availableEvidenceIds[0];
+    let rejected = false;
+    try { actGenerated(session, runtime, { action: 'collect', evidenceId: firstEvidence }); }
+    catch (error) { rejected = error.code === 'EVIDENCE_NOT_DISCOVERED'; }
+    const hiddenValues = runtime.gameCase.detective.evidence.flatMap(item =>
+      [item.evidenceId, item.title, item.publicContent]);
+    const initialText = JSON.stringify(initial);
+    investigationDisclosureSafe = rejected
+      && initial.discoveredEvidence.length === 0
+      && hiddenValues.every(value => !initialText.includes(value));
+  } catch { investigationDisclosureSafe = false; }
+  addCheck('INVESTIGATION_DISCLOSURE', investigationDisclosureSafe,
+    issue('INVESTIGATION_DISCLOSURE_FAILED', 'INVESTIGATION_DISCLOSURE',
+      'generated-game.investigation-view',
+      '未発見Evidenceが公開されたか、調査なしで取得できました。',
+      'UNKNOWN Evidenceを非表示にし、Discovery後だけCollectionを許可してください。',
+      ['phase9:session-response']));
+
   const publicStatements = new Set(allStatements(runtime.publicGameCase));
-  const available = new Set(runtime.publicGameCase.progression.investigation.availableEvidenceIds);
+  const available = new Set(runtime.gameCase.progression.investigation.availableEvidenceIds);
   const presentable = new Set(runtime.publicGameCase.progression.retrialCourt.presentableEvidenceIds);
-  const evidencePublic = new Set(runtime.publicGameCase.detective.evidence.map(item => item.evidenceId));
+  const evidencePublic = new Set(runtime.gameCase.detective.evidence.map(item => item.evidenceId));
   const solvable = runtime.gameCase.judgment.judgmentRules.some(rule =>
     publicStatements.has(rule.targetStatementId) && rule.acceptedEvidenceIds.some(id =>
       available.has(id) && presentable.has(id) && evidencePublic.has(id)));
@@ -235,7 +297,7 @@ export function evaluateGame(input) {
   const resistant = Boolean(wrong) && sameValues(UI_API_CONTRACT.objectionInputs,
     ['statementId', 'evidenceId']) && !answerIds.some(id => feedback.includes(id))
     && runtime.gameCase.progression.retryPolicy.maxCourtAttempts > 0
-    && runtime.publicGameCase.progression.investigation.availableEvidenceIds.length > 0;
+    && runtime.gameCase.detective.investigationTargets.length > 0;
   addCheck('BRUTE_FORCE_RESISTANCE', resistant, issue('INSUFFICIENT_BRUTE_FORCE_RESISTANCE',
     'BRUTE_FORCE_RESISTANCE', 'game-progression',
     'statementとEvidenceの選択、非開示feedback、調査、有限retryのいずれかが不足しています。',
@@ -254,7 +316,7 @@ export function evaluateGame(input) {
     ['phase8:public-game-case', 'phase9:session-response']));
 
   const actions = UI_API_CONTRACT.actions;
-  const usable = ['begin', 'continue', 'collect', 'retrial', 'objection', 'retry']
+  const usable = ['begin', 'continue', 'investigate', 'collect', 'retrial', 'objection', 'retry']
     .every(action => Object.values(actions).flat().includes(action))
     && UI_API_CONTRACT.rendering === 'TEXT_CONTENT_ONLY';
   addCheck('USABILITY', usable, issue('UI_ACTION_MISSING', 'USABILITY', 'ui-api-contract',
@@ -262,7 +324,8 @@ export function evaluateGame(input) {
     'TITLEからACQUITTEDとretryまでの承認済み操作を実装してください。', ['phase9:ui-api-contract']));
 
   const upstreamFailure = checks.some(check => check.status === 'FAIL'
-    && ['NORMAL_PLAYTHROUGH', 'LIMIT_PLAYTHROUGH', 'SOLVABILITY'].includes(check.category));
+    && ['NORMAL_PLAYTHROUGH', 'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY',
+      'INVESTIGATION_DISCLOSURE', 'SOLVABILITY'].includes(check.category));
   const status = issues.length === 0 ? 'ACCEPTED' : upstreamFailure ? 'BLOCKED' : 'NEEDS_REVISION';
   return makeResult(input, status, checks, issues);
 }

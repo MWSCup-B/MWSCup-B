@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Investigation Action v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "actionId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "actionType": { "enum": ["AUDIT_LOG", "INSPECT_DEVICE", "CHECK_EMAIL", "CHECK_BROWSER_HISTORY", "INSPECT_FILE", "ANALYZE_NETWORK_LOG", "REVIEW_AUTH_LOG", "CHECK_CONFIGURATION"] },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "allowedTargetTypes": {
+      "type": "array",
+      "items": { "enum": ["ENDPOINT", "SERVER", "MAILBOX", "LOG_SOURCE", "NETWORK_DEVICE", "FILE_SYSTEM", "BROWSER", "APPLICATION"] },
+      "minItems": 1,
+      "maxItems": 8
+    }
+  },
+  "required": ["schemaVersion", "actionId", "actionType", "displayName", "description", "allowedTargetTypes"],
+  "additionalProperties": false
+}

@@ -5,6 +5,7 @@ import { createAppServer } from '../server/server.js';
 import { verifiedScenarioFixture, semanticReview } from './helpers/verified-scenario.js';
 import { phase7Fixture } from './helpers/phase7-evidence.js';
 import { readyGameCaseFixture } from './helpers/ready-game-case.js';
+import { investigationFixtureDesign } from './helpers/ready-game-case.js';
 
 async function setup(t, mode = 'AUTHOR') {
   const server = createAppServer({ mode }); server.listen(0, '127.0.0.1');
@@ -21,8 +22,19 @@ async function setup(t, mode = 'AUTHOR') {
 
 function noPlayerSecrets(value) {
   assert.doesNotMatch(JSON.stringify(value),
-    /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|contradictionRef|exonerationRef|attackGraphRef|verificationResult|sourceRefs|provenance|fingerprint|correctionHint/);
+    /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|sourceNodeRef|contradictionRef|exonerationRef|attackGraphRef|verificationResult|sourceRefs|provenance|fingerprint|correctionHint/);
 }
+
+const discoverA = [
+  { action: 'investigate', targetId: 'target_web_server',
+    investigationActionId: 'action_audit_log' },
+  { action: 'collect', evidenceId: 'evidence_technical_a' },
+];
+const discoverB = [
+  { action: 'investigate', targetId: 'target_web_server',
+    investigationActionId: 'action_analyze_network_log' },
+  { action: 'collect', evidenceId: 'evidence_technical_b' },
+];
 
 async function acceptedAuthor(post) {
   const baseScenario = verifiedScenarioFixture();
@@ -50,6 +62,7 @@ async function acceptedAuthor(post) {
     initialCourtStatementIds: ['statement_seen_operation'],
     investigationEvidenceIds: ['evidence_technical_a', 'evidence_technical_b',
       'evidence_testimony'],
+    ...investigationFixtureDesign(),
     retrialStatementIds: ['statement_seen_operation', 'statement_checked_time'],
     returnToCourtCondition: 'ALL_REQUIRED_EVIDENCE_COLLECTED',
     objectionRules: [{ objectionRuleId: 'objection_seen_operation',
@@ -93,8 +106,7 @@ test('Play URLでGenerated Gameを開始しInitial CourtからACQUITTEDまで進
   const playId = new URL(`http://localhost${built.author.playUrl}`).searchParams.get('game');
   let result = await post('/api/start', { playId }); const playerToken = result.data.token;
   noPlayerSecrets(result.data); assert.equal(result.data.game.currentState, 'TITLE');
-  for (const body of [{ action: 'begin' }, { action: 'continue' },
-    { action: 'collect', evidenceId: 'evidence_technical_a' }, { action: 'retrial' },
+  for (const body of [{ action: 'begin' }, { action: 'continue' }, ...discoverA, { action: 'retrial' },
     { action: 'objection', statementId: 'statement_seen_operation',
       evidenceId: 'evidence_technical_a' }]) {
     result = await post('/api/action', body, playerToken);
@@ -107,9 +119,8 @@ test('Objection失敗後にInvestigationへ戻れる', async t => {
   const { post } = await setup(t); const built = await acceptedAuthor(post);
   const playId = new URL(`http://localhost${built.author.playUrl}`).searchParams.get('game');
   let result = await post('/api/start', { playId }); const playerToken = result.data.token;
-  for (const body of [{ action: 'begin' }, { action: 'continue' },
-    { action: 'collect', evidenceId: 'evidence_technical_a' },
-    { action: 'collect', evidenceId: 'evidence_technical_b' }, { action: 'retrial' },
+  for (const body of [{ action: 'begin' }, { action: 'continue' }, ...discoverA,
+    ...discoverB, { action: 'retrial' },
     { action: 'objection', statementId: 'statement_checked_time',
       evidenceId: 'evidence_technical_b' }]) result = await post('/api/action', body, playerToken);
   assert.equal(result.data.game.currentState, 'GUILTY_RETRY'); noPlayerSecrets(result.data);

@@ -7,7 +7,7 @@ export const UI_API_CONTRACT = Object.freeze({ schemaVersion: '1.0',
   states: ['TITLE', 'INITIAL_COURT', 'INVESTIGATION', 'RETRIAL_COURT',
     'OBJECTION', 'ACQUITTED', 'GUILTY_RETRY', 'BLOCKED'],
   actions: {
-    TITLE: ['begin'], INITIAL_COURT: ['continue'], INVESTIGATION: ['collect', 'retrial'],
+    TITLE: ['begin'], INITIAL_COURT: ['continue'], INVESTIGATION: ['investigate', 'collect', 'retrial'],
     RETRIAL_COURT: ['objection'], GUILTY_RETRY: ['retry'],
     OBJECTION: [], ACQUITTED: [], BLOCKED: [],
   },

@@ -58,11 +58,14 @@
       "type": "object",
       "properties": {
         "availableEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 512 },
+        "initialAvailableTargetIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 128 },
+        "completedInvestigationActions": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 400, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 0, "maxItems": 4096 },
+        "discoveredEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 0, "maxItems": 512 },
         "collectedEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 0, "maxItems": 512 },
         "requiredForCourtIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 512 },
         "returnToCourtCondition": { "enum": ["AT_LEAST_ONE_EVIDENCE_COLLECTED", "ALL_REQUIRED_EVIDENCE_COLLECTED"] }
       },
-      "required": ["availableEvidenceIds", "collectedEvidenceIds", "requiredForCourtIds", "returnToCourtCondition"],
+      "required": ["availableEvidenceIds", "initialAvailableTargetIds", "completedInvestigationActions", "discoveredEvidenceIds", "collectedEvidenceIds", "requiredForCourtIds", "returnToCourtCondition"],
       "additionalProperties": false
     },
     "retrialCourt": {

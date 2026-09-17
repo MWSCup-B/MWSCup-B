@@ -6,6 +6,7 @@ import { authorBootstrap, buildAuthorGame, createAuthorSession, importAuthorEvid
   from '../server/author-service.js';
 import { verifiedScenarioFixture, semanticReview } from './helpers/verified-scenario.js';
 import { phase7Fixture } from './helpers/phase7-evidence.js';
+import { investigationFixtureDesign } from './helpers/ready-game-case.js';
 
 function prepared() {
   const fixture = verifiedScenarioFixture();
@@ -46,6 +47,7 @@ function planDraft(session) {
     initialCourtStatementIds: ['statement_seen_operation'],
     investigationEvidenceIds: ['evidence_technical_a', 'evidence_technical_b',
       'evidence_testimony'],
+    ...investigationFixtureDesign(),
     retrialStatementIds: ['statement_seen_operation', 'statement_checked_time'],
     returnToCourtCondition: 'ALL_REQUIRED_EVIDENCE_COLLECTED',
     objectionRules: [{ objectionRuleId: 'objection_seen_operation',
@@ -156,6 +158,8 @@ test('Evidence JSONの正常Importと不正Importを区別する', () => {
   assert.equal(view.evidenceImportResult.status, 'VALID');
   assert.ok(view.progressionReferences.evidence.length);
   assert.ok(view.progressionReferences.statements.length);
+  assert.equal(view.progressionReferences.investigationActions.length, 8);
+  assert.ok(view.progressionReferences.investigationSourceNodes.length);
 });
 
 test('VALID Evidenceと明示PlanからACCEPTEDまでBuildする', () => {

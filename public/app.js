@@ -74,13 +74,37 @@ function renderInitialCourt() {
 }
 
 function renderInvestigation() {
-  screen.append(element('p', '証拠を調査し、第2法廷で提示するEvidenceを取得してください。'));
+  screen.append(element('p', '調査対象と方法を選び、Evidenceを発見して証拠品として取得してください。'));
   screen.append(element('h2', '調査対象'));
-  for (const candidate of game.evidenceCandidates) {
+  for (const target of game.investigationTargets) {
     const row = element('div', undefined, 'card');
-    row.append(element('strong', candidate.title), element('p', candidate.type, 'kind'),
-      button(candidate.collected ? '取得済み' : '取得する',
-        () => action('collect', { evidenceId: candidate.evidenceId }), candidate.collected));
+    row.append(element('strong', target.displayName), element('p', target.targetType, 'kind'),
+      element('p', target.description));
+    const actions = element('div', undefined, 'button-row');
+    for (const investigationAction of target.availableActions) {
+      actions.append(button(`${investigationAction.displayName}${investigationAction.completed ? '（実行済み）' : ''}`,
+        () => action('investigate', { targetId: target.targetId,
+          investigationActionId: investigationAction.actionId })));
+    }
+    row.append(actions);
+    screen.append(row);
+  }
+  screen.append(element('h2', '直近の調査結果'));
+  if (!game.lastInvestigationResult) screen.append(element('p', 'まだ調査を実行していません。'));
+  else {
+    const result = element('div', undefined, 'card');
+    result.append(element('p', game.lastInvestigationResult.publicMessage));
+    for (const hint of game.lastInvestigationResult.nextHints) result.append(element('p', hint, 'kind'));
+    screen.append(result);
+  }
+  screen.append(element('h2', '発見済みEvidence'));
+  if (!game.discoveredEvidence.length) screen.append(element('p', 'まだEvidenceを発見していません。'));
+  for (const item of game.discoveredEvidence) {
+    const row = evidenceCard(item);
+    row.append(element('p', item.discoveryState, 'kind'),
+      button(item.discoveryState === 'COLLECTED' ? '取得済み' : '証拠品として登録',
+        () => action('collect', { evidenceId: item.evidenceId }),
+        item.discoveryState === 'COLLECTED'));
     screen.append(row);
   }
   screen.append(element('h2', '取得済みEvidence'));

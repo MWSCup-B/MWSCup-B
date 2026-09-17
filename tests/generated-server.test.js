@@ -16,15 +16,27 @@ async function setup(t, result = readyGameCaseFixture().gameCaseResult) {
 
 function assertPublic(value) {
   assert.doesNotMatch(JSON.stringify(value),
-    /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|contradictionRef|exonerationRef|sourceRefs|requirementIds|attackGraphRef|provenance|fingerprint/);
+    /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|sourceNodeRef|contradictionRef|exonerationRef|sourceRefs|requirementIds|attackGraphRef|provenance|fingerprint/);
 }
+
+const discoverA = [
+  { action: 'investigate', targetId: 'target_web_server',
+    investigationActionId: 'action_audit_log' },
+  { action: 'collect', evidenceId: 'evidence_technical_a' },
+];
+const discoverB = [
+  { action: 'investigate', targetId: 'target_web_server',
+    investigationActionId: 'action_audit_log' },
+  { action: 'investigate', targetId: 'target_web_server',
+    investigationActionId: 'action_analyze_network_log' },
+  { action: 'collect', evidenceId: 'evidence_technical_b' },
+];
 
 test('Generated HTTP APIでTITLEからACQUITTEDまでプレイできる', async t => {
   const post = await setup(t);
   let response = await post('/api/start', {}); let data = await response.json();
   const token = data.token; assert.equal(data.game.currentState, 'TITLE'); assertPublic(data);
-  for (const body of [{ action: 'begin' }, { action: 'continue' },
-    { action: 'collect', evidenceId: 'evidence_technical_a' }, { action: 'retrial' },
+  for (const body of [{ action: 'begin' }, { action: 'continue' }, ...discoverA, { action: 'retrial' },
     { action: 'objection', statementId: 'statement_seen_operation',
       evidenceId: 'evidence_technical_a' }]) {
     response = await post('/api/action', body, token); assert.equal(response.status, 200);
@@ -37,14 +49,14 @@ test('Generated HTTP APIはstatement省略・別session Evidence・内部field�
   const post = await setup(t);
   const a = await (await post('/api/start', {})).json();
   const b = await (await post('/api/start', {})).json();
-  for (const body of [{ action: 'begin' }, { action: 'continue' },
-    { action: 'collect', evidenceId: 'evidence_technical_a' }, { action: 'retrial' }]) {
+  for (const body of [{ action: 'begin' }, { action: 'continue' }, ...discoverA,
+    { action: 'retrial' }]) {
     await post('/api/action', body, a.token);
   }
   assert.equal((await post('/api/action', { action: 'objection',
     evidenceId: 'evidence_technical_a' }, a.token)).status, 400);
-  for (const body of [{ action: 'begin' }, { action: 'continue' },
-    { action: 'collect', evidenceId: 'evidence_technical_b' }, { action: 'retrial' }]) {
+  for (const body of [{ action: 'begin' }, { action: 'continue' }, ...discoverB,
+    { action: 'retrial' }]) {
     await post('/api/action', body, b.token);
   }
   assert.equal((await post('/api/action', { action: 'objection',

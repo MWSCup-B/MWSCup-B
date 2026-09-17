@@ -34,6 +34,30 @@
       "minItems": 1,
       "maxItems": 512
     },
+    "investigationActions": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 8,
+      "maxItems": 64
+    },
+    "investigationTargets": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 1,
+      "maxItems": 128
+    },
+    "evidenceDiscoveryRules": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "initialAvailableTargetIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "minItems": 1,
+      "maxItems": 128
+    },
     "retrialStatementIds": {
       "type": "array",
       "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
@@ -86,6 +110,6 @@
     },
     "fingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
   },
-  "required": ["schemaVersion", "planId", "scenarioId", "evidenceSetId", "attackGraphRef", "initialCourtEvidenceIds", "initialCourtStatementIds", "investigationEvidenceIds", "retrialStatementIds", "returnToCourtCondition", "objectionRules", "retryPolicy", "publicMessages", "fingerprint"],
+  "required": ["schemaVersion", "planId", "scenarioId", "evidenceSetId", "attackGraphRef", "initialCourtEvidenceIds", "initialCourtStatementIds", "investigationEvidenceIds", "investigationActions", "investigationTargets", "evidenceDiscoveryRules", "initialAvailableTargetIds", "retrialStatementIds", "returnToCourtCondition", "objectionRules", "retryPolicy", "publicMessages", "fingerprint"],
   "additionalProperties": false
 }
