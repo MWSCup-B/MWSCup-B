@@ -1,41 +1,48 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ゲーム作成 — インシデント調査ゲーム</title>
-  <link rel="stylesheet" href="/style.css">
-  <script type="module" src="/author.js"></script>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scenario Builder — インシデント調査ゲーム</title>
+  <link rel="stylesheet" href="/style.css"><script type="module" src="/author.js"></script>
 </head>
 <body>
-  <header><p>インシデント調査ゲーム</p></header>
+  <header><p>インシデント調査ゲーム — Scenario Builder</p></header>
   <main class="author-main">
-    <section id="creation-panel" aria-labelledby="author-title">
-      <h1 id="author-title">ゲーム作成</h1>
-      <h2>攻撃手法</h2>
-      <div class="fixed-attack"><strong>XSS</strong><span>Cross-Site Scripting</span></div>
-      <fieldset><legend>ネットワーク</legend><div id="network-list" class="network-card-grid"></div></fieldset>
-      <fieldset><legend>難易度</legend><div id="difficulty-list" class="difficulty-options"></div></fieldset>
-      <div class="button-row"><button id="generate" type="button">ゲームを生成</button></div>
-      <p id="form-error" role="alert"></p>
+    <nav aria-label="作成手順"><ol class="wizard-progress"><li>1 作成方法</li><li>2 Attack / 真実丸</li><li>3 Network</li><li>4 Scenario Preview</li><li>5 Game Generation</li></ol></nav>
+    <section id="mode-panel" aria-labelledby="mode-title"><h1 id="mode-title">Scenario作成方法</h1><div class="mode-card-grid">
+      <article class="mode-card"><h2>詳細設定</h2><p>攻撃手法、Network、発生時間、調査方法などを自分で設定します。</p><p>セキュリティ知識のあるユーザ向け。</p><button id="choose-manual" type="button">詳細設定で作成</button></article>
+      <article class="mode-card makotomaru-card"><h2>真実丸（まことまる）</h2><p>AIがScenario条件を自動的に選びます。</p><p>セキュリティ初学者向け。</p><button id="choose-makotomaru" type="button">真実丸に任せる</button></article>
+    </div></section>
+    <section id="manual-panel" hidden aria-labelledby="manual-title"><h1 id="manual-title">詳細設定</h1>
+      <fieldset><legend>事件情報</legend><div class="form-grid">
+        <label>事件日<input id="incident-date" type="date" required></label><label>組織名<input id="organization-name" maxlength="120" required></label>
+        <label>被害System<input id="victim-system" maxlength="120" required></label><label>被告人の役割<input id="accused-role" maxlength="120" required></label>
+        <label class="wide">最初に疑われた理由<input id="suspicion-reason" maxlength="500" required></label><label>Difficulty<select id="manual-difficulty"><option value="1">★1</option><option value="2">★★</option><option value="3">★★★</option></select></label>
+      </div></fieldset>
+      <fieldset><legend>攻撃手法（1～3個）</legend><div id="attack-options" class="choice-grid"></div><p>複数選択はAttack Graphで因果関係を構築できる場合だけ利用できます。</p><div id="attack-details"></div></fieldset>
+      <fieldset><legend>Network Builder</legend><p>Subnet、Node、Service、ConnectionをGUIで設定します。</p>
+        <h2>Subnets</h2><div id="subnet-rows" class="builder-list"></div><button id="add-subnet" class="secondary" type="button">Subnet追加</button>
+        <h2>Nodes</h2><div id="node-rows" class="builder-list"></div><button id="add-node" class="secondary" type="button">Node追加</button>
+        <h2>Services</h2><div id="service-rows" class="builder-list"></div><button id="add-service" class="secondary" type="button">Service追加</button>
+        <h2>Connections</h2><div id="connection-rows" class="builder-list"></div><button id="add-connection" class="secondary" type="button">Connection追加</button>
+        <h2>Network Diagram</h2><svg id="manual-network-diagram" class="network-diagram" role="img" aria-label="設定中のNetwork Diagram"></svg>
+      </fieldset>
+      <div class="button-row"><button id="manual-back" class="secondary" type="button">作成方法へ戻る</button><button id="manual-create" type="button">Scenario案を作成</button></div><div id="manual-errors" class="error-list" role="alert"></div>
     </section>
-    <section id="generation-panel" aria-labelledby="generation-title" hidden>
-      <h1 id="generation-title">ゲームを生成しています</h1>
-      <ol id="generation-progress" class="generation-progress"></ol>
-      <div class="button-row"><button id="cancel" class="secondary" type="button">生成を中止</button></div>
-      <details><summary>詳細</summary><div id="detail-list" class="detail-list"></div></details>
+    <section id="makotomaru-panel" hidden aria-labelledby="makotomaru-title"><h1 id="makotomaru-title">真実丸</h1><p class="assistant-message">難易度と好みを選ぶと、登録済みの技術条件から成立するScenario Configurationを提案します。</p>
+      <div class="form-grid"><label>Difficulty<select id="makotomaru-difficulty"><option value="1">★1</option><option value="2">★★</option><option value="3">★★★</option></select></label>
+        <label>Attack Category<select id="attack-category"><option value="ANY">おまかせ</option><option value="WEB">Web攻撃</option><option value="AUTHENTICATION">認証攻撃</option><option value="SOCIAL_ENGINEERING">Social Engineering</option></select></label>
+        <label>Scenario Complexity<select id="complexity"><option value="SIMPLE">シンプル</option><option value="STANDARD" selected>標準</option><option value="COMPLEX">複雑</option></select></label></div>
+      <div class="button-row"><button id="makotomaru-back" class="secondary" type="button">作成方法へ戻る</button><button id="makotomaru-create" type="button">真実丸に考えてもらう</button></div><p id="makotomaru-error" role="alert"></p>
     </section>
-    <section id="ready-panel" aria-labelledby="ready-title" hidden>
-      <h1 id="ready-title">ゲームが完成しました</h1>
-      <ol id="ready-progress" class="generation-progress"></ol>
-      <a id="play-game" class="button-link" href="/">ゲーム開始</a>
+    <section id="preview-panel" hidden aria-labelledby="preview-title"><h1 id="preview-title">Scenario Preview</h1><p class="gate-notice">この時点ではゲーム生成へ進みません。内容を確認して承認してください。</p>
+      <article class="preview-summary"><h2>事件概要</h2><p id="preview-summary"></p><dl><dt>対象System</dt><dd id="preview-target"></dd><dt>Difficulty</dt><dd id="preview-difficulty"></dd></dl></article>
+      <h2>攻撃手法・発生時刻・調査方法</h2><div id="preview-attacks" class="builder-list"></div><h2>Network Diagram</h2><svg id="preview-network-diagram" class="network-diagram" role="img" aria-label="Scenario Network Diagram"></svg>
+      <details><summary>制作者向け詳細</summary><div id="preview-author-details"></div></details><div class="button-row"><button id="preview-reject" class="secondary" type="button">条件を修正</button><button id="preview-regenerate" class="secondary" type="button" hidden>真実丸に作り直してもらう</button><button id="preview-approve" type="button">このScenarioでゲームを作成</button></div>
     </section>
-    <section id="failure-panel" aria-labelledby="failure-title" hidden>
-      <h1 id="failure-title">ゲームの自動生成に失敗しました。</h1>
-      <p id="failure-message"></p>
-      <button id="retry" type="button">もう一度生成</button>
-      <details><summary>詳細</summary><div id="failure-details" class="detail-list"></div></details>
-    </section>
+    <section id="generation-panel" aria-labelledby="generation-title" hidden><h1 id="generation-title">処理しています</h1><p id="generation-message" class="assistant-message"></p><ol id="generation-progress" class="generation-progress"></ol><div class="button-row"><button id="cancel" class="secondary" type="button">生成を中止</button></div><details><summary>詳細</summary><div id="detail-list" class="detail-list"></div></details></section>
+    <section id="ready-panel" aria-labelledby="ready-title" hidden><h1 id="ready-title">ゲームが完成しました</h1><ol id="ready-progress" class="generation-progress"></ol><a id="play-game" class="button-link" href="/">ゲーム開始</a></section>
+    <section id="failure-panel" aria-labelledby="failure-title" hidden><h1 id="failure-title">ゲーム生成に失敗しました</h1><p id="failure-message"></p><button id="retry" type="button">作成方法へ戻る</button><details><summary>詳細</summary><div id="failure-details" class="detail-list"></div></details></section>
   </main>
 </body>
 </html>

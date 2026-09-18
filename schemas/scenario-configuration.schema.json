@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scenario Configuration v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "configurationId": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "mode": { "enum": ["MANUAL", "MAKOTOMARU"] },
+    "difficulty": { "enum": [1, 2, 3] },
+    "evidenceCount": { "enum": [1, 2, 3] },
+    "network": {
+      "type": "object",
+      "properties": {
+        "subnets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subnetId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "cidr": { "type": "string", "minLength": 3, "maxLength": 80 },
+              "trustBoundaryId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" }
+            },
+            "required": ["subnetId", "label", "cidr", "trustBoundaryId"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nodeId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "nodeType": { "enum": ["CLIENT", "SERVER", "PROXY", "WEB_SERVER", "DATABASE", "AD", "FILE_SERVER", "LOG_SERVER", "MAIL_SERVER", "EXTERNAL"] },
+              "os": { "enum": ["windows", "linux", "macos", "network", "other"] },
+              "ip": { "type": "string", "minLength": 3, "maxLength": 80 },
+              "subnetId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "trustBoundaryId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "roles": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" }, "minItems": 1, "maxItems": 16 },
+              "logSources": { "type": "array", "items": { "enum": ["WEB_LOG", "PROXY_LOG", "AUTH_LOG", "APPLICATION_LOG", "NETWORK_LOG", "EMAIL", "BROWSER_HISTORY", "DEVICE", "FILE", "CONFIGURATION"] }, "minItems": 0, "maxItems": 10 }
+            },
+            "required": ["nodeId", "label", "nodeType", "os", "ip", "subnetId", "trustBoundaryId", "roles", "logSources"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 128
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "serviceId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "nodeId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "serviceType": { "enum": ["web_browser", "email", "web_application", "sql_database", "proxy", "authentication", "file", "logging"] },
+              "platform": { "enum": ["browser", "email", "web", "sql", "proxy", "auth", "file", "logging"] }
+            },
+            "required": ["serviceId", "nodeId", "label", "serviceType", "platform"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fromNodeId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+              "toNodeId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" }
+            },
+            "required": ["fromNodeId", "toNodeId"],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 1024
+        }
+      },
+      "required": ["subnets", "nodes", "services", "connections"],
+      "additionalProperties": false
+    },
+    "attacks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "attackId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "order": { "enum": [1, 2, 3] },
+          "occurrenceTime": { "type": "string", "minLength": 16, "maxLength": 40 },
+          "sourceNodeId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "targetNodeId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "targetServiceId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "investigationTypes": { "type": "array", "items": { "enum": ["WEB_LOG", "PROXY_LOG", "AUTH_LOG", "APPLICATION_LOG", "NETWORK_LOG", "EMAIL", "BROWSER_HISTORY", "DEVICE", "FILE", "CONFIGURATION"] }, "minItems": 1, "maxItems": 4 },
+          "investigationSourceNodeId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+          "expectedEffect": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "notes": { "type": "string", "maxLength": 1000 }
+        },
+        "required": ["attackId", "order", "occurrenceTime", "sourceNodeId", "targetNodeId", "targetServiceId", "investigationTypes", "investigationSourceNodeId", "expectedEffect", "notes"],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 3
+    },
+    "incidentContext": {
+      "type": "object",
+      "properties": {
+        "incidentDate": { "type": "string", "minLength": 10, "maxLength": 10 },
+        "organizationName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "victimSystem": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "accusedRole": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "initialSuspicionReason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "required": ["incidentDate", "organizationName", "victimSystem", "accusedRole", "initialSuspicionReason"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "configurationId", "mode", "difficulty", "evidenceCount", "network", "attacks", "incidentContext"],
+  "additionalProperties": false
+}

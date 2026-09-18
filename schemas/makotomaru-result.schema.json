@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Makotomaru Result v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "configuration": { "type": "object", "additionalProperties": true },
+    "designRationale": { "type": "string", "minLength": 1, "maxLength": 1000 }
+  },
+  "required": ["schemaVersion", "configuration", "designRationale"],
+  "additionalProperties": false
+}

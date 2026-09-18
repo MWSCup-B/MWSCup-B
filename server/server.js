@@ -116,10 +116,23 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
         }
         const { token, record } = requireAuthorSession(req, authorSessions);
         let author;
-        if (pathname === '/api/author/generate') {
-          validateFields(body, ['networkId', 'difficulty']);
+        if (pathname === '/api/author/select-mode') {
+          validateFields(body, ['mode']);
+          author = autoManager.selectMode(record.session, body.mode);
+        } else if (pathname === '/api/author/manual') {
+          validateFields(body, ['configuration']);
           if (record.session.playId) playableGames.delete(record.session.playId);
-          author = autoManager.start(record.session, body);
+          author = autoManager.submitManual(record.session, body.configuration);
+        } else if (pathname === '/api/author/makotomaru') {
+          validateFields(body, ['request']);
+          if (record.session.playId) playableGames.delete(record.session.playId);
+          author = autoManager.startMakotomaru(record.session, body.request);
+        } else if (pathname === '/api/author/approve') {
+          validateFields(body, []); author = autoManager.approve(record.session);
+        } else if (pathname === '/api/author/reject') {
+          validateFields(body, []); author = autoManager.reject(record.session);
+        } else if (pathname === '/api/author/regenerate') {
+          validateFields(body, []); author = autoManager.regenerate(record.session);
         } else if (pathname === '/api/author/cancel') {
           validateFields(body, []); author = autoManager.cancel(record.session);
         } else throw new GameError('NOT_FOUND', 'path', '対象が見つかりません。', 404);

@@ -7,6 +7,7 @@ export function createGeneratedGame(runtime) {
   if (!runtime || runtime.mode !== 'GENERATED') throw new GameError('GAME_BUILD_BLOCKED',
     'game', 'Generated Game Caseを開始できません。', 503);
   return { gameCaseId: runtime.gameCase.gameCaseId, currentState: 'TITLE',
+    currentRound: 1,
     availableInvestigationTargets:
       [...runtime.gameCase.progression.investigation.initialAvailableTargetIds],
     completedInvestigationActions: [], discoveredEvidenceIds: [], collectedEvidenceIds: [],
@@ -34,6 +35,7 @@ export function generatedPlayerView(session, runtime) {
   const evidenceItems = runtime.gameCase.detective.evidence;
   const base = { mode: 'GENERATED', gameCaseId: publicCase.gameCaseId,
     currentState: session.currentState, title: publicCase.title, synopsis: publicCase.synopsis,
+    currentRound: session.currentRound, totalRounds: runtime.roundCount ?? 1,
     attemptCount: session.attemptCount, result: session.result };
   if (session.currentState === 'TITLE') return base;
   if (session.currentState === 'INITIAL_COURT') {
@@ -180,10 +182,15 @@ export function actGenerated(session, runtime, { action, evidenceId, statementId
     }
     session.attemptCount = outcome.attemptCount;
     session.previousAttempts.push({ statementId, evidenceId, outcome: outcome.outcome });
+    const hasNextRound = outcome.outcome === 'SUCCESS'
+      && session.currentRound < (runtime.roundCount ?? 1);
     session.result = outcome.outcome === 'SUCCESS'
-      ? { outcome: 'SUCCESS' }
+      ? { outcome: 'SUCCESS', objection: '異議あり！！', hasNextRound }
       : { outcome: 'FAILURE', publicFeedback: outcome.publicFailureFeedback };
-    session.currentState = outcome.nextState === 'ACQUITTED' ? 'ACQUITTED'
+    if (hasNextRound) { session.currentRound += 1; session.attemptCount = 0;
+      session.currentState = 'INVESTIGATION';
+      session.selectedStatementId = null; }
+    else session.currentState = outcome.nextState === 'ACQUITTED' ? 'ACQUITTED'
       : outcome.nextState === 'BLOCKED' ? 'BLOCKED' : 'GUILTY_RETRY';
   } else if (action === 'retry') {
     requireState(session, 'GUILTY_RETRY'); session.currentState = 'INVESTIGATION';

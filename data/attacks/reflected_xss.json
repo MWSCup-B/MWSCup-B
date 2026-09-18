@@ -4,6 +4,7 @@
   "label": "反射型クロスサイトスクリプティング",
   "category": "web_injection",
   "description": "攻撃者の入力がWeb応答に反射され、利用者のブラウザで対象オリジンのスクリプトとして実行される範囲。Cookie窃取、認証回避、OSコマンド実行、SQL injectionを自動的な効果にしない。",
+  "supportedInvestigationTypes": ["WEB_LOG", "PROXY_LOG", "BROWSER_HISTORY", "APPLICATION_LOG"],
   "bindings": [
     {
       "id": "attacker",

@@ -4,6 +4,7 @@
   "label": "フィッシング（メール内リンク誘導）",
   "category": "social_engineering",
   "description": "初期対応範囲は、欺瞞的なメール内リンクを利用者が開き、対象Webリクエストをブラウザから送るまで。認証情報窃取、マルウェア実行、端末侵害を効果に含めない。メール閲覧経路とリンク先への到達性は別々に確認する。",
+  "supportedInvestigationTypes": ["EMAIL", "AUTH_LOG", "BROWSER_HISTORY", "WEB_LOG"],
   "bindings": [
     {
       "id": "attacker",

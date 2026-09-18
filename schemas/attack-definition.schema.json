@@ -22,6 +22,14 @@
       "minLength": 1,
       "maxLength": 2000
     },
+    "supportedInvestigationTypes": {
+      "type": "array",
+      "items": {
+        "enum": ["WEB_LOG", "PROXY_LOG", "AUTH_LOG", "APPLICATION_LOG", "NETWORK_LOG", "EMAIL", "BROWSER_HISTORY", "DEVICE", "FILE", "CONFIGURATION"]
+      },
+      "minItems": 1,
+      "maxItems": 10
+    },
     "category": {
       "type": "string",
       "minLength": 1,

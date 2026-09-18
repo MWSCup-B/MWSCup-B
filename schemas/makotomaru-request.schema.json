@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Makotomaru Request v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "difficulty": { "enum": [1, 2, 3] },
+    "attackCategory": { "enum": ["WEB", "AUTHENTICATION", "SOCIAL_ENGINEERING", "ANY"] },
+    "complexity": { "enum": ["SIMPLE", "STANDARD", "COMPLEX"] }
+  },
+  "required": ["schemaVersion", "difficulty", "attackCategory", "complexity"],
+  "additionalProperties": false
+}

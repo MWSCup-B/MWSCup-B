@@ -69,12 +69,13 @@ test('Network SVG 4種類とoriginal visual assetが存在しscriptを含まな�
       new URL(`../public/assets/${path}`, import.meta.url), 'utf8'), /<svg/);
 });
 
-test('Author通常画面はXSS・Network Card・Difficulty・生成ボタンだけを入力にする', async () => {
+test('Author通常画面は実装済みAttackを動的表示するWizard入口を持つ', async () => {
   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
   const script = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
-  assert.match(html, /XSS/); assert.match(html, /network-list/); assert.match(html, /difficulty-list/);
-  assert.match(html, /ゲームを生成/); assert.doesNotMatch(html, /textarea|Developer Mode|Import/);
-  assert.match(script, /networkId/); assert.match(script, /difficulty/);
+  assert.match(html, /Scenario作成方法/); assert.match(html, /attack-options/);
+  assert.match(html, /manual-difficulty/); assert.match(html, /Scenario案を作成/);
+  assert.doesNotMatch(html, /textarea|Developer Mode|JSON Import/);
+  assert.match(script, /attackId/); assert.match(script, /difficulty/);
 });
 
 test('Introは事件・疑われた理由・罪状だけを公開しGround Truthを漏らさない', () => {

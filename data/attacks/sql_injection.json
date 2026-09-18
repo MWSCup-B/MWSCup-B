@@ -4,6 +4,7 @@
   "label": "SQLインジェクション（Webアプリ経由）",
   "category": "web_injection",
   "description": "Webアプリに送られた入力がSQLの構文・意図を変え、アプリのDB接続権限内で実行される範囲。認証回避、データ窃取・改変、DB管理者権限、OS実行は自動的な効果にしない。",
+  "supportedInvestigationTypes": ["WEB_LOG", "APPLICATION_LOG", "NETWORK_LOG", "CONFIGURATION"],
   "bindings": [
     {
       "id": "attacker",

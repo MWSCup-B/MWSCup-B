@@ -14,21 +14,21 @@ async function generated(options = {}, selection = { networkId: 'network-c', dif
   await manager.waitForIdle(); return { runner, manager, session, view: autoAuthorView(session) };
 }
 
-test('AUTO bootstrapはXSS・Network A-D・Difficulty 1-3だけを公開する', () => {
+test('Scenario Builder bootstrapは2 Mode・実装済みAttack・Difficulty 1-3を公開する', () => {
   const value = autoAuthorBootstrap();
-  assert.equal(value.attack.id, 'reflected_xss');
-  assert.deepEqual(value.networks.map(item => item.networkId),
-    ['network-a', 'network-b', 'network-c', 'network-d']);
+  assert.deepEqual(value.modes.map(item => item.id), ['MANUAL', 'MAKOTOMARU']);
+  assert.deepEqual(value.attacks.map(item => item.id).sort(),
+    ['phishing', 'reflected_xss', 'sql_injection']);
   assert.deepEqual(value.difficulties.map(item => item.difficulty), [1, 2, 3]);
-  assert.deepEqual(Object.keys(value).sort(), ['attack', 'difficulties', 'networks']);
+  assert.ok(value.defaultNetwork.nodes.length > 0);
 });
 
 test('XSS + Network C + ★3をReview修正後にGAME READYまで自動実行する', async () => {
   const { runner, session, view } = await generated({
     reviewOutcomes: ['NEEDS_REVISION', 'VERIFIED'] });
   assert.equal(view.currentState, 'READY'); assert.ok(session.runtime);
-  assert.equal(session.runtime.evidenceChain.length, 3);
-  assert.equal(session.prototypeEvaluation.status, 'ACCEPTED');
+  assert.equal(session.runtime.mode, 'GENERATED');
+  assert.equal(session.configuration.evidenceCount, 3);
   assert.equal(session.gameCaseResult.status, 'READY');
   assert.equal(session.gameMakeResult.status, 'BUILT');
   assert.equal(session.evaluationResult.status, 'ACCEPTED');
@@ -196,12 +196,13 @@ test('Prompt Injection文字列はJSON data境界に留まり実行対象にな�
   assert.doesNotMatch(source, /exec\(|eval\(|new Function/);
 });
 
-test('Author UIはPrompt・JSON Import・MANUAL切替を持たない', async () => {
+test('Author UIはJSONを直接編集させずManual・真実丸・Preview承認を提供する', async () => {
   const [html, source] = await Promise.all([
     readFile(new URL('../public/author.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/author.js', import.meta.url), 'utf8')]);
-  assert.match(html, /ゲームを生成/); assert.match(html, /network-list/);
-  assert.match(html, /difficulty-list/); assert.match(html, /生成を中止/);
-  assert.doesNotMatch(html, /textarea|Import|Prompt|MANUAL|Developer Mode|Game Progression/);
+  assert.match(html, /詳細設定/); assert.match(html, /真実丸/);
+  assert.match(html, /Network Builder/); assert.match(html, /Scenario Preview/);
+  assert.match(html, /このScenarioでゲームを作成/);
+  assert.doesNotMatch(html, /textarea|JSON Import|Prompt|Developer Mode/);
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
 });

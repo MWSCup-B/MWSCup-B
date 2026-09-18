@@ -2,17 +2,20 @@ import { CodexUnavailableError, CodexCancelledError, CodexOutputError, CodexTime
   from '../../server/codex/codex-errors.js';
 import { verifiedScenarioFixture, semanticReview } from './verified-scenario.js';
 import { phase7Fixture } from './phase7-evidence.js';
+import { createDefaultConfiguration } from '../../server/generation/scenario-configuration.js';
 
 export class MockCodexRunner {
   constructor({ unavailable = false, reviewOutcomes = ['VERIFIED'], malformedScenario = false,
     reviewerSchemaFailure = false, reviewerGroundFailure = false,
     evidenceInvalid = false, waitForCancel = false,
-    malformedScenarioOutput = 0, malformedEvidenceOutput = 0, timeout = false } = {}) {
+    malformedScenarioOutput = 0, malformedEvidenceOutput = 0, timeout = false,
+    invalidMakotomaruOutput = 0 } = {}) {
     Object.assign(this, { unavailable, reviewOutcomes, malformedScenario,
       reviewerSchemaFailure, reviewerGroundFailure, evidenceInvalid, waitForCancel,
       malformedScenarioOutput,
-      malformedEvidenceOutput, timeout });
+      malformedEvidenceOutput, timeout, invalidMakotomaruOutput });
     this.calls = []; this.scenarioCalls = 0; this.reviewCalls = 0; this.evidenceCalls = 0;
+    this.makotomaruCalls = 0;
   }
 
   async checkAvailability() {
@@ -31,6 +34,16 @@ export class MockCodexRunner {
       signal.addEventListener('abort', () => reject(new CodexCancelledError(phase)), { once: true });
     });
     if (this.timeout) throw new CodexTimeoutError(phase);
+    if (phase === 'MAKOTOMARU_CONFIGURATION') {
+      this.makotomaruCalls += 1;
+      if (this.makotomaruCalls <= this.invalidMakotomaruOutput) return {
+        schemaVersion: '1.0', configuration: {}, designRationale: 'invalid fixture' };
+      const difficulty = data.request.difficulty;
+      const attackIds = difficulty === 1 ? ['reflected_xss'] : ['phishing', 'reflected_xss'];
+      return { schemaVersion: '1.0', configuration: createDefaultConfiguration({
+        mode: 'MAKOTOMARU', difficulty, attackIds }),
+      designRationale: '登録済みAttackと調査資料から成立する経路を選択しました。' };
+    }
     if (phase === 'GENERATING_SCENARIO' || phase === 'REVISING_SCENARIO') {
       this.scenarioCalls += 1;
       if (this.scenarioCalls <= this.malformedScenarioOutput) throw new CodexOutputError(

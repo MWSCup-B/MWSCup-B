@@ -7,10 +7,11 @@ async function loadSchema(name) {
 
 const [scenarioPackage, review, evidencePackage, scenarioDraft, groundTruth, characters,
   timeline, learningObjectives, evidenceRequirements, evidenceArtifact, contradiction,
-  exoneration] = await Promise.all([
+  exoneration, makotomaruResult, scenarioConfiguration] = await Promise.all([
   'scenario-import-package', 'scenario-verification-review', 'evidence-import-package',
   'scenario-draft', 'ground-truth', 'character', 'timeline', 'learning-objective',
   'evidence-requirement', 'evidence-artifact', 'contradiction', 'exoneration',
+  'makotomaru-result', 'scenario-configuration',
 ].map(loadSchema));
 
 // The import-package contracts intentionally use open object placeholders because their
@@ -26,6 +27,9 @@ evidenceOutputSchema.properties.evidenceArtifacts.items = evidenceArtifact;
 evidenceOutputSchema.properties.contradictions.items = contradiction;
 evidenceOutputSchema.properties.exonerations.items = exoneration;
 
+const makotomaruOutputSchema = structuredClone(makotomaruResult);
+makotomaruOutputSchema.properties.configuration = scenarioConfiguration;
+
 export const AUTO_CODEX_OUTPUT_SCHEMAS = Object.freeze({
   scenario: Object.freeze({
     name: 'scenario-import-package', canonicalSchema: scenarioOutputSchema,
@@ -35,5 +39,8 @@ export const AUTO_CODEX_OUTPUT_SCHEMAS = Object.freeze({
   }),
   evidence: Object.freeze({
     name: 'evidence-import-package', canonicalSchema: evidenceOutputSchema,
+  }),
+  makotomaru: Object.freeze({
+    name: 'makotomaru-result', canonicalSchema: makotomaruOutputSchema,
   }),
 });

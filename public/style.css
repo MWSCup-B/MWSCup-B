@@ -21,6 +21,25 @@ fieldset { border: 0; padding: 0; margin: 1rem 0; min-width: 0; }
 legend { font-weight: bold; }
 #error { color: #a21b1b; }
 .author-main { max-width: 1120px; }
+.mode-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.2rem; }
+.mode-card { padding: 1.4rem; border: 2px solid #41546d; border-radius: 14px; background: #fff; }
+.makotomaru-card { background: linear-gradient(145deg, #fff, #eef8ff); border-color: #2778a5; }
+.choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .7rem; }
+.choice-card { display: flex; gap: .6rem; align-items: center; padding: .8rem; border: 1px solid #9caaba; border-radius: 8px; }
+.builder-list { display: grid; gap: .8rem; margin: .8rem 0; }
+.builder-card { padding: 1rem; border: 1px solid #aab6c3; border-radius: 10px; background: #fff; color: #172431; }
+.compact-builder { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; align-items: end; }
+.compact-builder label, .form-grid label { display: grid; gap: .3rem; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .8rem; }
+.form-grid .wide { grid-column: 1 / -1; }
+.network-diagram { width: 100%; min-height: 180px; background: #f7fafc; border: 1px solid #b7c4d0; border-radius: 10px; }
+.diagram-subnet { fill: #eaf2f8; stroke: #71879b; stroke-width: 2; }
+.diagram-node { fill: #fff; stroke: #24709a; stroke-width: 2; }
+.diagram-connection { stroke: #c5453f; stroke-width: 3; }
+.diagram-caption { font-size: 11px; fill: #405063; }
+.gate-notice, .assistant-message { padding: .8rem 1rem; border-left: 4px solid #2778a5; background: #eef8ff; color: #172431; }
+.error-list { color: #8d211d; }
+.danger-link { color: #8d211d; background: transparent; border: 1px solid #b75a55; }
 .author-main > section { margin-bottom: 1rem; }
 .step { border-left: .35rem solid #155a74; }
 .status-panel { display: flex; flex-wrap: wrap; gap: 1rem; padding: .8rem; background: #e7f1f5; }
