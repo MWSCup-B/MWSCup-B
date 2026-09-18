@@ -3,17 +3,19 @@ import { CodexUnavailableError, CodexCancelledError, CodexOutputError, CodexTime
 import { verifiedScenarioFixture, semanticReview } from './verified-scenario.js';
 import { phase7Fixture } from './phase7-evidence.js';
 import { createDefaultConfiguration } from '../../server/generation/scenario-configuration.js';
+import { addDistinctClaims } from './court-issues.js';
 
 export class MockCodexRunner {
   constructor({ unavailable = false, reviewOutcomes = ['VERIFIED'], malformedScenario = false,
     reviewerSchemaFailure = false, reviewerGroundFailure = false,
     evidenceInvalid = false, waitForCancel = false,
     malformedScenarioOutput = 0, malformedEvidenceOutput = 0, timeout = false,
-    invalidMakotomaruOutput = 0 } = {}) {
+    invalidMakotomaruOutput = 0, changeScenarioSummaryOnRevision = false } = {}) {
     Object.assign(this, { unavailable, reviewOutcomes, malformedScenario,
       reviewerSchemaFailure, reviewerGroundFailure, evidenceInvalid, waitForCancel,
       malformedScenarioOutput,
-      malformedEvidenceOutput, timeout, invalidMakotomaruOutput });
+      malformedEvidenceOutput, timeout, invalidMakotomaruOutput,
+      changeScenarioSummaryOnRevision });
     this.calls = []; this.scenarioCalls = 0; this.reviewCalls = 0; this.evidenceCalls = 0;
     this.makotomaruCalls = 0;
   }
@@ -49,7 +51,12 @@ export class MockCodexRunner {
       if (this.scenarioCalls <= this.malformedScenarioOutput) throw new CodexOutputError(
         'Codex出力が単一のJSONオブジェクトではありません。', { phase });
       if (this.malformedScenario) return { schemaVersion: '1.0' };
-      return verifiedScenarioFixture(data.scenarioGenerationInput).scenarioPackage;
+      const scenarioPackage = data.scenarioTemplate ? structuredClone(data.scenarioTemplate)
+        : verifiedScenarioFixture(data.scenarioGenerationInput).scenarioPackage;
+      if (this.changeScenarioSummaryOnRevision && this.scenarioCalls > 1) {
+        scenarioPackage.scenarioDraft.summary = '事件の意味が変わるため、再承認が必要な概要です。';
+      }
+      return scenarioPackage;
     }
     if (phase === 'REVIEWING_SCENARIO') {
       this.reviewCalls += 1;
@@ -74,11 +81,14 @@ export class MockCodexRunner {
       if (this.evidenceCalls <= this.malformedEvidenceOutput) throw new CodexOutputError(
         'Codex出力が単一のJSONオブジェクトではありません。', { phase });
       if (this.evidenceInvalid) return { schemaVersion: '1.0' };
-      const input = data.evidenceGenerationInput;
+      const input = data.evidenceDraftInput;
       const agent = input.evidenceAgentInput;
-      return phase7Fixture({ verificationInput: agent.scenarioVerificationInput,
+      const draft = phase7Fixture({ verificationInput: agent.scenarioVerificationInput,
         verificationResult: agent.verificationResult,
         scenarioPackage: agent.scenarioImportPackage }).evidencePackage;
+      for (const artifact of draft.evidenceArtifacts) delete artifact.integrity;
+      if (data.requestedCourtIssueCount) addDistinctClaims(draft, data.requestedCourtIssueCount);
+      return draft;
     }
     throw new Error(`unexpected phase: ${phase}`);
   }

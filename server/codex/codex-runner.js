@@ -16,6 +16,46 @@ function schemaFailureDetail(stderr) {
   return 'Codex rejected the output schema as invalid_json_schema.';
 }
 
+function httpStatusFrom(stderr) {
+  const text = String(stderr ?? '');
+  const match = text.match(/\bHTTP(?:\s+status)?\s*[:=]?\s*(\d{3})\b/i)
+    ?? text.match(/["']status["']\s*:\s*(\d{3})\b/i)
+    ?? text.match(/\bstatus(?:\s+code)?\s*[:=]\s*(\d{3})\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+export function classifyCodexExecFailure(stderr, exitCode, phase) {
+  const safe = sanitizeDiagnostic(stderr);
+  const httpStatus = httpStatusFrom(safe);
+  const common = { phase, exitCode, httpStatus, details: safe || null };
+  if (httpStatus === 429 || /\b(?:usage limit|usage_limit|quota|insufficient_quota|rate[ _-]?limit(?:ed|_exceeded)?)\b/i.test(safe)) {
+    return new CodexError('CODEX_USAGE_LIMIT_REACHED',
+      'Codexの利用上限に達しています。', {
+        ...common, retryable: true, cliErrorClass: 'usage_limit',
+        details: 'Codex usage or rate limit was reached.',
+      });
+  }
+  if (/\b(?:model_not_found|unknown model|model .* not (?:available|supported)|unsupported model)\b/i.test(safe)) {
+    return new CodexError('CODEX_MODEL_UNAVAILABLE', 'Codexモデルを利用できません。', {
+      ...common, retryable: false, cliErrorClass: 'model_unavailable',
+    });
+  }
+  if (/\b(?:context length|context_length_exceeded|input too (?:large|long)|maximum context|max(?:imum)? input tokens)\b/i.test(safe)) {
+    return new CodexError('CODEX_INPUT_TOO_LARGE', 'Codexへの入力が上限を超えました。', {
+      ...common, retryable: false, cliErrorClass: 'input_too_large',
+    });
+  }
+  if (httpStatus !== null || /\b(?:HTTP error|connection error|request failed)\b/i.test(safe)) {
+    return new CodexError('CODEX_HTTP_ERROR', 'Codexサービスとの通信に失敗しました。', {
+      ...common, retryable: httpStatus === null || httpStatus === 408 || httpStatus >= 500,
+      cliErrorClass: 'http_error',
+    });
+  }
+  return new CodexError('CODEX_EXEC_FAILED', 'Codex CLIの実行に失敗しました.', {
+    ...common, retryable: false, cliErrorClass: 'cli_error',
+  });
+}
+
 function collect(stream, onLimit) {
   let value = '';
   let bytes = 0;
@@ -163,11 +203,11 @@ export class CodexRunner {
         throw new CodexOutputSchemaError('Codexが生成用出力Schemaを受理しませんでした。', {
           phase, schemaName: materialized?.schemaName ?? outputSchemaName ?? 'unknown',
           cliErrorCode: 'invalid_json_schema', details: schemaFailureDetail(result.stderr),
+          exitCode: result.exitCode, httpStatus: httpStatusFrom(result.stderr),
         });
       }
-      if (result.exitCode !== 0) throw new CodexError('CODEX_EXEC_FAILED',
-        'Codex CLIの実行に失敗しました。', { phase, retryable: false,
-          details: sanitizeDiagnostic(result.stderr) });
+      if (result.exitCode !== 0) throw classifyCodexExecFailure(
+        result.stderr, result.exitCode, phase);
       return result.stdout;
     } finally {
       await materialized?.cleanup();

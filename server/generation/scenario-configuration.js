@@ -1,7 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import { isIP } from 'node:net';
 import { validateDocument, ValidationError } from './schema.js';
 import { buildAttackGraphs } from './attack-graph.js';
 import { buildScenarioGenerationInputs } from './scenario-interface.js';
+import { requestedCourtIssueCount } from './court-issues.js';
 
 export const INVESTIGATION_TYPES = Object.freeze({
   WEB_LOG: { label: 'Webアクセスログ', actionId: 'action_audit_log' },
@@ -48,26 +50,35 @@ const labels = Object.freeze({
 });
 
 export function scenarioCreationBootstrap(catalog) {
+  // Authorの初期入力だけに適用する。真実丸や受信済みConfigurationを上書きしない。
+  const defaultManualConfiguration = createDefaultConfiguration({
+    mode: 'MANUAL', difficulty: 1, attackIds: ['phishing'], incidentDate: '2026-09-18',
+  });
+  defaultManualConfiguration.attacks[0].evidenceAnswer =
+    'メール文のリンク先と実際に遷移するリンク先が異なること';
   return {
     modes: [
       { id: 'MANUAL', label: '詳細設定', description: '攻撃手法、Network、発生時間、調査方法などを自分で設定します。' },
       { id: 'MAKOTOMARU', label: '真実丸', description: 'AIがScenario条件を自動的に選びます。' },
     ],
     attacks: catalog.map(item => ({ id: item.id, label: item.label, category: item.category,
-      supportedInvestigationTypes: [...item.supportedInvestigationTypes] })),
+      supportedInvestigationTypes: [...item.supportedInvestigationTypes],
+      expectedEffects: item.effects.map(effect => ({ id: effect.predicate,
+        label: effect.description })) })),
     investigationTypes: Object.entries(INVESTIGATION_TYPES).map(([id, item]) => ({ id, label: item.label })),
     difficulties: [1, 2, 3].map(difficulty => ({ difficulty, label: '★'.repeat(difficulty), requiredEvidenceCount: difficulty })),
     nodeTypes: ['CLIENT', 'SERVER', 'PROXY', 'WEB_SERVER', 'DATABASE', 'AD', 'FILE_SERVER', 'LOG_SERVER', 'MAIL_SERVER', 'EXTERNAL'],
     defaultNetwork: structuredClone(DEFAULT_DESIGN_NETWORK),
+    defaultManualConfiguration,
   };
 }
 
 export function createDefaultConfiguration({ mode = 'MANUAL', difficulty = 1,
   attackIds = ['reflected_xss'], incidentDate = '2026-01-15' } = {}) {
   const specs = {
-    phishing: { sourceNodeId: 'sender-host', investigationSourceNodeId: 'mail-host', investigations: ['EMAIL'], effect: '利用者が誘導リンクを開き、Webリクエストを送信する。' },
-    reflected_xss: { sourceNodeId: 'client-host', investigationSourceNodeId: 'web-host', investigations: ['WEB_LOG'], effect: '対象オリジンで反射入力がスクリプトとして実行される。' },
-    sql_injection: { sourceNodeId: 'sender-host', investigationSourceNodeId: 'web-host', investigations: ['WEB_LOG'], effect: 'WebアプリのDB権限範囲でSQL構造が変更される。' },
+    phishing: { sourceNodeId: 'sender-host', investigationSourceNodeId: 'mail-host', investigations: ['EMAIL'], evidenceAnswer: '送信元と誘導先を示すメールヘッダーおよび本文が、後続のWebアクセスと同じ時系列にある。', effect: 'この利用者・ブラウザ・Webサービス・リクエストに限定したアクセス。認証情報取得やコード実行を意味しない。' },
+    reflected_xss: { sourceNodeId: 'client-host', investigationSourceNodeId: 'web-host', investigations: ['WEB_LOG'], evidenceAnswer: '対象時刻のWebアクセスログに、反射された入力を含む同一リクエストが記録されている。', effect: 'このブラウザの対象Webオリジンでスクリプトが実行される。Webオリジンを越えた権限やDB権限を付与しない。' },
+    sql_injection: { sourceNodeId: 'sender-host', investigationSourceNodeId: 'web-host', investigations: ['WEB_LOG'], evidenceAnswer: 'Webログとアプリケーション記録に、対象時刻のSQL構文を変化させた入力が対応して記録されている。', effect: '当該リクエストによりSQLが改変され、指定されたDB主体の権限範囲内で実行される。具体的な漏えい・改変被害は別途条件が必要。' },
   };
   return {
     schemaVersion: '1.0', configurationId: `configuration_${randomBytes(8).toString('hex')}`,
@@ -78,6 +89,7 @@ export function createDefaultConfiguration({ mode = 'MANUAL', difficulty = 1,
       sourceNodeId: specs[attackId].sourceNodeId, targetNodeId: 'web-host',
       targetServiceId: 'web-service', investigationTypes: specs[attackId].investigations,
       investigationSourceNodeId: specs[attackId].investigationSourceNodeId,
+      evidenceAnswer: specs[attackId].evidenceAnswer,
       expectedEffect: specs[attackId].effect, notes: '' })),
     incidentContext: { incidentDate, organizationName: '青葉ソリューションズ',
       victimSystem: '社内ポータル', accusedRole: 'システム利用者',
@@ -85,8 +97,90 @@ export function createDefaultConfiguration({ mode = 'MANUAL', difficulty = 1,
   };
 }
 
-function issue(code, field, reason, correctionHint) {
-  return { code, field, reason, correctionHint };
+function issue(code, field, reason, correctionHint, details = {}) {
+  return { code, field, reason, correctionHint, ...details };
+}
+
+function cloneForNormalization(value) {
+  if (value === undefined) return value;
+  return structuredClone(value);
+}
+
+function aliasMap(items, idKey, labelKey = 'label') {
+  const result = new Map();
+  for (const item of items ?? []) {
+    if (!item || typeof item !== 'object') continue;
+    if (typeof item[idKey] === 'string') result.set(item[idKey], item[idKey]);
+    if (typeof item[labelKey] === 'string') result.set(item[labelKey], item[idKey]);
+  }
+  return result;
+}
+
+function canonicalAlias(value, aliases) {
+  return typeof value === 'string' ? aliases.get(value.trim()) ?? value.trim() : value;
+}
+
+function normalizeOccurrenceTime(value, offset) {
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) {
+    return `${normalized}:00${offset}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(normalized)) {
+    return `${normalized}${offset}`;
+  }
+  return normalized;
+}
+
+// UI表示値を受け取れる唯一の境界。ここでcanonical ID/date-timeへ変換してからSchemaを検証する。
+export function normalizeScenarioConfiguration(input, catalog, { offset = '+09:00' } = {}) {
+  const configuration = cloneForNormalization(input);
+  if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration)) {
+    return configuration;
+  }
+  const network = configuration.network;
+  const attacks = configuration.attacks;
+  const attackAliases = aliasMap(catalog, 'id');
+  for (const [id, label] of Object.entries(labels)) attackAliases.set(label, id);
+  const investigationAliases = new Map(Object.entries(INVESTIGATION_TYPES)
+    .flatMap(([id, item]) => [[id, id], [item.label, id]]));
+  const nodeAliases = aliasMap(network?.nodes, 'nodeId');
+  const serviceAliases = aliasMap(network?.services, 'serviceId');
+  const subnetAliases = aliasMap(network?.subnets, 'subnetId');
+
+  for (const node of network?.nodes ?? []) {
+    node.subnetId = canonicalAlias(node.subnetId, subnetAliases);
+    if (Array.isArray(node.logSources)) node.logSources = node.logSources
+      .map(value => canonicalAlias(value, investigationAliases));
+  }
+  for (const service of network?.services ?? []) {
+    service.nodeId = canonicalAlias(service.nodeId, nodeAliases);
+  }
+  for (const connection of network?.connections ?? []) {
+    connection.fromNodeId = canonicalAlias(connection.fromNodeId, nodeAliases);
+    connection.toNodeId = canonicalAlias(connection.toNodeId, nodeAliases);
+  }
+  for (const attack of attacks ?? []) {
+    attack.attackId = canonicalAlias(attack.attackId, attackAliases);
+    attack.occurrenceTime = normalizeOccurrenceTime(attack.occurrenceTime, offset);
+    attack.sourceNodeId = canonicalAlias(attack.sourceNodeId, nodeAliases);
+    attack.targetNodeId = canonicalAlias(attack.targetNodeId, nodeAliases);
+    attack.targetServiceId = canonicalAlias(attack.targetServiceId, serviceAliases);
+    attack.investigationSourceNodeId = canonicalAlias(attack.investigationSourceNodeId,
+      nodeAliases);
+    if (Array.isArray(attack.investigationTypes)) attack.investigationTypes =
+      attack.investigationTypes.map(value => canonicalAlias(value, investigationAliases));
+  }
+  return configuration;
+}
+
+function validCidr(value) {
+  const separator = value.lastIndexOf('/');
+  if (separator <= 0) return false;
+  const address = value.slice(0, separator); const prefix = Number(value.slice(separator + 1));
+  const version = isIP(address);
+  return version === 4 ? Number.isInteger(prefix) && prefix >= 0 && prefix <= 32
+    : version === 6 && Number.isInteger(prefix) && prefix >= 0 && prefix <= 128;
 }
 
 function canonicalNetwork(network) {
@@ -194,7 +288,13 @@ export function validateScenarioConfiguration(configuration, catalog) {
   catch (error) {
     if (!(error instanceof ValidationError)) throw error;
     return { status: 'INVALID', errors: [issue(error.code, error.field, error.message,
-      '入力欄を確認し、定義済みの値を選択してください。')], technical: null };
+      '入力欄を確認し、定義済みの値を選択してください。', {
+        receivedType: error.receivedType ?? null, length: error.length ?? null,
+        expectedMinLength: error.expectedMinLength ?? null,
+        expectedMaxLength: error.expectedMaxLength ?? null,
+        expectedPattern: error.expectedPattern ?? null,
+        expectedFormat: error.expectedFormat ?? null,
+      })], technical: null };
   }
   const attacks = [...configuration.attacks].sort((a, b) => a.order - b.order);
   const unique = (items, field) => {
@@ -211,26 +311,62 @@ export function validateScenarioConfiguration(configuration, catalog) {
   const catalogMap = new Map(catalog.map(item => [item.id, item]));
   const nodes = new Map(configuration.network.nodes.map(item => [item.nodeId, item]));
   const services = new Map(configuration.network.services.map(item => [item.serviceId, item]));
-  const subnets = new Set(configuration.network.subnets.map(item => item.subnetId));
-  unique([...nodes.keys()], 'network.nodes.nodeId'); unique([...services.keys()], 'network.services.serviceId');
-  for (const node of nodes.values()) if (!subnets.has(node.subnetId)) errors.push(issue(
-    'BROKEN_REFERENCE', `network.nodes.${node.nodeId}.subnetId`, '存在しないSubnetを参照しています。', '既存Subnetを選択してください。'));
+  const subnetList = configuration.network.subnets;
+  const subnets = new Map(subnetList.map(item => [item.subnetId, item]));
+  unique(subnetList.map(item => item.subnetId), 'network.subnets.subnetId');
+  unique(configuration.network.nodes.map(item => item.nodeId), 'network.nodes.nodeId');
+  unique(configuration.network.nodes.map(item => item.ip), 'network.nodes.ip');
+  unique(configuration.network.services.map(item => item.serviceId), 'network.services.serviceId');
+  unique(configuration.network.connections.map(item => `${item.fromNodeId}->${item.toNodeId}`),
+    'network.connections');
+  for (const subnet of subnetList) if (!validCidr(subnet.cidr)) errors.push(issue(
+    'INVALID_CIDR', `network.subnets.${subnet.subnetId}.cidr`, 'SubnetのCIDR形式が不正です。',
+    'IPv4またはIPv6のCIDR（例: 10.10.0.0/24）を指定してください。'));
+  for (const node of configuration.network.nodes) {
+    const subnet = subnets.get(node.subnetId);
+    if (!subnet) errors.push(issue(
+      'BROKEN_REFERENCE', `network.nodes.${node.nodeId}.subnetId`, '存在しないSubnetを参照しています。', '既存Subnetを選択してください。'));
+    else if (node.trustBoundaryId !== subnet.trustBoundaryId) errors.push(issue(
+      'TRUST_BOUNDARY_MISMATCH', `network.nodes.${node.nodeId}.trustBoundaryId`,
+      'NodeのTrust Boundaryが所属Subnetと一致しません。', '所属SubnetのTrust Boundaryを選択してください。'));
+    if (!isIP(node.ip)) errors.push(issue('INVALID_IP_ADDRESS', `network.nodes.${node.nodeId}.ip`,
+      'NodeのIPアドレス形式が不正です。', '有効なIPv4またはIPv6アドレスを指定してください。'));
+  }
   for (const service of services.values()) if (!nodes.has(service.nodeId)) errors.push(issue(
     'BROKEN_REFERENCE', `network.services.${service.serviceId}.nodeId`, '存在しないNodeを参照しています。', '既存Nodeを選択してください。'));
+  for (const [index, connection] of configuration.network.connections.entries()) {
+    if (!nodes.has(connection.fromNodeId) || !nodes.has(connection.toNodeId)) errors.push(issue(
+      'BROKEN_REFERENCE', `network.connections.${index}`,
+      'Connectionが存在しないNodeを参照しています。', '接続元と接続先に既存Nodeを選択してください。'));
+  }
   const parsedTimes = [];
   for (const attack of attacks) {
     const definition = catalogMap.get(attack.attackId);
     if (!definition) { errors.push(issue('UNREGISTERED_ATTACK', `attacks.${attack.order}.attackId`,
       '実装されていないAttackです。', 'Attack Definitionに登録された攻撃を選択してください。')); continue; }
+    if (!definition.effects.some(effect => effect.description === attack.expectedEffect)) {
+      errors.push(issue('UNSUPPORTED_EXPECTED_EFFECT', `attacks.${attack.order}.expectedEffect`,
+        'Attack Definitionに存在しない想定効果です。',
+        `次の登録済みAttack Effectを完全一致で選択してください: ${definition.effects
+          .map(effect => effect.description).join(' / ')}`));
+    }
     const time = Date.parse(attack.occurrenceTime); parsedTimes.push(time);
     if (!Number.isFinite(time)) errors.push(issue('INVALID_OCCURRENCE_TIME', `attacks.${attack.order}.occurrenceTime`,
       '発生日時の形式が不正です。', '日付と時刻を指定してください。'));
+    else if (attack.occurrenceTime.slice(0, 10) !== configuration.incidentContext.incidentDate) {
+      errors.push(issue('INCIDENT_DATE_MISMATCH', `attacks.${attack.order}.occurrenceTime`,
+        'Attack発生日が事件日と一致しません。', '事件日と同じ日付の発生日時を指定してください。'));
+    }
     if (!nodes.has(attack.sourceNodeId) || !nodes.has(attack.targetNodeId)) errors.push(issue(
       'BROKEN_REFERENCE', `attacks.${attack.order}.sourceNodeId`, 'Attackが存在しないNodeを参照しています。', '既存Nodeを選択してください。'));
     const service = services.get(attack.targetServiceId);
     if (!service || service.nodeId !== attack.targetNodeId) errors.push(issue(
       'TARGET_SERVICE_MISMATCH', `attacks.${attack.order}.targetServiceId`, '対象Serviceが対象Node上に存在しません。', '対象NodeのServiceを選択してください。'));
     const investigationNode = nodes.get(attack.investigationSourceNodeId);
+    if (/^(?:正解|答え)[:：]?\s*$/u.test(attack.evidenceAnswer)) errors.push(issue(
+      'EMPTY_EVIDENCE_ANSWER', `attacks.${attack.order}.evidenceAnswer`,
+      '証拠から確認できる具体的な事実がありません。',
+      'ログやメール等から読み取れる時刻、送信元、要求内容などを記載してください。'));
     for (const type of attack.investigationTypes) {
       if (!definition.supportedInvestigationTypes.includes(type)) errors.push(issue(
         'UNSUPPORTED_INVESTIGATION', `attacks.${attack.order}.investigationTypes`,
@@ -268,7 +404,8 @@ export function buildScenarioPreview(configuration, scenarioPackage = null) {
       investigations: item.investigationTypes.map(type => ({ id: type, label: INVESTIGATION_TYPES[type].label })),
     })),
     targetSystem: configuration.incidentContext.victimSystem,
-    difficulty: configuration.difficulty, difficultyLabel: '★'.repeat(configuration.difficulty),
+    difficulty: configuration.difficulty,
+    difficultyLabel: `${'★'.repeat(configuration.difficulty)} / ${requestedCourtIssueCount(configuration)}争点`,
     network: structuredClone(configuration.network),
   };
 }

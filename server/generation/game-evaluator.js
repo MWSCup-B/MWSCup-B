@@ -2,7 +2,7 @@ import { createGeneratedGame, actGenerated, generatedPlayerView }
   from '../generated-game.js';
 import { buildGeneratedGame, UI_API_CONTRACT, validateGameMakeResult }
   from './game-make.js';
-import { validateGameCaseResult } from './game-case-validator.js';
+import { findIncorrectObjectionPair, validateGameCaseResult } from './game-case-validator.js';
 import { digest, sameValues, validateEvidenceSet } from './evidence-validator.js';
 import { validateScenarioVerificationResult } from './scenario-verifier.js';
 import { ValidationError, fail, validateDocument } from './schema.js';
@@ -97,19 +97,17 @@ function allStatements(publicCase) {
     .flatMap(testimony => testimony.statements.map(statement => statement.statementId));
 }
 
-function correctPair(gameCase) {
-  const rule = gameCase.judgment.judgmentRules[0];
+function correctPair(gameCase, round = 1) {
+  const issue = gameCase.progression.courtIssues?.[round - 1];
+  const rule = gameCase.judgment.judgmentRules.find(item => !issue || issue.judgmentRuleIds.includes(item.ruleId));
   return rule && { statementId: rule.targetStatementId, evidenceId: rule.acceptedEvidenceIds[0] };
 }
 
-function wrongPair(gameCase, publicCase) {
-  for (const statementId of allStatements(publicCase)) {
-    for (const evidenceId of publicCase.progression.retrialCourt.presentableEvidenceIds) {
-      if (!gameCase.judgment.judgmentRules.some(rule => rule.targetStatementId === statementId
-        && rule.acceptedEvidenceIds.includes(evidenceId))) return { statementId, evidenceId };
-    }
-  }
-  return null;
+function wrongPair(gameCase, publicCase, round = 1) {
+  const issue = gameCase.progression.courtIssues?.[round - 1];
+  return findIncorrectObjectionPair({ statementIds: issue?.statementIds ?? allStatements(publicCase),
+    presentableEvidenceIds: publicCase.progression.retrialCourt.presentableEvidenceIds,
+    objectionRules: gameCase.judgment.judgmentRules.filter(item => !issue || issue.judgmentRuleIds.includes(item.ruleId)) });
 }
 
 function enterInvestigation(session, runtime) {
@@ -198,16 +196,33 @@ export function evaluateGame(input) {
     checks.push({ category, status: passed ? 'PASS' : 'FAIL', sourceRefs: failure.sourceRefs });
     if (!passed) issues.push(failure);
   };
-  const correct = correctPair(runtime.gameCase);
   const wrong = wrongPair(runtime.gameCase, runtime.publicGameCase);
+  const noWrongReason = '公開された証言と提示可能な技術Evidenceの全組合せが正解で、誤答操作を実行できません。';
+  const noWrongHint = '既存資料に裏付けられるCONSISTENTな証言を含め、反駁対象との違いを選べるようにしてください。正解Evidenceの削除や無関係な資料の追加は行わないでください。';
 
   let normalPassed = false;
   try {
     const session = createGeneratedGame(runtime);
     enterInvestigation(session, runtime);
-    collectForCourt(session, runtime, [correct.evidenceId]);
-    const view = actGenerated(session, runtime, { action: 'objection', ...correct });
-    normalPassed = view.currentState === 'ACQUITTED';
+    let view;
+    for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round += 1) {
+      const activeCorrect = correctPair(runtime.gameCase, round);
+      collectForCourt(session, runtime, [activeCorrect.evidenceId]);
+      if (runtime.gameCase.progression.courtIssues && round > 1) {
+        const prior = correctPair(runtime.gameCase, round - 1);
+        let rejected = false;
+        try { actGenerated(session, runtime, { action: 'objection', ...prior }); }
+        catch (error) { rejected = error.code === 'STATEMENT_NOT_IN_CURRENT_ISSUE'; }
+        if (!rejected || session.currentState !== 'RETRIAL_COURT') throw new Error('Solved issue reused');
+      }
+      view = actGenerated(session, runtime, { action: 'objection', ...activeCorrect });
+      if (round < runtime.gameCase.progression.courtRoundCount
+        && (view.currentState !== 'INVESTIGATION' || view.currentRound !== round + 1)) {
+        throw new Error('Court round progression failed');
+      }
+    }
+    normalPassed = view.currentState === 'ACQUITTED'
+      && view.currentRound === runtime.gameCase.progression.courtRoundCount;
   } catch { normalPassed = false; }
   addCheck('NORMAL_PLAYTHROUGH', normalPassed, issue('NORMAL_PLAYTHROUGH_FAILED',
     'NORMAL_PLAYTHROUGH', 'generated-game.normal-path',
@@ -217,15 +232,30 @@ export function evaluateGame(input) {
   let retryPassed = false;
   if (wrong && runtime.gameCase.progression.retryPolicy.maxCourtAttempts > 1) try {
     const session = createGeneratedGame(runtime); enterInvestigation(session, runtime);
-    collectForCourt(session, runtime, [wrong.evidenceId]);
-    const failed = actGenerated(session, runtime, { action: 'objection', ...wrong });
-    const retried = actGenerated(session, runtime, { action: 'retry' });
-    retryPassed = failed.currentState === 'GUILTY_RETRY' && retried.currentState === 'INVESTIGATION';
+    retryPassed = true;
+    const rounds = runtime.gameCase.progression.courtIssues?.length ?? 1;
+    for (let round = 1; round <= rounds; round += 1) {
+      const activeWrong = wrongPair(runtime.gameCase, runtime.publicGameCase, round);
+      collectForCourt(session, runtime, [activeWrong.evidenceId]);
+      const owned = [...session.collectedEvidenceIds];
+      if (runtime.gameCase.progression.courtIssues) {
+        actGenerated(session, runtime, { action: 'investigation' });
+        actGenerated(session, runtime, { action: 'retrial' });
+        if (session.attemptCount !== 0) throw new Error('Voluntary investigation costs attempt');
+      }
+      const failed = actGenerated(session, runtime, { action: 'objection', ...activeWrong });
+      const retried = actGenerated(session, runtime, { action: 'retry' });
+      retryPassed &&= failed.currentState === 'GUILTY_RETRY' && retried.currentState === 'INVESTIGATION'
+        && retried.currentRound === round && sameValues(owned, session.collectedEvidenceIds);
+      actGenerated(session, runtime, { action: 'retrial' });
+      actGenerated(session, runtime, { action: 'objection', ...correctPair(runtime.gameCase, round) });
+    }
   } catch { retryPassed = false; }
   addCheck('RETRY_PLAYTHROUGH', retryPassed, issue('RETRY_PLAYTHROUGH_FAILED',
     'RETRY_PLAYTHROUGH', 'generated-game.retry-path',
-    '不正解後にGUILTY_RETRYからINVESTIGATIONへ戻れません。',
-    '再試行可能なmaxCourtAttemptsと公開retry遷移を設定してください。', ['phase9:runtime']));
+    wrong ? '不正解後にGUILTY_RETRYからINVESTIGATIONへ戻れません。' : noWrongReason,
+    wrong ? '再試行可能なmaxCourtAttemptsと公開retry遷移を設定してください。' : noWrongHint,
+    ['phase9:runtime']));
 
   let limitPassed = false;
   if (wrong) try {
@@ -239,8 +269,9 @@ export function evaluateGame(input) {
   } catch { limitPassed = false; }
   addCheck('LIMIT_PLAYTHROUGH', limitPassed, issue('LIMIT_PLAYTHROUGH_FAILED',
     'LIMIT_PLAYTHROUGH', 'generated-game.limit-path',
-    '誤提示を上限まで繰り返してもBLOCKEDになりません。',
-    'Game ProgressionのretryPolicyをBackend sessionへ適用してください。', ['phase9:runtime']));
+    wrong ? '誤提示を上限まで繰り返してもBLOCKEDになりません。' : noWrongReason,
+    wrong ? 'Game ProgressionのretryPolicyをBackend sessionへ適用してください。' : noWrongHint,
+    ['phase9:runtime']));
 
   let investigationReachable = false;
   try {
@@ -294,14 +325,16 @@ export function evaluateGame(input) {
   const answerIds = runtime.gameCase.judgment.judgmentRules.flatMap(rule =>
     [rule.targetStatementId, ...rule.acceptedEvidenceIds]);
   const feedback = runtime.publicGameCase.progression.retry.publicFailureFeedback;
-  const resistant = Boolean(wrong) && sameValues(UI_API_CONTRACT.objectionInputs,
+  const resistant = Boolean(wrong)
+    && (runtime.gameCase.progression.courtIssues ?? []).every((_, i) => wrongPair(runtime.gameCase, runtime.publicGameCase, i + 1))
+    && sameValues(UI_API_CONTRACT.objectionInputs,
     ['statementId', 'evidenceId']) && !answerIds.some(id => feedback.includes(id))
     && runtime.gameCase.progression.retryPolicy.maxCourtAttempts > 0
     && runtime.gameCase.detective.investigationTargets.length > 0;
   addCheck('BRUTE_FORCE_RESISTANCE', resistant, issue('INSUFFICIENT_BRUTE_FORCE_RESISTANCE',
     'BRUTE_FORCE_RESISTANCE', 'game-progression',
-    'statementとEvidenceの選択、非開示feedback、調査、有限retryのいずれかが不足しています。',
-    '正解を漏らさない誤組合せと調査・選択・上限をProgressionへ明示してください。',
+    wrong ? 'statementとEvidenceの選択、非開示feedback、調査、有限retryのいずれかが不足しています。' : noWrongReason,
+    wrong ? '正解を漏らさない誤組合せと調査・選択・上限をProgressionへ明示してください。' : noWrongHint,
     ['phase8:game-progression', 'phase9:ui-api-contract']));
 
   const sample = createGeneratedGame(runtime);

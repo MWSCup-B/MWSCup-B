@@ -1,6 +1,8 @@
 export const VISUAL_ASSETS = Object.freeze({
   background_intro: '/assets/backgrounds/intro.svg',
   background_courtroom: '/assets/backgrounds/courtroom.svg',
+  witness_neutral: '/assets/characters/witness-neutral.svg',
+  defendant_neutral: '/assets/characters/defendant-neutral.svg',
   background_investigation: '/assets/backgrounds/investigation.svg',
   defense_neutral: '/assets/characters/defense-neutral.svg',
   defense_thinking: '/assets/characters/defense-thinking.svg',

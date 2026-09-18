@@ -1,12 +1,16 @@
 export class CodexError extends Error {
   constructor(code, message, { phase = 'CHECKING_CODEX', retryable = false,
-    details = null, cause = null } = {}) {
+    details = null, cause = null, exitCode = null, httpStatus = null,
+    cliErrorClass = null } = {}) {
     super(message, { cause });
     this.name = 'CodexError';
     this.code = code;
     this.phase = phase;
     this.retryable = retryable;
     this.details = details;
+    this.exitCode = exitCode;
+    this.httpStatus = httpStatus;
+    this.cliErrorClass = cliErrorClass;
   }
 }
 
@@ -38,9 +42,11 @@ export class CodexOutputSchemaError extends CodexError {
   constructor(message = '生成用出力SchemaがCodexと互換ではありません。', {
     phase = 'GENERATING_SCENARIO', schemaName = 'unknown', schemaPath = '$',
     cliErrorCode = 'invalid_json_schema', details = null, cause = null,
+    exitCode = null, httpStatus = null,
   } = {}) {
     super('CODEX_OUTPUT_SCHEMA_INVALID', message, {
-      phase, retryable: false, details, cause,
+      phase, retryable: false, details, cause, exitCode, httpStatus,
+      cliErrorClass: 'output_schema',
     });
     this.schemaName = schemaName;
     this.schemaPath = schemaPath;

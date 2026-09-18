@@ -28,14 +28,25 @@ function publicEvidence(item) {
     publicContent: item.publicContent };
 }
 
+function canReturnToCourt(session, internal) {
+  const investigation = internal.progression.investigation;
+  return investigation.returnToCourtCondition === 'ALL_REQUIRED_EVIDENCE_COLLECTED'
+    ? investigation.requiredForCourtIds.every(id => session.collectedEvidenceIds.includes(id))
+    : internal.courtroom.presentableEvidenceIds.some(id => session.collectedEvidenceIds.includes(id));
+}
+
 export function generatedPlayerView(session, runtime) {
   const publicCase = runtime.publicGameCase;
   const characters = characterMap(publicCase);
   const evidence = evidenceMap(runtime.gameCase);
   const evidenceItems = runtime.gameCase.detective.evidence;
+  const totalRounds = runtime.gameCase.progression.courtRoundCount;
+  const issue = runtime.gameCase.progression.courtIssues?.[session.currentRound - 1];
   const base = { mode: 'GENERATED', gameCaseId: publicCase.gameCaseId,
     currentState: session.currentState, title: publicCase.title, synopsis: publicCase.synopsis,
-    currentRound: session.currentRound, totalRounds: runtime.roundCount ?? 1,
+    participants: publicCase.characters.filter(item => ['DEFENDANT', 'WITNESS'].includes(item.publicRole)),
+    currentRound: session.currentRound, totalRounds,
+    remainingAttempts: Math.max(0, runtime.gameCase.progression.retryPolicy.maxCourtAttempts - session.attemptCount),
     attemptCount: session.attemptCount, result: session.result };
   if (session.currentState === 'TITLE') return base;
   if (session.currentState === 'INITIAL_COURT') {
@@ -54,6 +65,7 @@ export function generatedPlayerView(session, runtime) {
     const actions = new Map(publicCase.detective.investigationActions
       .map(item => [item.actionId, item]));
     return { ...base,
+      canReturnToCourt: canReturnToCourt(session, runtime.gameCase),
       investigationTargets: runtime.gameCase.detective.investigationTargets
         .filter(item => availableTargets.has(item.targetId)).map(publicInvestigationTarget).map(item => ({
           targetId: item.targetId, targetType: item.targetType, displayName: item.displayName,
@@ -71,8 +83,10 @@ export function generatedPlayerView(session, runtime) {
   }
   if (session.currentState === 'RETRIAL_COURT') {
     const collected = new Set(session.collectedEvidenceIds);
-    return { ...base, testimonies: publicCase.progression.retrialCourt.testimonies.map(testimony => ({
-      ...testimony, speaker: characters.get(testimony.speakerCharacterId) })),
+    return { ...base, canInvestigate: Boolean(issue),
+    testimonies: publicCase.progression.retrialCourt.testimonies.map(testimony => ({
+      ...testimony, statements: testimony.statements.filter(item => !issue || issue.statementIds.includes(item.statementId)),
+      speaker: characters.get(testimony.speakerCharacterId) })).filter(item => item.statements.length),
     presentableEvidence: evidenceItems.filter(item => collected.has(item.evidenceId)
       && publicCase.progression.retrialCourt.presentableEvidenceIds.includes(item.evidenceId))
       .map(publicEvidence) };
@@ -155,13 +169,18 @@ export function actGenerated(session, runtime, { action, evidenceId, statementId
     if (!session.collectedEvidenceIds.includes(evidenceId)) session.collectedEvidenceIds.push(evidenceId);
   } else if (action === 'retrial') {
     requireState(session, 'INVESTIGATION');
-    const investigation = internal.progression.investigation;
-    const allowed = investigation.returnToCourtCondition === 'ALL_REQUIRED_EVIDENCE_COLLECTED'
-      ? investigation.requiredForCourtIds.every(id => session.collectedEvidenceIds.includes(id))
-      : session.collectedEvidenceIds.length > 0;
+    const allowed = canReturnToCourt(session, internal);
     if (!allowed) throw new GameError('COURT_RETURN_CONDITION_NOT_MET', 'evidence',
       '証拠の調査が不足しています。', 409);
     session.currentState = 'RETRIAL_COURT';
+    session.result = null;
+  } else if (action === 'investigation') {
+    requireState(session, 'RETRIAL_COURT');
+    if (!internal.progression.courtIssues) throw new GameError('UNKNOWN_ACTION', 'action',
+      'この旧形式のゲームには追加調査操作がありません。');
+    session.currentState = 'INVESTIGATION';
+    session.result = null;
+    session.selectedStatementId = null;
   } else if (action === 'objection') {
     requireState(session, 'RETRIAL_COURT');
     if (typeof statementId !== 'string') throw new GameError('STATEMENT_REQUIRED',
@@ -174,18 +193,19 @@ export function actGenerated(session, runtime, { action, evidenceId, statementId
     session.currentState = 'OBJECTION';
     let outcome;
     try { outcome = evaluateObjection(internal, { statementId, evidenceId,
-      attemptCount: session.attemptCount }); }
+      attemptCount: session.attemptCount, currentRound: session.currentRound,
+      collectedEvidenceIds: session.collectedEvidenceIds }); }
     catch (error) {
       session.currentState = 'RETRIAL_COURT';
       throw new GameError(error.code ?? 'INVALID_OBJECTION', error.field ?? 'objection',
         error.message, 400);
     }
     session.attemptCount = outcome.attemptCount;
-    session.previousAttempts.push({ statementId, evidenceId, outcome: outcome.outcome });
+    session.previousAttempts.push({ round: session.currentRound, statementId, evidenceId, outcome: outcome.outcome });
     const hasNextRound = outcome.outcome === 'SUCCESS'
-      && session.currentRound < (runtime.roundCount ?? 1);
+      && session.currentRound < internal.progression.courtRoundCount;
     session.result = outcome.outcome === 'SUCCESS'
-      ? { outcome: 'SUCCESS', objection: '異議あり！！', hasNextRound }
+      ? { outcome: 'SUCCESS', objection: '主張の再検討が成立しました。', hasNextRound }
       : { outcome: 'FAILURE', publicFeedback: outcome.publicFailureFeedback };
     if (hasNextRound) { session.currentRound += 1; session.attemptCount = 0;
       session.currentState = 'INVESTIGATION';

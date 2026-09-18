@@ -58,6 +58,43 @@ test('invalid_json_schemaはCODEX_OUTPUT_SCHEMA_INVALIDとして安全に分類�
     && error.details === 'schemaVersion requires explicit type');
 });
 
+test('usage/rate limitはexit codeとHTTP statusを保持して専用codeへ分類する', async () => {
+  for (const diagnostic of [
+    'HTTP 429 rate_limit_exceeded: retry later',
+    'usage limit reached for this account',
+    'insufficient_quota',
+  ]) {
+    const fake = fakeSpawn(({ child }) => {
+      child.stdout.end(); child.stderr.end(diagnostic); child.emit('close', 1, null);
+    });
+    await assert.rejects(new CodexRunner({ spawnImpl: fake.spawnImpl }).run({
+      prompt: 'x', phase: 'MAKOTOMARU_CONFIGURATION',
+    }), error => error.code === 'CODEX_USAGE_LIMIT_REACHED'
+      && error.exitCode === 1
+      && error.retryable === true
+      && (diagnostic.startsWith('HTTP') ? error.httpStatus === 429 : error.httpStatus === null)
+      && !String(error.details).includes('account'));
+  }
+});
+
+test('HTTP、model、input size、generic CLI failureを区別する', async () => {
+  const cases = [
+    ['HTTP 503 request failed', 'CODEX_HTTP_ERROR', 503],
+    ['model_not_found: unavailable-model', 'CODEX_MODEL_UNAVAILABLE', null],
+    ['context_length_exceeded: input too large', 'CODEX_INPUT_TOO_LARGE', null],
+    ['unexpected CLI failure', 'CODEX_EXEC_FAILED', null],
+  ];
+  for (const [diagnostic, code, httpStatus] of cases) {
+    const fake = fakeSpawn(({ child }) => {
+      child.stdout.end(); child.stderr.end(diagnostic); child.emit('close', 7, null);
+    });
+    await assert.rejects(new CodexRunner({ spawnImpl: fake.spawnImpl }).run({
+      prompt: 'x', phase: 'TEST',
+    }), error => error.code === code && error.exitCode === 7
+      && error.httpStatus === httpStatus);
+  }
+});
+
 test('Schema preflight失敗時はCodex subprocessを起動しない', async () => {
   const fake = fakeSpawn(() => assert.fail('spawn must not be called'));
   await assert.rejects(new CodexRunner({ spawnImpl: fake.spawnImpl }).run({

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 520">
+  <title>記録審理室・被告人のオリジナル立ち絵</title>
+  <path fill="#33475b" d="M57 520V360q14-77 123-77t123 77v160z"/>
+  <path fill="#718b96" d="m100 322 53-28h54l53 28-30 198H130z"/>
+  <path fill="#d1a383" d="M152 251h56v59l-28 27-28-27z"/>
+  <path fill="#283e4b" d="M103 198v-50q-3-74 76-77 81-3 80 81v130l-41 18-93-10z"/>
+  <ellipse cx="180" cy="185" rx="67" ry="91" fill="#e0b797"/>
+  <path fill="#283e4b" d="M110 159q-8-74 63-78 79-5 78 82l-31-22-20-40q-24 38-90 58z"/>
+  <g stroke="#453d39" stroke-width="4" stroke-linecap="round"><path d="m134 174 24-2m44 0 23 5"/><path d="M143 187h7m60 1h7"/></g>
+  <path d="m180 196-4 20h10m-22 21 30 2" fill="none" stroke="#996f5e" stroke-width="3" stroke-linecap="round"/>
+  <path fill="#d9e3df" d="m150 310 30 27-21 33-29-47m79-13-29 27 22 33 28-47"/>
+  <path d="M180 350v170m-85-128 36 112m134-112-36 112" fill="none" stroke="#536b7b" stroke-width="6"/>
+</svg>

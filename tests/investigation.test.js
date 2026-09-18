@@ -83,6 +83,28 @@ test('UNKNOWN Evidenceを公開せず、TargetとAction実行後だけDISCOVERED
   assert.equal(view.discoveredEvidence[0].discoveryState, 'COLLECTED');
 });
 
+for (const [targetField, evidenceField] of [['displayName', 'title'], ['description', 'publicContent']]) {
+  test(`調査先${targetField}に未発見Evidenceの${evidenceField}があればEvaluationは拒否する`, () => {
+    const fixture = readyGameCaseFixture();
+    const input = structuredClone(fixture.conversionInput);
+    const testimony = input.evidenceSet.evidenceArtifacts.find(item => item.type === 'TESTIMONY');
+    input.progressionPlan.investigationTargets[0][targetField] = testimony[evidenceField];
+    const gameCaseResult = convertGameCase(resealInput(input));
+    assert.equal(gameCaseResult.status, 'READY');
+    const built = buildGeneratedGame(gameCaseResult);
+    assert.equal(built.gameMakeResult.status, 'BUILT');
+    const evaluation = evaluateGame(buildGameEvaluationInput({
+      gameMakeResult: built.gameMakeResult, gameCaseResult, evidenceSet: fixture.evidenceSet,
+      verificationResult: fixture.verificationResult, scenarioPackage: fixture.scenarioPackage,
+    }));
+    assert.equal(evaluation.status, 'BLOCKED');
+    assert.equal(evaluation.accepted, false);
+    assert.ok(evaluation.issues.some(item => item.code === 'INVESTIGATION_DISCLOSURE_FAILED'
+      && item.target === 'generated-game.investigation-view'));
+    assert.equal(evaluation.checks.find(item => item.category === 'INVESTIGATION_DISCLOSURE').status, 'FAIL');
+  });
+}
+
 test('不正Target、不正Action、別Game CaseのIDを拒否し、誤調査は正解を漏らさない', () => {
   const fixture = readyGameCaseFixture();
   const { runtime } = buildGeneratedGame(fixture.gameCaseResult);

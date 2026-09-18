@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { AutoGenerationManager, autoAuthorBootstrap, autoAuthorView,
-  classifyBlocked, createAutoAuthorSession } from '../server/auto-generation-service.js';
+  buildMakotomaruOutputSchema, classifyBlocked, createAutoAuthorSession }
+  from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { CodexOutputSchemaError } from '../server/codex/codex-errors.js';
+import { CodexError } from '../server/codex/codex-errors.js';
 
 async function generated(options = {}, selection = { networkId: 'network-c', difficulty: 3 },
   maxAttempts = 3) {
@@ -32,13 +34,13 @@ test('XSS + Network C + ★3をReview修正後にGAME READYまで自動実行す
   assert.equal(session.gameCaseResult.status, 'READY');
   assert.equal(session.gameMakeResult.status, 'BUILT');
   assert.equal(session.evaluationResult.status, 'ACCEPTED');
-  assert.equal(runner.scenarioCalls, 2); assert.equal(runner.reviewCalls, 2);
+  assert.equal(runner.scenarioCalls, 1); assert.equal(runner.reviewCalls, 2);
   assert.equal(runner.evidenceCalls, 1);
   assert.equal(session.scenarioImportResult.status, 'VALID');
   assert.equal(session.evidenceImportResult.status, 'VALID');
   assert.deepEqual([...new Set(runner.calls.filter(item => item.kind === 'invocation')
     .map(item => item.outputSchemaName))].sort(),
-  ['evidence-import-package', 'scenario-import-package', 'scenario-verification-review']);
+  ['evidence-generation-draft', 'scenario-import-package', 'scenario-verification-review']);
   assert.ok(runner.calls.filter(item => item.kind === 'invocation')
     .every(item => item.hasOutputSchema));
   assert.ok(view.progress.every(item => item.status === 'COMPLETE'
@@ -48,19 +50,22 @@ test('XSS + Network C + ★3をReview修正後にGAME READYまで自動実行す
   assert.notStrictEqual(reviews[0].data, reviews[1].data);
 });
 
-test('Scenario malformed/schema validation failureをfeedback付きで最大3回再生成する', async () => {
-  const { runner, view } = await generated({ malformedScenario: true });
+test('Review後のScenario修正版がSchema違反ならfeedback付きで上限まで再生成する', async () => {
+  const { runner, view } = await generated({ malformedScenario: true,
+    reviewOutcomes: ['NEEDS_REVISION'] });
   assert.equal(view.currentState, 'FAILED');
   assert.equal(view.failure.code, 'MAX_REVISION_EXCEEDED');
-  assert.equal(runner.scenarioCalls, 3);
+  assert.equal(runner.scenarioCalls, 2);
   assert.ok(runner.calls.filter(item => item.phase === 'REVISING_SCENARIO')
-    .every(item => item.feedback.classification === 'REPAIRABLE_BLOCKED'));
+    .some(item => item.feedback.classification === 'REPAIRABLE_BLOCKED'));
 });
 
-test('Scenarioの非JSON出力をREPAIRABLE_BLOCKEDとして次Invocationで修正する', async () => {
-  const { runner, view } = await generated({ malformedScenarioOutput: 1 });
+test('Review後のScenario非JSON出力をREPAIRABLE_BLOCKEDとして次Invocationで修正する', async () => {
+  const { runner, view } = await generated({ malformedScenarioOutput: 1,
+    reviewOutcomes: ['NEEDS_REVISION', 'VERIFIED'] });
   assert.equal(view.currentState, 'READY'); assert.equal(runner.scenarioCalls, 2);
-  const revision = runner.calls.find(item => item.phase === 'REVISING_SCENARIO');
+  const revision = runner.calls.filter(item => item.phase === 'REVISING_SCENARIO')
+    .find(item => item.feedback.classification === 'REPAIRABLE_BLOCKED');
   assert.equal(revision.feedback.classification, 'REPAIRABLE_BLOCKED');
   assert.equal(revision.feedback.errors[0].code, 'MALFORMED_CODEX_JSON');
 });
@@ -113,12 +118,67 @@ test('output schemaエラーは専用分類と安全なDeveloper Detailを公開
   assert.equal(view.failure.code, 'CODEX_OUTPUT_SCHEMA_INVALID');
   assert.equal(view.failure.message, '生成用データ形式の内部エラーが発生しました。');
   assert.deepEqual(view.developerDetails[0], {
-    phase: 'GENERATING_SCENARIO', attempt: 1,
+    phase: 'REVIEWING_SCENARIO', attempt: 1,
     code: 'CODEX_OUTPUT_SCHEMA_INVALID', errorCode: 'CODEX_OUTPUT_SCHEMA_INVALID',
     field: 'generation', schemaName: 'scenario-import-package',
-    cliErrorCode: 'invalid_json_schema', reason: 'schemaVersion requires explicit type',
+    cliErrorCode: 'invalid_json_schema', cliErrorClass: 'output_schema',
+    exitCode: null, httpStatus: null, retryable: false,
+    receivedType: null, length: null, expectedMinLength: null,
+    expectedMaxLength: null, expectedPattern: null, expectedFormat: null,
+    reason: 'schemaVersion requires explicit type',
     correctionHint: '入力条件を変えずに、もう一度生成してください。',
   });
+});
+
+test('真実丸のusage limitは専用分類と最小Developer Detailで停止する', async () => {
+  const jsonRunner = {
+    checkAvailability: async () => ({ available: true, version: 'codex-cli test' }),
+    runJson: async ({ phase }) => { throw new CodexError('CODEX_USAGE_LIMIT_REACHED',
+      'Codexの利用上限に達しています。', { phase, retryable: true, exitCode: 1,
+        httpStatus: 429, cliErrorClass: 'usage_limit' }); },
+  };
+  const manager = new AutoGenerationManager({ jsonRunner });
+  const session = createAutoAuthorSession();
+  manager.startMakotomaru(session, { schemaVersion: '1.0', difficulty: 1,
+    attackCategory: 'ANY', complexity: 'STANDARD' });
+  await manager.waitForIdle(); const view = autoAuthorView(session);
+  assert.equal(view.currentState, 'FAILED');
+  assert.equal(view.failure.code, 'CODEX_USAGE_LIMIT_REACHED');
+  assert.match(view.failure.message, /利用上限/);
+  assert.deepEqual(view.developerDetails[0], {
+    phase: 'MAKOTOMARU_CONFIGURATION',
+    code: 'CODEX_USAGE_LIMIT_REACHED', errorCode: 'CODEX_USAGE_LIMIT_REACHED',
+    httpStatus: 429, retryable: true,
+  });
+});
+
+test('真実丸入力は技術成立性を保持しreference等の不要fieldを除外する', async () => {
+  const runner = new MockCodexRunner(); const manager = new AutoGenerationManager({ jsonRunner: runner });
+  const session = createAutoAuthorSession();
+  manager.startMakotomaru(session, { schemaVersion: '1.0', difficulty: 1,
+    attackCategory: 'ANY', complexity: 'STANDARD' });
+  await manager.waitForIdle();
+  const data = runner.calls.find(item => item.phase === 'MAKOTOMARU_CONFIGURATION').data;
+  assert.ok(data.allowedAttacks.every(item => item.requiredServices.length
+    && item.requiredReachability.length && item.observableArtifacts.length));
+  assert.ok(data.allowedAttacks.every(item => !Object.hasOwn(item, 'references')
+    && !Object.hasOwn(item, 'relatedAttackPatterns')));
+  assert.ok(data.networkTemplate.nodes.every(item => Array.isArray(item.roles)
+    && Array.isArray(item.logSources)));
+});
+
+test('真実丸Structured Output Schemaは要求値とcanonical ID/effectへ制約する', () => {
+  const schema = buildMakotomaruOutputSchema({ difficulty: 1 });
+  const configuration = schema.properties.configuration.properties;
+  const attack = configuration.attacks.items.properties;
+  assert.deepEqual(configuration.mode, { const: 'MAKOTOMARU' });
+  assert.deepEqual(configuration.difficulty, { const: 1 });
+  assert.deepEqual(configuration.evidenceCount, { const: 1 });
+  assert.ok(attack.attackId.enum.includes('reflected_xss'));
+  assert.ok(attack.sourceNodeId.enum.includes('client-host'));
+  assert.ok(attack.targetServiceId.enum.includes('web-service'));
+  assert.ok(attack.expectedEffect.enum.every(value => value.length > 20));
+  assert.equal(attack.expectedEffect.enum.length, 3);
 });
 
 test('Accountに依存する識別情報を状態へ保存・公開しない', async () => {
@@ -146,12 +206,77 @@ test('Evidence生成失敗とEvaluation拒否はREADYにしない', async () => 
     'EVALUATION_REJECTED'); assert.equal(session.runtime, null);
 });
 
+for (const status of ['BLOCKED', 'NEEDS_REVISION']) {
+  test(`Evaluation ${status}は個別code・target・理由・修正案を公開し、READYにしない`, async () => {
+    const issues = [{ code: 'INVESTIGATION_DISCLOSURE_FAILED', category: 'INVESTIGATION_DISCLOSURE',
+      target: 'generated-game.investigation-view', reason: '未発見Evidenceが公開されています。',
+      correctionHint: '調査先の公開表示から未発見資料のタイトルを除いてください。',
+      sourceRefs: ['internal-ground-must-not-be-exposed'] },
+    { code: 'NORMAL_PLAYTHROUGH_FAILED', category: 'NORMAL_PLAYTHROUGH',
+      target: 'generated-game.normal-path', reason: '通常操作でACQUITTEDへ到達できません。',
+      correctionHint: 'Game ProgressionとBackend actionの接続を修正してください。',
+      sourceRefs: ['phase9:runtime'] }];
+    const runner = new MockCodexRunner();
+    let evaluationCalls = 0;
+    const manager = new AutoGenerationManager({ jsonRunner: runner,
+      evaluator: () => { evaluationCalls += 1; return { status, issues }; } });
+    const session = createAutoAuthorSession();
+    const configuration = autoAuthorBootstrap().defaultManualConfiguration;
+    const originalConfiguration = structuredClone(configuration);
+    manager.submitManual(session, configuration); await manager.waitForIdle();
+    assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
+    manager.approve(session); await manager.waitForIdle();
+    const view = autoAuthorView(session);
+    assert.equal(view.currentState, 'FAILED');
+    assert.equal(view.failure.code, 'EVALUATION_REJECTED');
+    assert.match(view.failure.message, /Developer Detail/);
+    assert.equal(view.playUrl, null); assert.equal(session.runtime, null);
+    assert.equal(evaluationCalls, 1); assert.equal(runner.evidenceCalls, 1);
+    assert.deepEqual(session.configuration, originalConfiguration);
+    for (const issue of issues) {
+      const detail = view.developerDetails.find(item => item.code === issue.code);
+      assert.ok(detail);
+      assert.equal(detail.phase, 'EVALUATING'); assert.equal(detail.attempt, 1);
+      assert.equal(detail.field, issue.target); assert.equal(detail.reason, issue.reason);
+      assert.equal(detail.correctionHint, issue.correctionHint); assert.equal(detail.retryable, false);
+      assert.equal(Object.hasOwn(detail, 'sourceRefs'), false);
+    }
+    const summary = view.developerDetails.find(item => item.code === 'EVALUATION_REJECTED');
+    assert.match(summary.correctionHint, /個別の評価エラー/);
+    assert.doesNotMatch(summary.correctionHint, /もう一度生成/);
+    assert.ok(!JSON.stringify(view).includes('internal-ground-must-not-be-exposed'));
+    assert.equal(view.progress.find(item => item.id === 'evaluation').status, 'FAILED');
+  });
+}
+
 test('Evidenceの非JSON出力はfeedback付き別Invocationで1回修正する', async () => {
   const { runner, view } = await generated({ malformedEvidenceOutput: 1 });
   assert.equal(view.currentState, 'READY'); assert.equal(runner.evidenceCalls, 2);
   const repair = runner.calls.filter(item => item.phase === 'GENERATING_EVIDENCE')[1];
   assert.equal(repair.feedback.classification, 'REPAIRABLE_BLOCKED');
   assert.equal(repair.feedback.errors[0].code, 'MALFORMED_CODEX_JSON');
+});
+
+test('Evidence draftにAIがintegrityを付けた場合はfield付きで差し戻してから再生成する', async () => {
+  const runner = new MockCodexRunner();
+  const runJson = runner.runJson.bind(runner);
+  runner.runJson = async args => {
+    const draft = await runJson(args);
+    if (args.phase === 'GENERATING_EVIDENCE' && runner.evidenceCalls === 1) {
+      draft.evidenceArtifacts[0].integrity = { algorithm: 'SHA-256', publicContentDigest: '0'.repeat(64) };
+    }
+    return draft;
+  };
+  const manager = new AutoGenerationManager({ jsonRunner: runner });
+  const session = createAutoAuthorSession();
+  manager.start(session, { networkId: 'network-a', difficulty: 1 });
+  await manager.waitForIdle();
+  assert.equal(session.auto.state, 'READY');
+  assert.equal(runner.evidenceCalls, 2);
+  const repair = runner.calls.filter(item => item.phase === 'GENERATING_EVIDENCE')[1];
+  assert.equal(repair.feedback.errors[0].code, 'UNKNOWN_FIELD');
+  assert.equal(repair.feedback.errors[0].field, 'evidence-generation-draft.evidenceArtifacts[0].integrity');
+  assert.equal(session.evidenceImportResult.status, 'VALID');
 });
 
 test('REPAIRABLE_BLOCKEDとHARD_BLOCKEDを機械可読codeで分類する', () => {
@@ -205,4 +330,11 @@ test('Author UIはJSONを直接編集させずManual・真実丸・Preview承認
   assert.match(html, /このScenarioでゲームを作成/);
   assert.doesNotMatch(html, /textarea|JSON Import|Prompt|Developer Mode/);
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
+  assert.match(source, /author\.canCancel/);
+  assert.match(source, /value\.defaultManualConfiguration/);
+  assert.match(source, /readInitialConfiguration\(bootstrap\)/);
+  assert.match(source, /networkModel = structuredClone\(preset\.network\)/);
+  assert.match(source, /renderAttackDetails\(preset\.attacks\)/);
+  assert.match(source, /control\.checked = selectedAttacks\.has\(control\.value\)/);
+  assert.doesNotMatch(source, /\[value="reflected_xss"\].*checked = true/);
 });

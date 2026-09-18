@@ -22,6 +22,10 @@ export const PROGRESSION_TRANSITIONS = [
   { from: 'GUILTY_RETRY', event: 'RETURN_TO_INVESTIGATION', to: 'INVESTIGATION' },
   { from: 'GUILTY_RETRY', event: 'LIMIT_REACHED', to: 'BLOCKED' },
 ];
+const ISSUE_TRANSITIONS = [
+  { from: 'OBJECTION', event: 'NEXT_ISSUE', to: 'INVESTIGATION' },
+  { from: 'RETRIAL_COURT', event: 'INVESTIGATE_AGAIN', to: 'INVESTIGATION' },
+];
 
 function unique(items, key, field) {
   const seen = new Set();
@@ -53,6 +57,8 @@ export function progressionPlanCore(plan) {
     initialAvailableTargetIds: plan.initialAvailableTargetIds,
     retrialStatementIds: plan.retrialStatementIds,
     returnToCourtCondition: plan.returnToCourtCondition,
+    courtRoundCount: plan.courtRoundCount,
+    ...(plan.courtIssueMode ? { courtIssueMode: plan.courtIssueMode } : {}),
     objectionRules: plan.objectionRules, retryPolicy: plan.retryPolicy,
     publicMessages: plan.publicMessages };
 }
@@ -68,6 +74,11 @@ export function validateGameProgressionPlan(plan) {
   }
   unique(plan.objectionRules, item => item.objectionRuleId,
     'game-progression-plan.objectionRules.objectionRuleId');
+  if (plan.courtIssueMode && (plan.courtRoundCount < 2
+    || new Set(plan.objectionRules.map(rule => rule.targetStatementId)).size !== plan.courtRoundCount)) {
+    fail('DISTINCT_COURT_ISSUES_REQUIRED', 'game-progression-plan.objectionRules',
+      '争点数と異なる反駁対象statementの数が一致していません。同じ主張の繰り返しは争点にできません。');
+  }
   for (const rule of plan.objectionRules) unique(rule.acceptedEvidenceIds, value => value,
     `game-progression-plan.objectionRules.${rule.objectionRuleId}.acceptedEvidenceIds`);
   if (!Number.isSafeInteger(plan.retryPolicy.maxCourtAttempts)
@@ -174,6 +185,17 @@ function validateProgressionPlanReferences(input) {
     }
   }
   const feedback = plan.publicMessages.failureFeedback;
+  if (plan.courtIssueMode) {
+    const targets = [...new Set(plan.objectionRules.map(rule => rule.targetStatementId))];
+    const claims = targets.map(id => statements.get(id).statement.spokenContent.normalize('NFKC').replace(/\s/g, ''));
+    if (new Set(claims).size !== claims.length) fail('DUPLICATE_COURT_CLAIM',
+      'game-progression-plan.objectionRules', '同じ発言をIDだけ変えて別の争点にすることはできません。');
+    for (const rule of plan.objectionRules) {
+      const support = exonerations.get(rule.exonerationRef).supportingEvidenceIds;
+      if (support.some(id => !investigation.has(id))) fail('UNOBTAINABLE_EXONERATION_SUPPORT',
+        'game-progression-plan.investigationEvidenceIds', '無罪論証に必要な資料をすべて通常プレイで取得可能にしてください。');
+    }
+  }
   const answerIds = plan.objectionRules.flatMap(rule =>
     [rule.targetStatementId, ...rule.acceptedEvidenceIds]);
   if (answerIds.some(id => feedback.includes(id))) {
@@ -335,6 +357,18 @@ export function deriveJudgmentRules(input) {
   }).sort((a, b) => a.ruleId.localeCompare(b.ruleId));
 }
 
+// 公開選択肢の直積から、どの正解ruleにも一致しない提示を探す。
+// 同じstatementに複数ruleがある場合も、正解の和集合を誤答にしない。
+export function findIncorrectObjectionPair({ statementIds, presentableEvidenceIds, objectionRules }) {
+  for (const statementId of statementIds) {
+    for (const evidenceId of presentableEvidenceIds) {
+      if (!objectionRules.some(rule => rule.targetStatementId === statementId
+        && rule.acceptedEvidenceIds.includes(evidenceId))) return { statementId, evidenceId };
+    }
+  }
+  return null;
+}
+
 function publicIds(input) {
   return new Map(input.characters.characters
     .map((item, index) => [item.characterId, `case_character_${String(index + 1).padStart(3, '0')}`]));
@@ -377,8 +411,25 @@ export function deriveGameCaseParts(input) {
       spokenContent: value.statement.spokenContent, displayOrder };
   });
   const judgmentRules = deriveJudgmentRules(input);
+  const issueTargets = input.progressionPlan.retrialStatementIds.filter(id =>
+    judgmentRules.some(rule => rule.targetStatementId === id));
+  const nonTargets = input.progressionPlan.retrialStatementIds.filter(id => !issueTargets.includes(id));
+  const courtIssues = input.progressionPlan.courtIssueMode ? issueTargets.map((target, index) => {
+    const rules = judgmentRules.filter(rule => rule.targetStatementId === target);
+    const required = rules.flatMap(rule => rule.acceptedEvidenceIds);
+    // The final verdict requires the full verified exoneration support, not one IP or account.
+    if (index === issueTargets.length - 1) required.push(...input.exonerations
+      .filter(item => judgmentRules.some(rule => rule.exonerationRef === item.exonerationId))
+      .flatMap(item => item.supportingEvidenceIds));
+    return { issueId: `court_issue_${index + 1}`,
+      statementIds: input.progressionPlan.retrialStatementIds.filter(id => id === target || nonTargets.includes(id)),
+      judgmentRuleIds: rules.map(rule => rule.ruleId), requiredEvidenceIds: [...new Set(required)] };
+  }) : null;
   const progression = { schemaVersion: '1.0', initialState: 'TITLE',
-    states: [...PROGRESSION_STATES], transitions: structuredClone(PROGRESSION_TRANSITIONS),
+    courtRoundCount: input.progressionPlan.courtRoundCount,
+    ...(courtIssues ? { courtIssues } : {}),
+    states: [...PROGRESSION_STATES], transitions: structuredClone([
+      ...PROGRESSION_TRANSITIONS, ...(courtIssues ? ISSUE_TRANSITIONS : [])]),
     initialCourt: { prosecutionStatements,
       presentedEvidenceIds: [...input.progressionPlan.initialCourtEvidenceIds],
       speakerCharacterIds: [...new Set(prosecutionStatements.map(item => item.speakerCharacterId))],
@@ -387,7 +438,8 @@ export function deriveGameCaseParts(input) {
     investigation: { availableEvidenceIds: [...input.progressionPlan.investigationEvidenceIds],
       initialAvailableTargetIds: [...input.progressionPlan.initialAvailableTargetIds],
       completedInvestigationActions: [], discoveredEvidenceIds: [], collectedEvidenceIds: [],
-      requiredForCourtIds: [...new Set(judgmentRules.flatMap(item => item.acceptedEvidenceIds))],
+      requiredForCourtIds: [...new Set(courtIssues ? courtIssues.flatMap(item => item.requiredEvidenceIds)
+        : judgmentRules.flatMap(item => item.acceptedEvidenceIds))],
       returnToCourtCondition: input.progressionPlan.returnToCourtCondition },
     retrialCourt: { testimonies: structuredClone(testimonies),
       presentableEvidenceIds: [...presentableEvidenceIds] },
@@ -471,7 +523,8 @@ export function validateGameCase(gameCase) {
   for (const testimony of gameCase.courtroom.testimonies) validateDisplayOrder(testimony.statements,
     'game-case.courtroom.testimonies.statements');
   if (!sameValues(gameCase.progression.states, PROGRESSION_STATES)
-    || !sameValues(gameCase.progression.transitions, PROGRESSION_TRANSITIONS)) fail('INVALID_PROGRESSION_STATE_MACHINE',
+    || !sameValues(gameCase.progression.transitions, [...PROGRESSION_TRANSITIONS,
+      ...(gameCase.progression.courtIssues ? ISSUE_TRANSITIONS : [])])) fail('INVALID_PROGRESSION_STATE_MACHINE',
     'game-case.progression', 'Game Progressionの状態または遷移が正式なState Machineと一致しません。');
   if (!sameValues(gameCase.progression.retrialCourt, gameCase.courtroom)) fail('RETRIAL_COURT_MISMATCH',
     'game-case.progression.retrialCourt', 'Retrial CourtがCourtroom公開投影と一致しません。');
@@ -488,6 +541,46 @@ export function validateGameCase(gameCase) {
   if (!Number.isSafeInteger(gameCase.progression.retryPolicy.maxCourtAttempts)
     || gameCase.progression.retryPolicy.maxCourtAttempts < 1) fail('INVALID_RETRY_LIMIT',
     'game-case.progression.retryPolicy.maxCourtAttempts', 'maxCourtAttemptsは1以上の安全な整数である必要があります。');
+  if (gameCase.progression.courtIssues) {
+    const issues = gameCase.progression.courtIssues;
+    const ruleMap = new Map(gameCase.judgment.judgmentRules.map(rule => [rule.ruleId, rule]));
+    const statements = new Set(gameCase.courtroom.testimonies.flatMap(item => item.statements.map(s => s.statementId)));
+    const evidence = new Set(gameCase.detective.evidence.map(item => item.evidenceId));
+    const claimed = new Set();
+    const assignedRules = new Set();
+    const allTargets = new Set(gameCase.judgment.judgmentRules.map(rule => rule.targetStatementId));
+    const claimText = new Map(gameCase.courtroom.testimonies.flatMap(item => item.statements)
+      .map(item => [item.statementId, item.spokenContent.normalize('NFKC').replace(/\s/g, '')]));
+    const distinctText = new Set();
+    if (issues.length !== gameCase.progression.courtRoundCount) fail('INVALID_COURT_ISSUES',
+      'game-case.progression.courtIssues', '争点数と法廷ラウンド数が一致していません。');
+    issues.forEach((issue, index) => {
+      for (const field of ['statementIds', 'judgmentRuleIds', 'requiredEvidenceIds']) {
+        unique(issue[field], id => id, `game-case.progression.courtIssues.${index}.${field}`);
+      }
+      const rules = issue.judgmentRuleIds.map(id => ruleMap.get(id));
+      const target = rules[0]?.targetStatementId;
+      if (issue.issueId !== `court_issue_${index + 1}` || !target || claimed.has(target)
+        || distinctText.has(claimText.get(target))
+        || rules.some(rule => !rule || rule.targetStatementId !== target
+          || !issue.statementIds.includes(rule.targetStatementId)
+          || rule.acceptedEvidenceIds.some(id => !issue.requiredEvidenceIds.includes(id)))
+        || issue.statementIds.some(id => !statements.has(id) || (allTargets.has(id) && id !== target))
+        || issue.judgmentRuleIds.some(id => assignedRules.has(id))
+        || issue.requiredEvidenceIds.some(id => !evidence.has(id))) fail('INVALID_COURT_ISSUES',
+        'game-case.progression.courtIssues', '争点の証言・判定・必要証拠の参照が不正または重複しています。');
+      claimed.add(target);
+      distinctText.add(claimText.get(target));
+      issue.judgmentRuleIds.forEach(id => assignedRules.add(id));
+      if (!findIncorrectObjectionPair({ statementIds: issue.statementIds,
+        presentableEvidenceIds: gameCase.courtroom.presentableEvidenceIds, objectionRules: rules })) {
+        fail('EVIDENCE_NO_INCORRECT_OBJECTION_PAIR', 'game-case.progression.courtIssues',
+          '争点ごとに根拠に基づいて選び分ける証言と証拠が必要です。');
+      }
+    });
+    if (assignedRules.size !== ruleMap.size) fail('INVALID_COURT_ISSUES',
+      'game-case.progression.courtIssues', 'どの争点にも割り当てられていない判定ルールがあります。');
+  }
   const expected = digest(gameCaseCore(gameCase));
   if (gameCase.fingerprint !== expected || gameCase.gameCaseId !== `game_case_${expected.slice(0, 20)}`) {
     fail('GAME_CASE_FINGERPRINT_MISMATCH', 'game-case.fingerprint',
@@ -569,20 +662,27 @@ export function validateGameCaseBundle({ input, gameCase, publicGameCase }) {
   return { gameCase, publicGameCase };
 }
 
-export function evaluateObjection(gameCase, { statementId, evidenceId, attemptCount }) {
+export function evaluateObjection(gameCase, { statementId, evidenceId, attemptCount,
+  currentRound = 1, collectedEvidenceIds = [] }) {
   validateGameCase(gameCase);
   if (!Number.isSafeInteger(attemptCount) || attemptCount < 0) fail('INVALID_ATTEMPT_COUNT',
     'objection.attemptCount', 'attemptCountは0以上の安全な整数である必要があります。');
   const statements = new Set(gameCase.courtroom.testimonies
     .flatMap(item => item.statements.map(statement => statement.statementId)));
   const presentable = new Set(gameCase.courtroom.presentableEvidenceIds);
+  const issue = gameCase.progression.courtIssues?.[currentRound - 1];
+  if (gameCase.progression.courtIssues && (!Number.isSafeInteger(currentRound) || !issue
+    || !issue.statementIds.includes(statementId))) fail('STATEMENT_NOT_IN_CURRENT_ISSUE',
+    'objection.statementId', '現在の争点で審理している発言を選んでください。');
   if (!statements.has(statementId)) fail('BROKEN_STATEMENT_REFERENCE', 'objection.statementId',
     '選択されたstatementはRetrial Courtに存在しません。');
   if (!presentable.has(evidenceId)) fail('BROKEN_EVIDENCE_REFERENCE', 'objection.evidenceId',
     '提示されたEvidenceはRetrial Courtで提示できません。');
   const nextAttemptCount = attemptCount + 1;
   const matchedRule = gameCase.judgment.judgmentRules.find(rule =>
-    rule.targetStatementId === statementId && rule.acceptedEvidenceIds.includes(evidenceId));
+    (!issue || issue.judgmentRuleIds.includes(rule.ruleId))
+    && rule.targetStatementId === statementId && rule.acceptedEvidenceIds.includes(evidenceId)
+    && (!issue || issue.requiredEvidenceIds.every(id => collectedEvidenceIds.includes(id))));
   if (matchedRule) return { outcome: 'SUCCESS', state: 'ACQUITTED', nextState: 'ACQUITTED',
     attemptCount: nextAttemptCount, judgmentRuleId: matchedRule.ruleId };
   const common = { outcome: 'FAILURE', state: 'GUILTY_RETRY', attemptCount: nextAttemptCount,

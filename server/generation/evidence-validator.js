@@ -359,6 +359,15 @@ export function validateEvidenceConsistency(evidencePackage, input) {
     '当該Requirementへ追跡可能なArtifactを1件以上生成してください。',
     [`evidenceRequirement:${row.requirementId}`], null, row.requirementId);
   for (const requirement of requirements.values()) {
+    for (const ground of requirement.grounds.filter(item => item.sourceType === 'ATTACK_GRAPH_ARTIFACT')) {
+      add(issues, ![...artifacts.values()].some(artifact => artifact.type !== 'TESTIMONY'
+        && artifact.requirementIds.includes(requirement.requirementId)
+        && artifact.sourceRefs.some(ref => sameValues(ref, ground))),
+      'OBSERVABLE_EVIDENCE_NOT_COVERED', 'evidenceArtifacts.sourceRefs',
+      'Evidence Requirementが依存する観測資料が取得可能な技術Evidenceに含まれていません。',
+      'groundsの各ATTACK_GRAPH_ARTIFACTを実際の技術資料へ対応付けてください。証言や人物参照では代用できません。',
+      [`attackGraph.artifact:${ground.attackNodeId}:${ground.sourceId}`], null, requirement.requirementId);
+    }
     if (requirement.purpose === 'CONTRADICTION_PROOF') add(issues,
       !evidencePackage.contradictions.some(item => {
         const ids = [item.testimonyEvidenceId, ...item.conflictingEvidenceIds];

@@ -7,14 +7,20 @@ const jsonRunner = new CodexJsonRunner(new CodexRunner({ cwd: process.cwd() }));
 const manager = new AutoGenerationManager({ jsonRunner });
 const session = createAutoAuthorSession();
 
-manager.start(session, { networkId: 'network-a', difficulty: 1 });
+manager.startMakotomaru(session, { schemaVersion: '1.0', difficulty: 1,
+  attackCategory: 'ANY', complexity: 'STANDARD' });
 await manager.waitForIdle();
+if (session.auto.state === 'SCENARIO_PREVIEW') {
+  manager.approve(session);
+  await manager.waitForIdle();
+}
 const view = autoAuthorView(session);
 console.log(JSON.stringify({ generationId: view.generationId, state: view.currentState,
   attempts: view.attempt, scenario: session.verificationResult?.status ?? null,
   evidence: session.evidenceImportResult?.status ?? null,
   gameCase: session.gameCaseResult?.status ?? null,
   evaluation: session.evaluationResult?.status ?? null,
+  evaluationIssues: session.evaluationResult?.issues ?? null,
   prototypeEvaluation: session.prototypeEvaluation?.status ?? null,
-  failure: view.failure }, null, 2));
+  failure: view.failure, details: view.developerDetails }, null, 2));
 if (view.currentState !== 'READY') process.exitCode = 1;

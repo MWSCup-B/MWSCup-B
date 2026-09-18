@@ -65,6 +65,8 @@
       "maxItems": 512
     },
     "returnToCourtCondition": { "enum": ["AT_LEAST_ONE_EVIDENCE_COLLECTED", "ALL_REQUIRED_EVIDENCE_COLLECTED"] },
+    "courtRoundCount": { "enum": [1, 2, 3, 4] },
+    "courtIssueMode": { "const": "DISTINCT_CLAIMS" },
     "objectionRules": {
       "type": "array",
       "items": {
@@ -110,6 +112,6 @@
     },
     "fingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
   },
-  "required": ["schemaVersion", "planId", "scenarioId", "evidenceSetId", "attackGraphRef", "initialCourtEvidenceIds", "initialCourtStatementIds", "investigationEvidenceIds", "investigationActions", "investigationTargets", "evidenceDiscoveryRules", "initialAvailableTargetIds", "retrialStatementIds", "returnToCourtCondition", "objectionRules", "retryPolicy", "publicMessages", "fingerprint"],
+  "required": ["schemaVersion", "planId", "scenarioId", "evidenceSetId", "attackGraphRef", "initialCourtEvidenceIds", "initialCourtStatementIds", "investigationEvidenceIds", "investigationActions", "investigationTargets", "evidenceDiscoveryRules", "initialAvailableTargetIds", "retrialStatementIds", "returnToCourtCondition", "courtRoundCount", "objectionRules", "retryPolicy", "publicMessages", "fingerprint"],
   "additionalProperties": false
 }

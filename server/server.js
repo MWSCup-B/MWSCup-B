@@ -17,6 +17,8 @@ const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/generated-view.js', ['generated-view.js', 'text/javascript; charset=utf-8']],
+  ['/generated-game.css', ['generated-game.css', 'text/css; charset=utf-8']],
   ['/author', ['author.html', 'text/html; charset=utf-8']],
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
   ['/visual-assets.js', ['visual-assets.js', 'text/javascript; charset=utf-8']],
@@ -29,11 +31,12 @@ for (const path of [
   'characters/judge-neutral.svg', 'effects/objection.svg',
   'networks/network-a.svg', 'networks/network-b.svg', 'networks/network-c.svg',
   'networks/network-d.svg',
+  'characters/witness-neutral.svg', 'characters/defendant-neutral.svg',
 ]) assets.set(`/assets/${path}`, [`assets/${path}`, 'image/svg+xml; charset=utf-8']);
 const generatedActionFields = new Map([
   ['begin', ['action']], ['continue', ['action']],
   ['investigate', ['action', 'targetId', 'investigationActionId']],
-  ['collect', ['action', 'evidenceId']], ['retrial', ['action']],
+  ['collect', ['action', 'evidenceId']], ['retrial', ['action']], ['investigation', ['action']],
   ['objection', ['action', 'statementId', 'evidenceId']], ['retry', ['action']],
 ]);
 const xssActionFields = new Map([

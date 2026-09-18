@@ -11,17 +11,24 @@ import { buildScenarioReviewReferenceRules, buildScenarioVerificationInput,
   SCENARIO_VERIFICATION_PROMPT, validateScenarioVerificationReview,
   verifyScenario } from './generation/scenario-verifier.js';
 import { buildEvidenceGenerationInput, EVIDENCE_PROMPT_TEMPLATE,
+  buildEvidenceGenerationDraftInput, materializeEvidenceGenerationDraft,
   importEvidencePackage } from './generation/evidence-interface.js';
 import { buildGameCaseConversionInput, buildGameProgressionPlan,
   convertGameCase } from './generation/game-case-converter.js';
 import { buildGeneratedGame } from './generation/game-make.js';
+import { findIncorrectObjectionPair } from './generation/game-case-validator.js';
+import { sameValues } from './generation/evidence-validator.js';
 import { buildGameEvaluationInput, evaluateGame } from './generation/game-evaluator.js';
 import { DEFAULT_INVESTIGATION_ACTIONS } from './generation/investigation-validator.js';
 import { buildScenarioPreview, createDefaultConfiguration, INVESTIGATION_TYPES,
-  scenarioCreationBootstrap, validateScenarioConfiguration }
+  normalizeScenarioConfiguration, scenarioCreationBootstrap, validateScenarioConfiguration }
   from './generation/scenario-configuration.js';
-import { buildInvestigationAssignments } from './generation/investigation-registry.js';
+import { buildEvidenceInvestigationPlan, buildInvestigationAssignments }
+  from './generation/investigation-registry.js';
 import { assignDialogueTemplate } from './generation/dialogue-template.js';
+import { courtIssueGenerationProblems, requestedCourtIssueCount } from './generation/court-issues.js';
+import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
+  from './generation/scenario-template.js';
 import { CodexCancelledError, CodexError, CodexOutputError }
   from './codex/codex-errors.js';
 import { sanitizeDiagnostic } from './codex/codex-output-parser.js';
@@ -73,14 +80,30 @@ export function autoAuthorBootstrap() {
 
 function detail(issue, phase, attempt) {
   const errorCode = issue?.code ?? 'AUTO_GENERATION_FAILED';
+  if (errorCode === 'CODEX_USAGE_LIMIT_REACHED') return {
+    phase, code: errorCode, errorCode,
+    httpStatus: issue?.httpStatus ?? null, retryable: Boolean(issue?.retryable),
+  };
   return { phase, attempt, code: errorCode, errorCode,
     field: issue?.field ?? 'generation',
     schemaName: issue?.schemaName ?? null,
     cliErrorCode: issue?.cliErrorCode ?? null,
+    cliErrorClass: issue?.cliErrorClass ?? null,
+    exitCode: issue?.exitCode ?? null,
+    httpStatus: issue?.httpStatus ?? null,
+    retryable: Boolean(issue?.retryable),
+    receivedType: issue?.receivedType ?? null,
+    length: issue?.length ?? null,
+    expectedMinLength: issue?.expectedMinLength ?? null,
+    expectedMaxLength: issue?.expectedMaxLength ?? null,
+    expectedPattern: issue?.expectedPattern ?? null,
+    expectedFormat: issue?.expectedFormat ?? null,
     reason: sanitizeDiagnostic(issue?.reason ?? issue?.details ?? issue?.message
       ?? '生成処理に失敗しました。'),
     correctionHint: sanitizeDiagnostic(issue?.correctionHint
-      ?? '入力条件を変えずに、もう一度生成してください。') };
+      ?? (errorCode === 'EVALUATION_REJECTED'
+        ? 'Developer Detailの個別の評価エラーを確認し、該当工程を修正してください。'
+        : '入力条件を変えずに、もう一度生成してください。')) };
 }
 
 function mark(session, id, status, attempt = null) {
@@ -99,10 +122,15 @@ function complete(session, progressId, attempt = null) {
 
 function publicFailure(code) {
   if (code === 'CODEX_UNAVAILABLE') return 'Codexを利用できません。Codex CLIでChatGPTアカウントへログインしてください。';
+  if (code === 'CODEX_USAGE_LIMIT_REACHED') return 'Codexの利用上限に達しています。利用枠の回復後にもう一度実行してください。';
   if (code === 'CODEX_TIMEOUT') return 'Codexの応答が時間内に完了しませんでした。';
+  if (code === 'CODEX_MODEL_UNAVAILABLE') return '指定されたCodexモデルを利用できません。';
+  if (code === 'CODEX_INPUT_TOO_LARGE') return 'Codexへ送る生成入力が上限を超えました。';
+  if (code === 'CODEX_HTTP_ERROR') return 'Codexサービスとの通信に失敗しました。';
   if (code === 'MAX_REVISION_EXCEEDED') return '技術的に成立するScenarioを生成できませんでした。';
   if (code === 'GENERATION_CANCELLED') return 'ゲーム生成を中止しました。';
   if (code === 'CODEX_OUTPUT_SCHEMA_INVALID') return '生成用データ形式の内部エラーが発生しました。';
+  if (code === 'EVALUATION_REJECTED') return 'ゲームの最終検証で問題が見つかりました。Developer Detailの理由を確認してください。';
   return 'ゲームの自動生成に失敗しました。';
 }
 
@@ -182,19 +210,36 @@ function buildAutomaticProgression(session) {
   if (!firstNodeId || !artifacts.length || !statements.length) throw new CodexError(
     'GAME_CASE_INPUT_INCOMPLETE', 'Game Caseに必要なEvidenceまたはTestimonyが不足しています。',
     { phase: 'BUILDING_INVESTIGATION' });
-  const sourceNode = session.configuration.network.nodes.find(item => item.nodeId === firstNodeId);
-  const target = { schemaVersion: '1.0', targetId: 'target_scenario', targetType: 'SERVER',
-    displayName: sourceNode?.label ?? '関連システム', description: '事件に関係する合成環境の調査対象です。',
-    sourceNodeRef: { sourceType: 'NETWORK_NODE', sourceId: firstNodeId },
-    availableActionIds: ['action_audit_log', 'action_inspect_device', 'action_inspect_file',
-      'action_analyze_network_log', 'action_review_auth_log', 'action_check_configuration'],
-    initiallyAvailable: true };
-  const selectedActions = session.configuration.attacks.flatMap(attack =>
-    attack.investigationTypes.map(type => INVESTIGATION_TYPES[type].actionId));
-  const ruleActions = selectedActions.length ? selectedActions : ['action_audit_log'];
+  const investigationPlan = buildEvidenceInvestigationPlan(session.configuration,
+    session.generationInput);
+  const targets = [];
+  const artifactRoutes = artifacts.map(artifact => {
+    const sources = investigationPlan.filter(item => artifact.sourceRefs.some(ref =>
+      ref.sourceType === 'ATTACK_GRAPH_ARTIFACT' && ref.attackNodeId === item.ground.attackNodeId
+      && ref.sourceId === item.ground.sourceId));
+    const route = artifact.type === 'TESTIMONY' ? null
+      : sources.find(item => item.evidenceType === artifact.type) ?? sources[0];
+    const sourceNodeRef = route ? { sourceType: 'NETWORK_NODE', sourceId: route.sourceNodeId }
+      : { sourceType: 'EVIDENCE_ARTIFACT', sourceId: artifact.evidenceId };
+    const targetType = route?.targetType ?? 'FILE_SYSTEM';
+    let target = targets.find(item => item.sourceNodeRef.sourceType === sourceNodeRef.sourceType
+      && item.sourceNodeRef.sourceId === sourceNodeRef.sourceId && item.targetType === targetType);
+    const actionId = route?.actionId ?? 'action_inspect_file';
+    if (!target) {
+      target = { schemaVersion: '1.0', targetId: `target_auto_${targets.length + 1}`,
+        // 調査先は発見前にも公開されるため、未発見Artifactのタイトルを使わない。
+        targetType, displayName: route?.sourceLabel ?? `事件資料の調査先 ${targets.length + 1}`,
+        description: route ? '確認済みの取得元が保持する合成記録を調査します。'
+          : '事件資料として提示された合成文書・供述を確認します。',
+        sourceNodeRef, availableActionIds: [], initiallyAvailable: true };
+      targets.push(target);
+    }
+    if (!target.availableActionIds.includes(actionId)) target.availableActionIds.push(actionId);
+    return { targetId: target.targetId, actionId };
+  });
   const evidenceDiscoveryRules = artifacts.map((artifact, index) => ({ schemaVersion: '1.0',
     ruleId: `discovery_auto_${index + 1}`, evidenceId: artifact.evidenceId,
-    targetId: target.targetId, actionId: ruleActions[index % ruleActions.length],
+    ...artifactRoutes[index],
     prerequisites: { requiredEvidenceIds: index ? [artifacts[index - 1].evidenceId] : [],
       requiredCompletedActionIds: [] },
     discoveryResult: { publicMessage: '関連する合成記録が見つかりました。', discovered: true,
@@ -218,16 +263,18 @@ function buildAutomaticProgression(session) {
     initialCourtStatementIds: [set.contradictions[0]?.statementRef ?? statements[0].statementId],
     investigationEvidenceIds: artifacts.map(item => item.evidenceId),
     investigationActions: structuredClone(DEFAULT_INVESTIGATION_ACTIONS),
-    investigationTargets: [target], evidenceDiscoveryRules,
-    initialAvailableTargetIds: [target.targetId],
+    investigationTargets: targets, evidenceDiscoveryRules,
+    initialAvailableTargetIds: targets.map(item => item.targetId),
     retrialStatementIds: statements.map(item => item.statementId),
-    returnToCourtCondition: 'ALL_REQUIRED_EVIDENCE_COLLECTED', objectionRules,
+    returnToCourtCondition: 'AT_LEAST_ONE_EVIDENCE_COLLECTED',
+    courtRoundCount: requestedCourtIssueCount(session.configuration),
+    courtIssueMode: 'DISTINCT_CLAIMS', objectionRules,
     retryPolicy: { maxCourtAttempts: 3, onFailure: 'RETURN_TO_INVESTIGATION',
       onLimitReached: 'BLOCKED' },
     publicMessages: { initialRuling: '現在の証拠だけでは被告人への疑いが残ります。',
       acquittalRuling: '被告人を無罪とします。',
       acquittalExplanation: '取得した複数の技術記録から、人物を断定する主張は維持できません。',
-      failureFeedback: 'その証拠では現在の主張を崩せません。追加調査を行ってください。' } });
+      failureFeedback: 'この提示では論証が成立しません。発言との対応や、裏付けとなる資料が十分かを再調査してください。' } });
 }
 
 function buildContractGameCase(session) {
@@ -243,7 +290,6 @@ function buildContractGameCase(session) {
   const built = buildGeneratedGame(session.gameCaseResult);
   session.gameMakeResult = built.gameMakeResult;
   session.runtime = built.runtime;
-  session.runtime.roundCount = session.configuration.difficulty;
   if (session.gameCaseResult.status !== 'READY' || session.gameMakeResult.status !== 'BUILT') {
     const issue = [...session.gameCaseResult.errors, ...session.gameMakeResult.errors][0];
     throw new CodexError(issue?.code ?? 'GAME_BUILD_FAILED',
@@ -252,9 +298,91 @@ function buildContractGameCase(session) {
   }
 }
 
+// 全組合せが正解のdraftを修正する際は、既存の証拠・論証・証言を維持し、
+// 裏付けのあるCONSISTENT statementとその公開文だけを既存TESTIMONYへ追記する。
+function preservesCourtChoiceRevision(base, draft) {
+  const { evidenceArtifacts: originals, ...baseFields } = base;
+  const { evidenceArtifacts: revised, ...revisedFields } = draft;
+  if (!sameValues(baseFields, revisedFields) || originals.length !== revised.length) return false;
+  return originals.every(original => {
+    const revision = revised.find(item => item.evidenceId === original.evidenceId);
+    if (!revision) return false;
+    if (original.type !== 'TESTIMONY') return sameValues(original, revision);
+    const { publicContent, testimony, ...fields } = original;
+    const { publicContent: newContent, testimony: newTestimony, ...newFields } = revision;
+    if (!sameValues(fields, newFields) || !newTestimony
+      || newTestimony.witnessCharacterId !== testimony.witnessCharacterId
+      || !newContent.startsWith(publicContent)
+      || !sameValues(newTestimony.statements.slice(0, testimony.statements.length), testimony.statements)) {
+      return false;
+    }
+    return newTestimony.statements.slice(testimony.statements.length).every(statement =>
+      statement.technicalAssessment === 'CONSISTENT' && !statement.contradictionCandidate
+      && statement.groundTruthRefs.length > 0);
+  });
+}
+
 function feedbackFromIssues(issues, classification) {
   return { classification, errors: (issues ?? []).map(item => ({ code: item.code,
     field: item.field, reason: item.reason, correctionHint: item.correctionHint })) };
+}
+
+function compactCondition(item) {
+  return { source: item.source, predicate: item.predicate, args: item.args,
+    value: item.value, description: item.description };
+}
+
+function compactAttackDefinition(definition) {
+  return {
+    id: definition.id, label: definition.label, category: definition.category,
+    description: definition.description,
+    supportedInvestigationTypes: definition.supportedInvestigationTypes,
+    bindings: definition.bindings,
+    requiredRoles: definition.requiredRoles,
+    platforms: definition.platforms,
+    requiredServices: definition.requiredServices,
+    prerequisites: definition.prerequisites.map(compactCondition),
+    requiredPrivileges: definition.requiredPrivileges.map(compactCondition),
+    requiredReachability: definition.requiredReachability,
+    effects: definition.effects.map(compactCondition),
+    observableArtifacts: definition.observableArtifacts.map(item => ({ id: item.id,
+      description: item.description, conditions: item.conditions.map(compactCondition) })),
+  };
+}
+
+function makotomaruInput(request) {
+  return { request,
+    allowedAttacks: catalog.map(compactAttackDefinition),
+    networkTemplate: autoAuthorBootstrap().defaultNetwork,
+    investigationTypes: Object.entries(INVESTIGATION_TYPES).map(([id, item]) => ({
+      id, label: item.label,
+    })),
+  };
+}
+
+function constrainedString(schema, values) {
+  return { ...schema, enum: [...new Set(values)] };
+}
+
+export function buildMakotomaruOutputSchema(request) {
+  const schema = structuredClone(AUTO_CODEX_OUTPUT_SCHEMAS.makotomaru.canonicalSchema);
+  const configuration = schema.properties.configuration.properties;
+  const attack = configuration.attacks.items.properties;
+  const network = autoAuthorBootstrap().defaultNetwork;
+  const nodeIds = network.nodes.map(item => item.nodeId);
+  const serviceIds = network.services.map(item => item.serviceId);
+  configuration.mode = { const: 'MAKOTOMARU' };
+  configuration.difficulty = { const: request.difficulty };
+  configuration.evidenceCount = { const: request.difficulty };
+  attack.attackId = constrainedString(attack.attackId, catalog.map(item => item.id));
+  attack.sourceNodeId = constrainedString(attack.sourceNodeId, nodeIds);
+  attack.targetNodeId = constrainedString(attack.targetNodeId, nodeIds);
+  attack.targetServiceId = constrainedString(attack.targetServiceId, serviceIds);
+  attack.investigationSourceNodeId = constrainedString(attack.investigationSourceNodeId,
+    nodeIds);
+  attack.expectedEffect = constrainedString(attack.expectedEffect,
+    catalog.flatMap(item => item.effects.map(effect => effect.description)));
+  return schema;
 }
 
 async function reviewWithRepair({ jsonRunner, verificationInput, signal, session, attempt }) {
@@ -321,15 +449,20 @@ export class AutoGenerationManager {
   submitManual(session, configuration) {
     resetForGeneration(session, { mode: 'MANUAL', difficulty: configuration?.difficulty });
     session.auto.maxAttempts = this.maxAttempts;
-    session.configuration = structuredClone(configuration);
-    const validation = validateScenarioConfiguration(configuration, catalog);
+    const normalized = normalizeScenarioConfiguration(configuration, catalog);
+    session.configuration = structuredClone(normalized);
+    const validation = validateScenarioConfiguration(normalized, catalog);
     session.configurationValidation = { status: validation.status,
       errors: structuredClone(validation.errors) };
     if (validation.status !== 'VALID') {
+      session.auto.details.push(...validation.errors.map(item => detail(item,
+        'MANUAL_CONFIGURATION', null)));
       session.auto.state = 'MANUAL_CONFIGURATION';
       return autoAuthorView(session);
     }
     session.configurationValidation = { status: 'VALID', errors: [] };
+    // #begin starts an async operation; publish the busy state before its first await.
+    session.auto.state = 'MANUAL_CONFIGURATION';
     return this.#begin(session, signal => this.#createDraft(session, signal));
   }
 
@@ -340,13 +473,16 @@ export class AutoGenerationManager {
     resetForGeneration(session, { mode: 'MAKOTOMARU', difficulty: request.difficulty });
     session.auto.maxAttempts = this.maxAttempts;
     session.makotomaruRequest = structuredClone(request);
+    // #begin starts an async operation; publish the busy state before its first await.
+    session.auto.state = 'MAKOTOMARU_CONFIGURATION';
     return this.#begin(session, signal => this.#createMakotomaruDraft(session, signal));
   }
 
   approve(session) {
-    if (session.auto.state !== 'SCENARIO_PREVIEW' || !session.scenarioPackage) {
+    if (session.auto.state !== 'SCENARIO_PREVIEW' || !session.scenarioPackage
+      || session.verificationResult?.status !== 'VERIFIED') {
       throw new GameError('SCENARIO_PREVIEW_REQUIRED', 'approval',
-        'Preview中のScenarioだけを承認できます。', 409);
+        '独立検証済みでPreview中のScenarioだけを承認できます。', 409);
     }
     session.userApproval = { status: 'USER_APPROVED', approvedAt: new Date().toISOString(),
       configurationId: session.configuration.configurationId };
@@ -438,6 +574,8 @@ export class AutoGenerationManager {
         () => this.jsonRunner.runJson({ instruction: SCENARIO_PROMPT_TEMPLATE,
           data: { scenarioGenerationInput: session.generationInput,
             scenarioConfiguration: session.configuration,
+            scenarioTemplate: session.scenarioPackage,
+            requestedCourtIssueCount: requestedCourtIssueCount(session.configuration),
             requestedDifficulty: session.configuration.difficulty }, feedback,
           outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.scenario.canonicalSchema,
           outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.scenario.name, phase, signal }));
@@ -445,8 +583,6 @@ export class AutoGenerationManager {
       session.scenarioPackage = structuredClone(scenarioPackage);
       complete(session, attempt === 1 ? 'scenario' : 'revision', attempt);
       if (attempt > 1) complete(session, 'scenario', attempt);
-      session.scenarioPreview = buildScenarioPreview(session.configuration, scenarioPackage);
-      session.userApproval = null; session.auto.state = 'SCENARIO_PREVIEW';
       return true;
     } catch (error) {
       if (!(error instanceof ValidationError) && !(error instanceof CodexOutputError)) throw error;
@@ -459,25 +595,92 @@ export class AutoGenerationManager {
     }
   }
 
+  #createScenarioTemplate(session) {
+    session.auto.attempt = 1;
+    setPhase(session, 'SCENARIO_DRAFT', 'scenario', 1);
+    session.scenarioPackage = buildScenarioTemplate({
+      generationInput: session.generationInput, configuration: session.configuration,
+    });
+    validateDocument('scenario-import-package', session.scenarioPackage);
+    complete(session, 'scenario', 1);
+  }
+
+  async #validateReviewForPreview(session, signal) {
+    while (session.auto.attempt <= this.maxAttempts) {
+      const attempt = session.auto.attempt;
+      setPhase(session, 'SCENARIO_VALIDATING', 'validation', attempt);
+      session.scenarioImportResult = importScenarioPackage({
+        generationInput: session.generationInput, scenarioPackage: session.scenarioPackage });
+      if (session.scenarioImportResult.status !== 'VALID') {
+        const issues = session.scenarioImportResult.errors;
+        const classification = classifyBlocked(issues);
+        session.auto.details.push(...issues.map(item => detail(item, 'SCENARIO_VALIDATING', attempt)));
+        if (classification === 'HARD_BLOCKED') throw new CodexError('HARD_BLOCKED',
+          'Scenario Validationを継続できません。', { phase: 'SCENARIO_VALIDATING' });
+        await this.#generateScenario(session, signal, feedbackFromIssues(issues, classification));
+        continue;
+      }
+      const coverageIssues = validateScenarioEvidenceCoverage({
+        generationInput: session.generationInput, configuration: session.configuration,
+        scenarioPackage: session.scenarioPackage });
+      if (coverageIssues.length) {
+        session.auto.details.push(...coverageIssues.map(item => detail(item,
+          'SCENARIO_VALIDATING', attempt)));
+        await this.#generateScenario(session, signal,
+          feedbackFromIssues(coverageIssues, 'REPAIRABLE_BLOCKED'));
+        continue;
+      }
+      complete(session, 'validation', attempt);
+      session.verificationInput = buildScenarioVerificationInput({
+        generationInput: session.generationInput,
+        importResult: session.scenarioImportResult, scenarioPackage: session.scenarioPackage,
+        revisionAttemptsUsed: attempt - 1 });
+      setPhase(session, 'SCENARIO_REVIEWING', 'verification', attempt);
+      const verification = await measured(session, 'REVIEWING_SCENARIO', attempt,
+        () => reviewWithRepair({ jsonRunner: this.jsonRunner,
+          verificationInput: session.verificationInput, signal, session, attempt }));
+      if (verification.status === 'VERIFIED') {
+        complete(session, 'verification', attempt); session.auto.state = 'VERIFIED';
+        session.scenarioPreview = buildScenarioPreview(session.configuration, session.scenarioPackage);
+        session.scenarioPreview.verification = { status: verification.status,
+          checks: verification.checks.map(check => ({ category: check.category,
+            outcome: check.outcome, reason: check.reason })) };
+        session.userApproval = null; session.auto.state = 'SCENARIO_PREVIEW';
+        return;
+      }
+      const issues = verification.issues ?? [];
+      const classification = verification.status === 'NEEDS_REVISION'
+        ? 'REPAIRABLE_BLOCKED' : classifyBlocked(issues);
+      session.auto.details.push(...issues.map(item => detail(item, 'SCENARIO_REVIEWING', attempt)));
+      if (classification === 'HARD_BLOCKED') throw new CodexError('HARD_BLOCKED',
+        'Independent Verificationを継続できません。', { phase: 'SCENARIO_REVIEWING' });
+      await this.#generateScenario(session, signal,
+        verification.revisionFeedback ?? feedbackFromIssues(issues, classification));
+    }
+    throw new CodexError('MAX_REVISION_EXCEEDED',
+      '最大試行回数までに検証済みScenarioを作成できませんでした。',
+      { phase: 'SCENARIO_REVISING' });
+  }
+
   async #createDraft(session, signal) {
     await this.#ensureCodex(session, signal); this.#prepare(session);
     complete(session, 'configuration');
-    await this.#generateScenario(session, signal);
+    this.#createScenarioTemplate(session);
+    await this.#validateReviewForPreview(session, signal);
   }
 
   async #createMakotomaruDraft(session, signal) {
     await this.#ensureCodex(session, signal);
     setPhase(session, 'MAKOTOMARU_CONFIGURATION', 'configuration');
     let feedback = null;
+    const outputSchema = buildMakotomaruOutputSchema(session.makotomaruRequest);
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      session.auto.attempt = attempt;
+      mark(session, 'configuration', 'RUNNING', attempt);
       const result = await measured(session, 'MAKOTOMARU_CONFIGURATION', attempt,
         () => this.jsonRunner.runJson({ instruction: MAKOTOMARU_PROMPT,
-          data: { request: session.makotomaruRequest,
-            allowedAttacks: catalog.map(item => ({ id: item.id, category: item.category,
-              supportedInvestigationTypes: item.supportedInvestigationTypes })),
-            networkTemplate: autoAuthorBootstrap().defaultNetwork,
-            investigationTypes: Object.keys(INVESTIGATION_TYPES) }, feedback,
-          outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.makotomaru.canonicalSchema,
+          data: makotomaruInput(session.makotomaruRequest), feedback,
+          outputSchema,
           outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.makotomaru.name,
           phase: 'MAKOTOMARU_CONFIGURATION', signal }));
       let errors = [];
@@ -485,6 +688,7 @@ export class AutoGenerationManager {
         result.configuration.mode = 'MAKOTOMARU';
         result.configuration.difficulty = session.makotomaruRequest.difficulty;
         result.configuration.evidenceCount = session.makotomaruRequest.difficulty;
+        result.configuration = normalizeScenarioConfiguration(result.configuration, catalog);
         const validation = validateScenarioConfiguration(result.configuration, catalog);
         errors = validation.errors;
       } catch (error) { errors = [{ code: error.code ?? 'MAKOTOMARU_OUTPUT_INVALID',
@@ -494,7 +698,8 @@ export class AutoGenerationManager {
         session.configuration = structuredClone(result.configuration);
         session.configurationValidation = { status: 'VALID', errors: [] };
         complete(session, 'configuration', attempt); this.#prepare(session);
-        await this.#generateScenario(session, signal); return;
+        this.#createScenarioTemplate(session);
+        await this.#validateReviewForPreview(session, signal); return;
       }
       session.auto.details.push(...errors.map(item => detail(item,
         'MAKOTOMARU_CONFIGURATION', attempt)));
@@ -517,39 +722,10 @@ export class AutoGenerationManager {
   async #continueApproved(session, signal) {
     if (session.userApproval?.status !== 'USER_APPROVED') throw new CodexError(
       'USER_APPROVAL_REQUIRED', 'ユーザ承認がありません。', { phase: 'USER_APPROVED' });
-    const attempt = session.auto.attempt;
-    setPhase(session, 'SCENARIO_VALIDATING', 'validation', attempt);
-    session.scenarioImportResult = importScenarioPackage({
-      generationInput: session.generationInput, scenarioPackage: session.scenarioPackage });
-    if (session.scenarioImportResult.status !== 'VALID') {
-      const issues = session.scenarioImportResult.errors;
-      const classification = classifyBlocked(issues);
-      session.auto.details.push(...issues.map(item => detail(item, 'SCENARIO_VALIDATING', attempt)));
-      if (classification === 'HARD_BLOCKED') throw new CodexError('HARD_BLOCKED',
-        'Scenario Validationを継続できません。', { phase: 'SCENARIO_VALIDATING' });
-      await this.#generateScenario(session, signal, feedbackFromIssues(issues, classification));
-      return;
-    }
-    complete(session, 'validation', attempt);
-    session.verificationInput = buildScenarioVerificationInput({
-      generationInput: session.generationInput,
-      importResult: session.scenarioImportResult, scenarioPackage: session.scenarioPackage,
-      revisionAttemptsUsed: attempt - 1 });
-    setPhase(session, 'SCENARIO_REVIEWING', 'verification', attempt);
-    const verification = await measured(session, 'REVIEWING_SCENARIO', attempt,
-      () => reviewWithRepair({ jsonRunner: this.jsonRunner,
-        verificationInput: session.verificationInput, signal, session, attempt }));
-    if (verification.status !== 'VERIFIED') {
-      const issues = verification.issues ?? [];
-      const classification = verification.status === 'NEEDS_REVISION'
-        ? 'REPAIRABLE_BLOCKED' : classifyBlocked(issues);
-      session.auto.details.push(...issues.map(item => detail(item, 'SCENARIO_REVIEWING', attempt)));
-      if (classification === 'HARD_BLOCKED') throw new CodexError('HARD_BLOCKED',
-        'Independent Verificationを継続できません。', { phase: 'SCENARIO_REVIEWING' });
-      await this.#generateScenario(session, signal, feedbackFromIssues(issues, classification));
-      return;
-    }
-    complete(session, 'verification', attempt); session.auto.state = 'VERIFIED';
+    if (session.verificationResult?.status !== 'VERIFIED') throw new CodexError(
+      'SCENARIO_NOT_VERIFIED', '独立検証済みScenarioではありません。',
+      { phase: 'USER_APPROVED' });
+    session.auto.state = 'VERIFIED';
 
     setPhase(session, 'EVIDENCE_BUILDING', 'evidence', session.auto.attempt);
     session.evidenceGenerationInput = buildEvidenceGenerationInput({
@@ -559,37 +735,75 @@ export class AutoGenerationManager {
       'HARD_BLOCKED', 'Evidence Generation Inputを作成できません。',
       { phase: 'GENERATING_EVIDENCE' });
     let evidenceFeedback = null;
-    let evidenceImported = null;
+    let evidenceProgressionPlan = null;
+    let courtChoiceRevisionBase = null;
+    const evidenceDraftInput = buildEvidenceGenerationDraftInput(session.evidenceGenerationInput);
     for (let evidenceAttempt = 1; evidenceAttempt <= 2; evidenceAttempt += 1) {
       let evidencePackage;
+      let draft;
       try {
-        evidencePackage = await measured(session, 'GENERATING_EVIDENCE', evidenceAttempt,
+        draft = await measured(session, 'GENERATING_EVIDENCE', evidenceAttempt,
           () => this.jsonRunner.runJson({ instruction: EVIDENCE_PROMPT_TEMPLATE,
-            data: { evidenceGenerationInput: session.evidenceGenerationInput,
+            data: { evidenceDraftInput,
+              ...(courtChoiceRevisionBase ? { courtChoiceRevisionBase } : {}),
+              requestedCourtIssueCount: requestedCourtIssueCount(session.configuration),
               requestedEvidenceChainLength: session.configuration.difficulty }, feedback: evidenceFeedback,
-            outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.evidence.canonicalSchema,
-            outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.evidence.name,
+            outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceDraft.canonicalSchema,
+            outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceDraft.name,
             phase: 'GENERATING_EVIDENCE', signal }));
+        evidencePackage = materializeEvidenceGenerationDraft(draft);
       } catch (error) {
-        if (!(error instanceof CodexOutputError)) throw error;
-        const issue = { code: error.code, field: 'evidence-import-package',
+        if (!(error instanceof CodexOutputError) && !(error instanceof ValidationError)) throw error;
+        const issue = { code: error.code, field: error.field ?? 'evidence-generation-draft',
           reason: error.message,
-          correctionHint: '指定Schemaに適合する単一JSONオブジェクトだけを返してください。' };
+          correctionHint: '指定draft Schemaに適合する単一JSONオブジェクトを返し、integrityは出力しないでください。既存のRequirement・ground・証言・複数資料の参照を維持してください。' };
         session.auto.details.push(detail(issue, 'GENERATING_EVIDENCE', evidenceAttempt));
         evidenceFeedback = feedbackFromIssues([issue], 'REPAIRABLE_BLOCKED');
         continue;
       }
+      if (courtChoiceRevisionBase && !preservesCourtChoiceRevision(courtChoiceRevisionBase, draft)) {
+        const issues = [{ code: 'EVIDENCE_COURT_REPAIR_CHANGED_INPUT', field: 'evidence-generation-draft',
+          reason: '誤答選択肢の修正で、既存の証拠・論証・証言が変更されています。',
+          correctionHint: 'courtChoiceRevisionBaseを維持し、既存TESTIMONYのstatementsとpublicContentの末尾に、既存Ground Truthと資料に裏付けられるCONSISTENTな発言だけを追記してください。' }];
+        session.auto.details.push(...issues.map(item => detail(item, 'GENERATING_EVIDENCE', evidenceAttempt)));
+        evidenceFeedback = feedbackFromIssues(issues, 'REPAIRABLE_BLOCKED');
+        continue;
+      }
       session.evidenceImportResult = importEvidencePackage({
         generationInput: session.evidenceGenerationInput, evidencePackage });
-      evidenceImported = session.evidenceImportResult;
-      if (evidenceImported.status === 'VALID') break;
-      const issues = evidenceImported.errors;
+      const evidenceImported = session.evidenceImportResult;
+      let issues = evidenceImported.errors;
+      if (evidenceImported.status === 'VALID') {
+        issues = courtIssueGenerationProblems(evidenceImported.evidenceSet,
+          requestedCourtIssueCount(session.configuration));
+        if (issues.length) {
+          session.auto.details.push(...issues.map(item => detail(item, 'GENERATING_EVIDENCE', evidenceAttempt)));
+          evidenceFeedback = feedbackFromIssues(issues, 'REPAIRABLE_BLOCKED');
+          continue;
+        }
+        const plan = buildAutomaticProgression(session);
+        const presentableEvidenceIds = evidenceImported.evidenceSet.evidenceArtifacts
+          .filter(item => item.type !== 'TESTIMONY' && plan.investigationEvidenceIds.includes(item.evidenceId))
+          .map(item => item.evidenceId);
+        const issueTargets = [...new Set(plan.objectionRules.map(rule => rule.targetStatementId))];
+        if (issueTargets.every(target => findIncorrectObjectionPair({
+          statementIds: plan.retrialStatementIds.filter(id => id === target || !issueTargets.includes(id)),
+          presentableEvidenceIds, objectionRules: plan.objectionRules.filter(rule => rule.targetStatementId === target) }))) {
+          evidenceProgressionPlan = plan;
+          break;
+        }
+        courtChoiceRevisionBase ??= structuredClone(draft);
+        issues = [{ code: 'EVIDENCE_NO_INCORRECT_OBJECTION_PAIR',
+          field: 'evidenceArtifacts.testimony.statements',
+          reason: '提示可能な技術Evidenceと証言の全組合せが正解で、誤答・再試行・試行上限の経路を構成できません。',
+          correctionHint: 'courtChoiceRevisionBaseの証拠・論証・既存証言を変更せず、既存資料とGround Truthに裏付けられるCONSISTENTな発言を既存TESTIMONYのstatementsとpublicContentの末尾へ追記してください。正解の削除、無関係な資料や人物事実の追加は禁止です。' }];
+      }
       session.auto.details.push(...issues.map(item => detail(item,
         'GENERATING_EVIDENCE', evidenceAttempt)));
       if (classifyBlocked(issues) === 'HARD_BLOCKED') break;
       evidenceFeedback = feedbackFromIssues(issues, 'REPAIRABLE_BLOCKED');
     }
-    if (evidenceImported?.status !== 'VALID') throw new CodexError(
+    if (!evidenceProgressionPlan) throw new CodexError(
       'EVIDENCE_GENERATION_FAILED', '有効なEvidence Packageを生成できませんでした。',
       { phase: 'GENERATING_EVIDENCE' });
     complete(session, 'evidence');
@@ -598,7 +812,7 @@ export class AutoGenerationManager {
     session.investigationAssignments = buildInvestigationAssignments(session.configuration);
     session.evidenceChain = session.evidenceImportResult.evidenceSet.evidenceArtifacts
       .slice(0, session.configuration.evidenceCount).map(item => item.evidenceId);
-    session.progressionPlan = buildAutomaticProgression(session);
+    session.progressionPlan = evidenceProgressionPlan;
     complete(session, 'investigation');
     setPhase(session, 'DIALOGUE_BUILDING', 'dialogue');
     session.dialoguePlan = assignDialogueTemplate({ configuration: session.configuration,
@@ -613,12 +827,21 @@ export class AutoGenerationManager {
       gameMakeResult: session.gameMakeResult, gameCaseResult: session.gameCaseResult,
       evidenceSet: session.evidenceImportResult.evidenceSet,
       verificationResult: session.verificationResult, scenarioPackage: session.scenarioPackage }));
-    if (session.evaluationResult.status !== 'ACCEPTED') throw new CodexError(
-      'EVALUATION_REJECTED', 'EvaluationがGameを拒否しました。', { phase: 'EVALUATING' });
+    if (session.evaluationResult.status !== 'ACCEPTED') {
+      // Evaluationはfieldではなくtargetを返す。内部成果物全体を公開せず、
+      // 個別の理由と修正指針だけを既存の安全な診断表示へ引き継ぐ。
+      session.auto.details.push(...(session.evaluationResult.issues ?? []).map(item => detail({
+        code: item.code, field: item.target, reason: item.reason,
+        correctionHint: item.correctionHint,
+      }, 'EVALUATING', session.auto.attempt)));
+      throw new CodexError('EVALUATION_REJECTED', 'EvaluationがGameを拒否しました。',
+        { phase: 'EVALUATING' });
+    }
     complete(session, 'evaluation');
     if (session.auto.progress.revision.status === 'WAITING') {
       session.auto.progress.revision.status = 'SKIPPED';
     }
     session.auto.state = 'READY'; session.auto.completedAt = new Date().toISOString();
   }
+
 }

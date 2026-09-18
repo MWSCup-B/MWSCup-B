@@ -54,6 +54,7 @@ for (const [key, expectedName] of [
   ['scenario', 'scenario-import-package'],
   ['review', 'scenario-verification-review'],
   ['evidence', 'evidence-import-package'],
+  ['evidenceDraft', 'evidence-generation-draft'],
 ]) {
   test(`${expectedName}のCLI専用Schemaを全体変換できる`, () => {
     const source = AUTO_CODEX_OUTPUT_SCHEMAS[key];

@@ -1,7 +1,10 @@
+import { requestedCourtIssueCount } from './court-issues.js';
+
 export const COURT_DIALOGUE_TEMPLATE = Object.freeze([
-  'INTRO', 'INITIAL_COURT', 'INVESTIGATION', 'COURT_ROUND_1',
-  'COURT_ROUND_2', 'COURT_ROUND_3', 'ACQUITTED',
+  'INTRO', 'INITIAL_COURT', 'INVESTIGATION', 'COURT_EVIDENCE_ROUND', 'ACQUITTED',
 ]);
+
+export const COURT_SPEAKERS = Object.freeze(['JUDGE', 'PROSECUTOR', 'DEFENSE']);
 
 const fixedLines = Object.freeze({
   judgeOpen: '提出された記録と証言を区別して審理します。',
@@ -23,11 +26,19 @@ export function assignDialogueTemplate({ configuration, scenarioPackage, evidenc
     prosecutionEvidence: technicalEvidence[0]?.title ?? '技術記録',
     prosecutionClaim: configuration.incidentContext.initialSuspicionReason,
     defenseEvidence: technicalEvidence.map(item => item.title),
-    technicalCounterArgument: evidenceSet.exonerations[0]?.explanation
+    technicalCounterArgument: evidenceSet.exonerations[0]?.reason
       ?? '利用記録だけでは実際の操作者を断定できません。',
   };
+  const fixedDialogue = [
+    { scene: 'INTRO', speaker: 'JUDGE', line: fixedLines.judgeOpen },
+    { scene: 'INITIAL_COURT', speaker: 'PROSECUTOR', line: fixedLines.prosecutorEvidence },
+    { scene: 'INVESTIGATION', speaker: 'DEFENSE', line: fixedLines.defenseOpen },
+    { scene: 'COURT_EVIDENCE_ROUND', speaker: 'DEFENSE', line: fixedLines.objection },
+    { scene: 'ACQUITTED', speaker: 'JUDGE', line: fixedLines.acquitted },
+  ];
   return { schemaVersion: '1.0', templateSections: [...COURT_DIALOGUE_TEMPLATE], slots,
-    fixedLines: structuredClone(fixedLines), rounds: Array.from({ length: configuration.difficulty },
+    speakers: [...COURT_SPEAKERS], fixedLines: structuredClone(fixedLines), fixedDialogue,
+    rounds: Array.from({ length: requestedCourtIssueCount(configuration) },
       (_, index) => ({ round: index + 1, evidenceTitle: slots.defenseEvidence[index]
         ?? slots.defenseEvidence.at(-1) ?? '技術記録', objection: fixedLines.objection })) };
 }

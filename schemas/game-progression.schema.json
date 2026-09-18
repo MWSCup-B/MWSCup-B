@@ -5,6 +5,21 @@
   "properties": {
     "schemaVersion": { "const": "1.0" },
     "initialState": { "const": "TITLE" },
+    "courtRoundCount": { "enum": [1, 2, 3, 4] },
+    "courtIssues": {
+      "type": "array", "minItems": 2, "maxItems": 4,
+      "items": {
+        "type": "object",
+        "properties": {
+          "issueId": { "type": "string", "pattern": "^court_issue_[1-4]$" },
+          "statementIds": { "type": "array", "minItems": 1, "maxItems": 512, "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" } },
+          "judgmentRuleIds": { "type": "array", "minItems": 1, "maxItems": 512, "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" } },
+          "requiredEvidenceIds": { "type": "array", "minItems": 1, "maxItems": 512, "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" } }
+        },
+        "required": ["issueId", "statementIds", "judgmentRuleIds", "requiredEvidenceIds"],
+        "additionalProperties": false
+      }
+    },
     "states": {
       "type": "array",
       "items": { "enum": ["TITLE", "INITIAL_COURT", "INVESTIGATION", "RETRIAL_COURT", "OBJECTION", "ACQUITTED", "GUILTY_RETRY", "BLOCKED"] },
@@ -17,14 +32,14 @@
         "type": "object",
         "properties": {
           "from": { "enum": ["TITLE", "INITIAL_COURT", "INVESTIGATION", "RETRIAL_COURT", "OBJECTION", "ACQUITTED", "GUILTY_RETRY", "BLOCKED"] },
-          "event": { "enum": ["START", "INITIAL_RULING", "RETURN_TO_COURT_CONDITION_MET", "SELECT_OBJECTION", "SUCCESS", "FAILURE", "RETURN_TO_INVESTIGATION", "LIMIT_REACHED"] },
+          "event": { "enum": ["START", "INITIAL_RULING", "RETURN_TO_COURT_CONDITION_MET", "SELECT_OBJECTION", "SUCCESS", "FAILURE", "RETURN_TO_INVESTIGATION", "LIMIT_REACHED", "NEXT_ISSUE", "INVESTIGATE_AGAIN"] },
           "to": { "enum": ["TITLE", "INITIAL_COURT", "INVESTIGATION", "RETRIAL_COURT", "OBJECTION", "ACQUITTED", "GUILTY_RETRY", "BLOCKED"] }
         },
         "required": ["from", "event", "to"],
         "additionalProperties": false
       },
       "minItems": 8,
-      "maxItems": 8
+      "maxItems": 10
     },
     "initialCourt": {
       "type": "object",
@@ -138,6 +153,6 @@
       "additionalProperties": false
     }
   },
-  "required": ["schemaVersion", "initialState", "states", "transitions", "initialCourt", "investigation", "retrialCourt", "objection", "retryState", "retryPolicy", "outcomes"],
+  "required": ["schemaVersion", "initialState", "courtRoundCount", "states", "transitions", "initialCourt", "investigation", "retrialCourt", "objection", "retryState", "retryPolicy", "outcomes"],
   "additionalProperties": false
 }

@@ -5,6 +5,7 @@ const errorBox = document.querySelector('#error');
 let token = null;
 let game = null;
 let busy = false;
+let generatedRenderer = null;
 const playId = new URLSearchParams(location.search).get('game');
 
 function element(tag, text, className) {
@@ -26,7 +27,8 @@ async function request(path, body) {
   if (busy) return;
   busy = true;
   errorBox.textContent = '';
-  const controls = [...screen.querySelectorAll('button, input')].map(node => [node, node.disabled]);
+  screen.setAttribute('aria-busy', 'true');
+  const controls = [...screen.querySelectorAll('button, input, select')].map(node => [node, node.disabled]);
   controls.forEach(([node]) => { node.disabled = true; });
   try {
     const response = await fetch(path, { method: 'POST',
@@ -36,6 +38,12 @@ async function request(path, body) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || '処理に失敗しました。');
     if (data.token) token = data.token;
+    if (data.game?.mode === 'GENERATED' && !generatedRenderer) {
+      try { generatedRenderer = (await import('./generated-view.js')).renderGeneratedGame; }
+      catch {
+        throw new Error('新しいゲーム画面を読み込めません。コード更新後は必要な生成内容を控え、サーバーを再起動してページを再読み込みしてください。再起動するとメモリ上のゲームとセッションは失われます。');
+      }
+    }
     game = data.game;
     render();
   } catch (error) {
@@ -43,6 +51,7 @@ async function request(path, body) {
       ? '通信できません。サーバーの起動を確認してください。' : error.message;
   } finally {
     busy = false;
+    screen.setAttribute('aria-busy', 'false');
     controls.forEach(([node, disabled]) => { if (node.isConnected) node.disabled = disabled; });
   }
 }
@@ -57,118 +66,6 @@ function evidenceCard(item) {
     element('p', item.type ?? item.kind, 'kind'),
     element('p', item.publicContent ?? item.text));
   return node;
-}
-
-function renderInitialCourt() {
-  const court = game.initialCourt;
-  screen.append(element('p', '第1法廷では、現在提示されている主張と証拠を確認します。'));
-  screen.append(element('h2', '検察側の主張'));
-  for (const statement of court.prosecutionStatements) {
-    const node = element('div', undefined, 'card');
-    node.append(element('strong', statement.speaker.displayName),
-      element('p', statement.spokenContent));
-    screen.append(node);
-  }
-  screen.append(element('h2', '提示された証拠'));
-  court.presentedEvidence.forEach(item => screen.append(evidenceCard(item)));
-  screen.append(element('p', court.publicRuling, 'ruling'));
-  screen.append(button('追加調査へ', () => action('continue')));
-}
-
-function renderInvestigation() {
-  screen.append(element('p', '調査対象と方法を選び、Evidenceを発見して証拠品として取得してください。'));
-  screen.append(element('h2', '調査対象'));
-  for (const target of game.investigationTargets) {
-    const row = element('div', undefined, 'card');
-    row.append(element('strong', target.displayName), element('p', target.targetType, 'kind'),
-      element('p', target.description));
-    const actions = element('div', undefined, 'button-row');
-    for (const investigationAction of target.availableActions) {
-      actions.append(button(`${investigationAction.displayName}${investigationAction.completed ? '（実行済み）' : ''}`,
-        () => action('investigate', { targetId: target.targetId,
-          investigationActionId: investigationAction.actionId })));
-    }
-    row.append(actions);
-    screen.append(row);
-  }
-  screen.append(element('h2', '直近の調査結果'));
-  if (!game.lastInvestigationResult) screen.append(element('p', 'まだ調査を実行していません。'));
-  else {
-    const result = element('div', undefined, 'card');
-    result.append(element('p', game.lastInvestigationResult.publicMessage));
-    for (const hint of game.lastInvestigationResult.nextHints) result.append(element('p', hint, 'kind'));
-    screen.append(result);
-  }
-  screen.append(element('h2', '発見済みEvidence'));
-  if (!game.discoveredEvidence.length) screen.append(element('p', 'まだEvidenceを発見していません。'));
-  for (const item of game.discoveredEvidence) {
-    const row = evidenceCard(item);
-    row.append(element('p', item.discoveryState, 'kind'),
-      button(item.discoveryState === 'COLLECTED' ? '取得済み' : '証拠品として登録',
-        () => action('collect', { evidenceId: item.evidenceId }),
-        item.discoveryState === 'COLLECTED'));
-    screen.append(row);
-  }
-  screen.append(element('h2', '取得済みEvidence'));
-  if (!game.collectedEvidence.length) screen.append(element('p', 'まだEvidenceを取得していません。'));
-  game.collectedEvidence.forEach(item => screen.append(evidenceCard(item)));
-  screen.append(button('第2法廷へ', () => action('retrial'), !game.collectedEvidence.length));
-}
-
-function renderRetrialCourt() {
-  screen.append(element('p', '矛盾するstatementと、提示する取得済みEvidenceを選択してください。'));
-  const statements = element('fieldset');
-  statements.append(element('legend', '指摘するstatement'));
-  for (const testimony of game.testimonies) for (const statement of testimony.statements) {
-    const label = element('label', undefined, 'card');
-    const radio = document.createElement('input');
-    radio.type = 'radio'; radio.name = 'statement'; radio.value = statement.statementId;
-    label.append(radio, element('strong', testimony.speaker.displayName),
-      element('p', statement.spokenContent));
-    statements.append(label);
-  }
-  const evidence = element('fieldset');
-  evidence.append(element('legend', '提示するEvidence'));
-  for (const item of game.presentableEvidence) {
-    const label = element('label', undefined, 'card');
-    const radio = document.createElement('input');
-    radio.type = 'radio'; radio.name = 'evidence'; radio.value = item.evidenceId;
-    label.append(radio, element('strong', item.title), element('p', item.type, 'kind'),
-      element('p', item.publicContent));
-    evidence.append(label);
-  }
-  const present = button('異議あり！！', () => {
-    const statement = statements.querySelector('input:checked');
-    const item = evidence.querySelector('input:checked');
-    if (statement && item) action('objection',
-      { statementId: statement.value, evidenceId: item.value });
-  }, true);
-  const update = () => { present.disabled = !(statements.querySelector('input:checked')
-    && evidence.querySelector('input:checked')); };
-  statements.addEventListener('change', update);
-  evidence.addEventListener('change', update);
-  screen.append(statements, evidence, present);
-}
-
-function renderGenerated() {
-  const titles = { TITLE: game.title, INITIAL_COURT: '第1法廷', INVESTIGATION: '探偵パート',
-    RETRIAL_COURT: '第2法廷', GUILTY_RETRY: '有罪側判定', ACQUITTED: '無罪判決',
-    BLOCKED: '進行停止' };
-  const title = element('h1', titles[game.currentState] ?? 'インシデント調査ゲーム');
-  title.id = 'screen-title'; title.tabIndex = -1; screen.append(title);
-  if (game.currentState === 'TITLE') {
-    screen.append(element('p', game.synopsis), button('事件を開始', () => action('begin')));
-  } else if (game.currentState === 'INITIAL_COURT') renderInitialCourt();
-  else if (game.currentState === 'INVESTIGATION') renderInvestigation();
-  else if (game.currentState === 'RETRIAL_COURT') renderRetrialCourt();
-  else if (game.currentState === 'GUILTY_RETRY') {
-    screen.append(element('p', game.publicFailureFeedback),
-      button('再調査する', () => action('retry')));
-  } else if (game.currentState === 'ACQUITTED') {
-    screen.append(element('p', game.acquittal.publicRuling, 'ruling'),
-      element('p', game.acquittal.publicExplanation));
-  } else if (game.currentState === 'BLOCKED') screen.append(element('p', game.blockedMessage));
-  title.focus();
 }
 
 function imageAsset(assetId, alt, className) {
@@ -303,6 +200,7 @@ function renderFixture() {
 
 function render() {
   screen.replaceChildren();
+  document.body.classList.remove('playing-generated');
   screen.className = ''; screen.style.backgroundImage = '';
   if (!game) {
     const title = element('h1', 'インシデント調査ゲーム');
@@ -312,7 +210,7 @@ function render() {
     title.focus(); return;
   }
   if (game.mode === 'XSS_PROTOTYPE') renderXssPrototype();
-  else if (game.mode === 'GENERATED') renderGenerated();
+  else if (game.mode === 'GENERATED') generatedRenderer({ screen, game, action });
   else renderFixture();
 }
 

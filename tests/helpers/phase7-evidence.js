@@ -52,6 +52,43 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
           technicalAssessment: 'CONSISTENT', groundTruthRefs: [contradictionGround.sourceId],
           contradictionCandidate: false }] } }),
   ];
+  // Author用の全資料要件を、別の既成Scenarioに置き換えず、そのままEvidenceへ展開する。
+  const observations = agent.evidenceRequirements.requirements
+    .filter(item => item.requirementId.startsWith('requirement_observation_'));
+  if (observations.length) {
+    const kinds = { email_record: ['EMAIL', '保存メール',
+      '教材用合成メール\nFrom: notice@example.invalid\nContent-Type: text/html; charset=UTF-8\n本文: 次の案内を確認してください。\n表示文字列: https://portal.example.invalid/help\nHTMLソース抜粋（非実行）:\n<a href="https://portal.example.invalid/notice?ref=training-01">https://portal.example.invalid/help</a>\n保存メールであり、リンク操作を記録した資料ではありません。'],
+    web_access_record: ['WEB_ACCESS_LOG', 'Webアクセス記録',
+      '教材用合成アクセス記録\n対象: https://portal.example.invalid/notice?ref=training-01\nRequest target: /notice?ref=training-01\n利用者の氏名・操作意図・メールを開いた操作を記録する欄はありません。'],
+    browser_execution_record: ['DEVICE_INFORMATION', 'ブラウザ実行計測',
+      '教材用合成計測資料\n対象応答に対応する実行計測記録。通常の閲覧履歴とは区別します。'],
+    database_statement_record: ['DATABASE_LOG', 'DB実行記録',
+      '教材用合成DB監査記録\n対象要求に対応するSQL処理の記録。実際の操作者を記録した資料ではありません。'] };
+    const technical = observations.map((requirement, index) => {
+      const ground = requirement.grounds[0];
+      const matching = agent.evidenceRequirements.requirements.filter(item => item.grounds
+        .some(ref => ref.sourceType === ground.sourceType && ref.sourceId === ground.sourceId
+          && ref.attackNodeId === ground.attackNodeId));
+      const [type, title, body] = kinds[ground.sourceId];
+      const event = agent.timeline.events.find(item => item.attackNodeId === ground.attackNodeId);
+      const timestamp = agent.timeline.narrativeTimestamps.find(item => item.eventId === event?.eventId);
+      const publicContent = body + (type === 'WEB_ACCESS_LOG' && timestamp
+        ? `\n時刻（教材用合成値）: ${timestamp.displayTimestamp}` : '');
+      return artifact(evidenceGenerationInput, { evidenceId: index === 0 ? 'evidence_technical_a'
+        : index === 1 ? 'evidence_technical_b' : `evidence_technical_${index + 1}`,
+      type, title, publicContent, sourceRefs: [ground],
+      requirementIds: matching.map(item => item.requirementId),
+      purpose: [...new Set(matching.map(item => item.purpose))] });
+    });
+    const spokenContent = '提示された技術資料だけで、被告人が自分の意思で対象の操作を行ったと特定できる。';
+    const testimony = evidenceArtifacts[2];
+    testimony.publicContent = `架空の調査担当者の主張: 「${spokenContent}」`;
+    testimony.testimony.statements = [{ statementId: 'statement_seen_operation', spokenContent,
+      technicalAssessment: 'CONTRADICTED', groundTruthRefs: [contradictionGround.sourceId],
+      contradictionCandidate: true }];
+    testimony.integrity.publicContentDigest = contentDigest(testimony.publicContent);
+    evidenceArtifacts.splice(0, evidenceArtifacts.length, ...technical, testimony);
+  }
   const contradictions = [{ schemaVersion: '1.0', contradictionId: 'contradiction_seen_operation',
     testimonyEvidenceId: 'evidence_testimony', statementRef: 'statement_seen_operation',
     conflictingEvidenceIds: ['evidence_technical_a'], groundTruthRefs: [contradictionGround.sourceId],

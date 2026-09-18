@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 520">
+  <title>記録審理室・証言者のオリジナル立ち絵</title>
+  <path fill="#1b3040" d="M55 520V360q15-82 125-82t125 82v160z"/>
+  <path fill="#ad9a65" d="M66 351l84-57h60l84 57-25 169H91z"/>
+  <path fill="#ece5cf" d="m147 296 33 55 33-55 15 224h-96z"/>
+  <path fill="#cba782" d="M151 258h59v55l-30 29-29-29z"/>
+  <ellipse cx="180" cy="182" rx="78" ry="98" fill="#dabda0"/>
+  <path fill="#45515a" d="M102 196V132q-2-68 80-73 87 3 83 85l-10 67-15-83q-45 16-111-2l-13 74z"/>
+  <path fill="#abb0a9" d="M106 133q8-72 78-65l43 12-73 16z"/>
+  <g fill="none" stroke="#334652" stroke-width="5"><rect x="123" y="165" width="45" height="28" rx="8"/><rect x="192" y="165" width="45" height="28" rx="8"/><path d="M168 177h24"/></g>
+  <g fill="#283d43"><circle cx="149" cy="179" r="4"/><circle cx="212" cy="179" r="4"/></g>
+  <path d="m181 186-5 30h13m-24 20h33" fill="none" stroke="#876c5b" stroke-width="3" stroke-linecap="round"/>
+  <path d="m103 378 50 65m103-65-47 65" fill="none" stroke="#81724e" stroke-width="14"/>
+  <rect x="123" y="407" width="115" height="90" rx="6" fill="#374f5f" stroke="#d5dfde" stroke-width="3"/>
+  <path d="M143 430h73m-73 15h51m-51 15h64" stroke="#a6c7c7" stroke-width="3"/>
+</svg>

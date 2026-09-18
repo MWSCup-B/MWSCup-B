@@ -14,6 +14,8 @@ Scenario Generatorの自己評価、合否申告、推論過程は使用しな�
 
 ## 必須レビュー
 
+Backendは同じ入力からAttack Graph、Network到達性、攻撃順序、時系列、観測可能な痕跡を独立再計算します。あなたはその結果を変更せず、攻撃Scenarioが選択した調査方法と証拠で実現・説明可能かを意味面から評価してください。妥当性を確認できない場合は`PASS`にせず、修正対象と理由を示してください。
+
 次のcategoryを各1件、合計6件出力してください。
 
 1. `EVIDENCE_GROUND_ALIGNMENT`：Evidence Requirementの説明とgroundsの意味的一致。
@@ -33,5 +35,7 @@ Scenario Generatorの自己評価、合否申告、推論過程は使用しな�
 - `REFERENCE_CONTENT_ALIGNMENT`では、本文の有無やoutcomeにかかわらず`referenceMaterial:`をsubjectとsourceにしてください。`CONTENT_AVAILABLE`な全`referenceMaterial:`をsourceに含めてください。本文がなく`NOT_APPLICABLE`にする場合も、metadata-onlyの`referenceMaterial:`をsubjectとsourceに指定してください。
 - `<VALIDATION_FEEDBACK>`に`referenceRules`がある修復実行では、各categoryの`subjectRefs`と`sourceRefs`に列挙された値だけを対応するcheckへ使用してください。
 - Learning ObjectiveまたはEvidence Requirementが空の場合、その項目を`PASS`にせず、不足として`FAIL`または`UNKNOWN`にしてください。
+- 難易度・evidenceCountは調査チェーンの基準であり、補助資料を含む取得総数の上限ではありません。新しい自動生成の法廷は`difficulty + 1`（2～4）件の異なる争点を要求します。Evidence Requirementに示された争点数・具体的な主張・根拠資料との対応を検証し、難易度と同じ1～3ラウンドに読み替えないでください。資料ごとの取得要件を参照し、メールとWebアクセス記録等の必要資料が既存の取得元・記録条件から通常プレイへ渡せるかを検証してください。取得経路や異なる争点の裏付けが不足する場合は差し戻してください。
+- 人物の非関与を新たに証明したことと、提示資料では人物・意図を特定する主張を支持できないことを区別してください。具体的な主張、その対象人物、根拠資料と限定的な反駁が対応しているかを確認してください。
 
 このレビューは`VERIFIED`を決定しません。BackendのDeterministic Verificationが構造、参照、技術成立性、独立性を再検証し、最終状態を集計します。

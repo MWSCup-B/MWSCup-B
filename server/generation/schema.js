@@ -22,19 +22,20 @@ const schemas = new Map(await Promise.all(names.map(async name => [name,
 ])));
 
 export class ValidationError extends Error {
-  constructor(code, field, message) {
+  constructor(code, field, message, details = {}) {
     super(message);
-    Object.assign(this, { code, field });
+    Object.assign(this, { code, field, ...details });
   }
 }
 
-export function fail(code, field, message) {
-  throw new ValidationError(code, field, message);
+export function fail(code, field, message, details = {}) {
+  throw new ValidationError(code, field, message, details);
 }
 
 // 同梱スキーマが使用するキーワードだけを実装。外部スキーマやコードは実行しない。
 const keywords = new Set(['$schema', 'title', 'type', 'const', 'enum', 'properties',
-  'required', 'additionalProperties', 'items', 'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern']);
+  'required', 'additionalProperties', 'items', 'minItems', 'maxItems', 'minLength',
+  'maxLength', 'pattern', 'format']);
 
 function checkSchema(schema) {
   for (const key of Object.keys(schema)) {
@@ -45,15 +46,42 @@ function checkSchema(schema) {
 }
 for (const schema of schemas.values()) checkSchema(schema);
 
+function validDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+function validDateTime(value) {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    && Number.isFinite(Date.parse(value));
+}
+
+function validFormat(value, format) {
+  if (format === 'date') return validDate(value);
+  if (format === 'date-time') return validDateTime(value);
+  fail('UNSUPPORTED_SCHEMA', 'format', '未対応の文字列形式です。');
+}
+
 function validate(value, schema, path) {
   const type = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
-  if (schema.type && ![schema.type].flat().includes(type)) fail('INVALID_TYPE', path, '値の型が不正です。');
+  if (schema.type && ![schema.type].flat().includes(type)) fail('INVALID_TYPE', path, '値の型が不正です。',
+    { receivedType: type });
   if ('const' in schema && value !== schema.const) fail('UNSUPPORTED_VERSION', path, '未対応の値またはスキーマ版です。');
   if (schema.enum && !schema.enum.includes(value)) fail('UNSUPPORTED_VALUE', path, '未対応の値です。');
   if (type === 'string') {
     if (value.length < (schema.minLength ?? 0) || value.length > (schema.maxLength ?? Infinity)
-      || (schema.pattern && !new RegExp(schema.pattern).test(value))) {
-      fail('INVALID_STRING', path, '文字列の長さまたは形式が不正です。');
+      || (schema.pattern && !new RegExp(schema.pattern).test(value))
+      || (schema.format && !validFormat(value, schema.format))) {
+      fail('INVALID_STRING', path, '文字列の長さまたは形式が不正です。', {
+        receivedType: type, length: value.length,
+        expectedMinLength: schema.minLength ?? null,
+        expectedMaxLength: schema.maxLength ?? null,
+        expectedPattern: schema.pattern ?? null,
+        expectedFormat: schema.format ?? null,
+      });
     }
   }
   if (type === 'array') {

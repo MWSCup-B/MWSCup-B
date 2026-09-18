@@ -1,467 +1,390 @@
-# セキュリティインシデント調査ゲーム
+# Security Incident Investigation Game
 
-セキュリティインシデントを題材に、技術証拠を調査し、被告人への主張の矛盾を法廷で指摘するローカル Web ゲームです。
+## 1. システム概要
 
-通常の制作画面は `AUTO_CODEX` 専用です。利用者は次の3項目だけを選択し、ゲーム生成を開始します。
+セキュリティインシデントの技術調査を題材にした、ローカル Web 学習ゲームと制作システムです。制作ユーザは事件条件を設定し、システムが技術的に検証可能な Scenario、Evidence、Investigation、裁判進行へ変換します。Player は攻撃実行を疑われた被告人の弁護側として合成ログ、端末情報、通信記録、メール、証言などを調査し、法廷で主張と技術証拠の矛盾を示します。
 
-- 攻撃手法: 反射型 XSS（固定）
-- ネットワーク: Network A～D
-- 難易度: ★1～3
+参考作品の名称、キャラクター、台詞、画像、音楽、UI は複製せず、リポジトリ内の独自素材と固定 Template を使用します。
 
-Prompt、Schema、内部 JSON、Ground Truth は通常画面から入力しません。Scenario、Evidence、ゲーム進行は、Codex CLIによる構造化生成とBackendの決定論的検証を組み合わせて構築します。
+## 2. 基本コンセプト
 
-## 動作要件と起動
+ゲーム生成は、最初に事件の Ground Truth と攻撃経路を確定し、その後に Evidence Chain、Investigation Path、Court Contradiction、Judgment を構築します。人物のアカウント、端末、IP アドレスが記録に現れることだけを根拠に、実際の操作者を断定しません。
 
-- Node.js 22以上
-- Codex CLI
-- Codex CLIでChatGPTアカウントへログイン済みであること
-
-```sh
-cd /home/shu/MWSCup
-codex login status
-npm start
-```
-
-起動後、`http://localhost:3000` を開きます。通常起動では `AUTHOR` modeとなり、`127.0.0.1:3000` だけで待ち受けます。
-
-アプリケーションはCodex CLIが保持している認証をそのまま利用します。アプリケーション自身はログイン、ログアウト、アカウント切替、credential変更を行いません。また、email、password、access token、refresh token、credential file、account IDを読み取り、保存、表示しません。
-
-## システム全体像
-
-システムは、ブラウザUI、HTTP/API、生成オーケストレーション、Codex境界、決定論的検証、ゲーム実行環境に分かれています。
+Player は次の順で無罪を論証します。
 
 ```text
-Author Browser
-  │  Attack / Network / Difficulty
-  ▼
-HTTP Server / Author API
-  ▼
-AutoGenerationManager
-  ├─ deterministic input preparation
-  ├─ Scenario Codex invocation
-  ├─ canonical validation
-  ├─ independent Review Codex invocation
-  ├─ Evidence Codex invocation
-  ├─ deterministic game conversion
-  └─ independent evaluation
-  ▼
-READY runtime + unguessable playId
-  ▼
-Player Browser / Player API
+Ground Truth（非公開）
+  → Evidence Chain
+  → Investigation Path
+  → Court Contradiction
+  → deterministic Judgment
 ```
 
-CodexはScenario、Independent Review、Evidenceを生成します。攻撃成立性、参照整合性、Ground Truth追跡、Evidence由来、ゲーム遷移、情報漏えいの合否はBackendが決定します。生成担当の自己評価だけで次工程へ進むことはありません。
+ゲーム開始後に LLM が正誤判定することはありません。正しい statement と取得済み Evidence の対応、retry、round 進行、最終判定は Backend が決定論的に処理します。
 
-### 論理エージェントと実装上の対応
+## 3. Scenario 作成方式
 
-| 論理エージェント | 主な役割 | 実装上の担当 |
-| --- | --- | --- |
-| Orchestrator | 入力検証、状態遷移、再試行、成果物統合 | `server/auto-generation-service.js`、`server/generation/orchestrator.js` |
-| Scenario Agent | Ground Truth、攻撃経路、時系列、人物、学習目標、必要証拠の生成 | `prompts/scenario-generation-v1.md`、`server/generation/scenario-interface.js` |
-| Verification Agent | Scenarioの独立レビューと決定論的再検証 | `prompts/scenario-verification-v1.md`、`server/generation/scenario-verifier.js` |
-| Evidence Agent | 検証済みScenarioからEvidence、Contradiction、Exonerationを生成 | `prompts/evidence-generation-v1.md`、`server/generation/evidence-interface.js` |
-| Game Make Agent | 検証済み成果物をゲーム形式へ変換 | `server/generation/game-case-converter.js`、`server/generation/game-make.js` |
-| Evaluation Agent | 正常経路、失敗経路、解答可能性、漏えいを評価 | `server/generation/game-evaluator.js`、`server/xss-prototype.js` |
+### 詳細設定
 
-これらは常駐する別サービスではなく、工程ごとに責務を分離した論理コンポーネントです。Scenario、Review、EvidenceのCodex呼び出しは、それぞれ独立した `codex exec --ephemeral` processとして実行されます。
+内部 ID は `MANUAL`、日本語 UI は「詳細設定」です。JSON を直接編集せず、Wizard の GUI から次を設定します。
 
-## 自動生成パイプライン
+- Attack 1～3件、Attack Order、発生日時
+- source node、target node、target service
+- Attack Definition が対応する Investigation Type
+- Investigation の取得元 Node
+- 選択したログ・メール・端末情報などから導く「証拠の答え」
+- Attack Definition に由来する expected effect
+- Difficulty ★1～3
+- incident context
+- subnet、node type、OS、IP、service、connection、trust boundary、log source
+
+利用可能な Attack は `data/attacks/` に存在し、Backend が検証できる定義だけです。複数 Attack は単なる物語上の並置ではなく、Attack Graph が単一の連結成分になる場合だけ受理します。
+
+詳細設定の初期値は、メール内リンクの表示と実際のリンク先を比較するフィッシングの固定プリセットです。初期ネットワーク（2 Subnets / 5 Nodes / 4 Services / 5 Connections）、フィッシング1件、★1、事件日`2026-09-18`、発生時刻`09:10 +09:00`を設定済みで表示します。Sourceは`sender-host`、Targetは`web-host` / `web-service`、調査は`mail-host`の`EMAIL`です。「証拠から導く答え」には「メール文のリンク先と実際に遷移するリンク先が異なること」を入力済みにします。表示後は編集可能で、初期値への再設定はページ初期化時だけです。生成開始・Preview承認は従来どおり利用者が操作し、真実丸の提案条件は変更しません。
+
+初期設定の受信とNetwork・Attack欄の描画が完了するまでは、作成方法の選択と生成開始を無効にします。初期設定が欠ける、型が不正、画面要素が欠ける場合は、画面上部にエラーを表示し、不完全なConfigurationは送信しません。更新後に`defaultManualConfiguration`が取得できない場合は、起動中のサーバーを停止して`npm start`で再起動し、画面を再読み込みしてください。画面だけを更新しても、サーバー側で読み込み済みのコードは更新されません。サーバー再起動で進行中の生成・セッションは失われるため、必要な内容を控えてから行ってください。
+
+### 真実丸
+
+内部 ID は `MAKOTOMARU`、日本語 UI は「真実丸」です。ユーザは Difficulty を必須指定し、Attack Category と Complexity を任意の選択指針として指定します。真実丸の出力も詳細設定と同じ `Scenario Configuration` であり、別 Pipeline は持ちません。
+
+「真実丸に考えてもらう」を押すと、開始直後から生成中の画面を表示します。Codex の可用性確認、Configuration 提案、検証、必要な限定 Revision は Backend の同一 generation として継続し、画面が `MODE_SELECTION` に戻ることはありません。処理中は重複開始と設定画面への戻りを無効にし、必要ならキャンセルできます。画面を再読込みしても、Backend の処理が自動的に中断されたことを意味しません。状態は Author API の generation state で確認します。
+
+## 4. 真実丸とは
+
+真実丸は初心者向けの AI Scenario Configuration Assistant です。完成した事件物語やゲーム全体を自由生成するエージェントではありません。
+
+真実丸は登録済み Attack Definition、Network Contract、Investigation Registry、Scenario Configuration Schema の範囲で、Attack 数と順序、時刻、Node、Service、Network、Investigation Type、初期疑惑理由、証拠から導く答えを検討します。出力は Backend で毎回決定論的に検証され、不成立なら machine-readable feedback を付けて最大3回まで再提案します。ユーザへ JSON 修正を要求しません。
+
+Revision 回数には上限があるため、検証失敗を無限に再試行しません。Author Pipelineでは初回を含む最大3 attemptで `MAX_REVISION_EXCEEDED` として停止し、部分的なゲームを成功扱いにしません。
+
+## 5. Scenario Configuration
+
+正本は `schemas/scenario-configuration.schema.json` の versioned contract です。主要フィールドは次のとおりです。
 
 ```text
-Attack + Network + Difficulty
-  → Codex availability/auth check
-  → Candidate / Attack Graph構築
-  → Scenario Generation
-  → Scenario Schema / Reference / Technical Validation
-  → Independent Verification
-  → Automatic Revision（最大3 attempt）
-  → Evidence Generation / Validation
-  → Investigation / Dialogue構築
-  → Game Case変換
-  → Game Build
-  → Evaluation
-  → READY
+schemaVersion
+configurationId
+mode: MANUAL | MAKOTOMARU
+difficulty: 1 | 2 | 3
+evidenceCount: 1 | 2 | 3
+network
+  ├─ subnets[]
+  ├─ nodes[]
+  ├─ services[]
+  └─ connections[]
+attacks[] (1..3)
+  ├─ attackId / order / occurrenceTime
+  ├─ sourceNodeId / targetNodeId / targetServiceId
+  ├─ investigationTypes[] / investigationSourceNodeId
+  ├─ evidenceAnswer
+  └─ expectedEffect / notes
+incidentContext
 ```
 
-### 1. 入力準備
+Backend は Attack count、ID と参照、連続 order、時系列、事件日、Node/Service 所属、IP/CIDR、trust boundary、connection、reachability、Attack combination、Investigation support、Log Source、Difficulty と Evidence 数、Scenario Generation Input の構築可能性を検査します。
 
-`xss-networks.js` がNetwork A～Dの技術入力を提供します。攻撃カタログ、ネットワーク、Scenario ContextからCandidateとAttack Graphを決定論的に構築し、成立するScenario Generation Inputだけを次工程へ渡します。
+詳細設定の入力は Backend の単一境界で正規化してから同Schemaを検証します。`datetime-local` の `YYYY-MM-DDTHH:mm` は秒と `+09:00` を持つ date-time にし、Attack、Node、Service、Investigation の表示ラベルは、同じ入力内または登録済み定義で一意に対応する canonical ID へ変換します。変換後も未知IDや不正な日時は拒否し、Validatorの `minLength`、`maxLength`、`pattern`、`format`、`enum` は緩和しません。
 
-不足条件、必要権限、service所属、明示的な到達制御、ログ観測可能性は別々に評価します。技術的に成立しない組合せを物語上の都合で補完しません。
-
-### 2. Scenario Generation
-
-Scenario Agentは次を生成します。
-
-- Scenario Draft
-- Ground Truth
-- Characters
-- Timeline
-- Learning Objectives
-- Evidence Requirements
-
-出力は `scenario-import-package` と各構成要素のcanonical Schemaで検証されます。その後、generation input、Attack Graph、参照ID、Ground Truth、Timeline間の整合性を検査します。
-
-### 3. Independent Verification
-
-Scenario生成とは別のCodex invocationで、6種類の意味レビューを実行します。
-
-- Evidence Ground Alignment
-- Learning Objective Alignment
-- Fact / Narrative Separation
-- Identity Attribution
-- Investigation Coverage
-- Reference Content Alignment
-
-Review出力はBackendが再検証します。Reviewが参照できる値は `allowedReviewRefs` に限定され、categoryごとの `subjectRefs` と `sourceRefs` も検査されます。形式または参照規則に違反したReviewは、技術的事実を変更しないrepair invocationを1回だけ実行します。
-
-BackendはさらにAttack Graph再構築、技術環境、Phase 5B結果、Ground Truth追跡、Timeline、Evidence producibilityを独立に再計算します。
-
-### 4. Revision Loop
-
-Schema、参照、Evidence coverageなど修正可能な問題は `REPAIRABLE_BLOCKED` としてmachine-readable feedbackへ変換し、Scenario Agentへ戻します。内部状態破損、技術契約不成立など継続不能な問題は `HARD_BLOCKED` として停止します。
-
-初回生成を含めて最大3 attemptです。検証済みにならない場合は `MAX_REVISION_EXCEEDED` で終了します。
-
-### 5. Evidence Generation
-
-`VERIFIED` のScenarioだけからEvidence Generation Inputを作成します。Evidence AgentはEvidence Artifact、Contradiction、Exonerationを生成します。
-
-Backendは次を検査します。
-
-- generation input、Scenario、Attack Graphの参照一致
-- Ground Truth、Timeline、Character、observable artifactへの由来
-- Evidence Requirement coverage
-- Testimonyと技術評価の整合
-- ContradictionとExonerationの成立
-- 複数根拠による人物断定の否定
-- public contentへの内部ID、Ground Truth、正解の漏えい
-
-### 6. Investigation、Dialogue、Game Build
-
-難易度に応じて1～3段のEvidence Chainを構築します。調査画面のログとgrep風選択肢は合成データであり、shell、filesystem、外部ネットワークを実行しません。
-
-Dialogueは検証済み成果物から値を抽出し、`JUDGE`、`PROSECUTOR`、`DEFENSE` の固定Templateへ適用します。
-
-Game Case変換では内部Game CaseとPlayer向けPublic Game Caseを分け、進行規則、Evidence取得条件、法廷判定をBackend内部へ保持します。
-
-### 7. Evaluationと公開
-
-Evaluationは、正常経路だけでなく次も実プレイ相当の状態遷移で検証します。
-
-- Evidence Chainの到達可能性
-- 調査対象と4択の成立
-- 未取得Evidenceの提示拒否
-- 誤ったEvidenceから再調査へ戻る経路
-- 正しいStatementとEvidenceの組合せ
-- 最終 `ACQUITTED` への到達
-- retry上限
-- Player viewへの内部情報漏えい
-
-Game Case EvaluationとXSS runtime Evaluationの両方が `ACCEPTED` の場合だけ `READY` となり、推測困難な `playId` を発行します。途中成果物はPlayerから参照できません。
-
-## Structured Outputの設計
-
-リポジトリ内のJSON Schemaは、保存・受渡し・canonical validationの正本です。Codex CLIへ渡すSchemaは、その正本から実行時に生成します。
+## 6. 全体 Architecture
 
 ```text
-canonical JSON Schema
-  → open placeholderを構成Schemaで展開
-  → Codex Structured Outputs互換Schemaへ変換
-  → permission 0600の一時ファイルへ出力
-  → codex exec --output-schema
-  → stdoutの単一JSON objectをparse
-  → canonical Schema / consistency validatorで再検証
+┌──────────────── Author Browser ────────────────┐
+│ Mode → GUI Configuration → verified Preview → Approval │
+└──────────────────────┬─────────────────────────┘
+                       │ Author API
+                       ▼
+┌──────────────── HTTP Backend ──────────────────┐
+│ session / state / validation / public boundary │
+└──────────┬───────────────────────┬──────────────┘
+           │                       │
+           ▼                       ▼
+┌── Codex execution ──┐   ┌── Deterministic code ─────────┐
+│ Makotomaru          │   │ Schema / reference validation │
+│ Scenario revision   │   │ Scenario template / Attack Graph │
+│ Verification review│   │ gates / conversion / judgment │
+│ Evidence Agent      │   │ runtime / evaluation          │
+└──────────┬──────────┘   └──────────────┬───────────────┘
+           └──────────────┬──────────────┘
+                          ▼
+              Internal + Public Game Case
+                          │ playId
+                          ▼
+                    Player Browser
 ```
 
-`codex-schema-adapter.js` は、`const` と `enum` の明示的な型補完、入れ子、配列、`$defs` の再帰変換、`oneOf` から `anyOf` への変換を行います。open objectや非対応keywordはCodexを起動する前に拒否します。
+`AUTO_CODEX` は Codex CLI の起動、Structured Output、timeout、cancel、診断の redaction を担う実行基盤です。真実丸、Scenario Agent、Verification Agent の責務とは分離されています。
 
-対象となるCodex出力は次の3種類です。
+## 7. Scenario Creation Workflow
 
-- Scenario Import Package
-- Scenario Verification Review
-- Evidence Import Package
+```text
+MANUAL GUI ───────┐
+                  ├→ canonical Scenario Configuration
+MAKOTOMARU ───────┘       │
+                           ├→ deterministic Configuration Validation
+                           ├→ deterministic Scenario基盤
+                           ├→ Scenario canonical validation
+                           ├→ Independent AI Review + Backend Verification
+                           ├→ 不合格なら限定Revision（最大3 attempt）
+                           ├→ VERIFIED Scenario Preview
+                           └→ USER_APPROVED
+```
 
-Codex用Schemaは生成制約であり、最終的な信頼判定ではありません。生成JSONは必ずcanonical validatorと工程固有validatorを通過する必要があります。
+Scenario Preview には事件概要、Attack、順序、発生時刻、Target、Investigation Method、Difficulty、Network Diagram、事前検証済みであることを表示します。Ground Truth、正解 Evidence、最終 Answer は通常 Preview に含めず、制作者が明示的に開く詳細欄だけに入力した証拠の答えを表示します。ユーザが `OK` に相当する「このScenarioでゲームを作成」を押すまで Evidence、Dialogue、Game Build へ進みません。
 
-## 状態管理
+## 8. Game Generation Workflow
 
-### AUTO_CODEX状態
+`USER_APPROVED` かつ `VERIFIED` の Scenario だけが次へ進みます。
 
-| 状態 | 意味 |
-| --- | --- |
-| `IDLE` | 未開始 |
-| `CHECKING_CODEX` | CLI存在・ログイン状態の確認 |
-| `GENERATING_SCENARIO` | 初回Scenario生成 |
-| `VALIDATING_SCENARIO` | ScenarioのSchema・参照・技術検証 |
-| `REVIEWING_SCENARIO` | 独立意味レビュー |
-| `REVISING_SCENARIO` | feedbackに基づくScenario再生成 |
-| `GENERATING_EVIDENCE` | Evidence生成と検証 |
-| `BUILDING_INVESTIGATION` | 調査対象とEvidence Chainの構築 |
-| `BUILDING_DIALOGUE` | 固定TemplateによるDialogue構築 |
-| `BUILDING_GAME` | Game Caseとruntimeの構築 |
-| `EVALUATING` | 正常・失敗経路と漏えいの評価 |
-| `READY` | Play URL発行可能 |
-| `FAILED` | 理由付き失敗 |
-| `CANCELLED` | 利用者による中止 |
+```text
+VERIFIED Scenario
+  → Evidence generation / provenance validation
+  → Investigation Target + Action + synthetic Evidence + Discovery Rule
+  → fixed Dialogue Template + verified slots
+  → Internal / Public Game Case conversion
+  → Game runtime build
+  → independent Evaluation
+  → READY + unguessable playId
+```
 
-同一サーバーでは同時に1生成だけを許可します。生成中の再実行は `GENERATION_LOCKED` で拒否します。Cancellationは実行中のCodex subprocessへ `SIGTERM` を送り、必要な場合は `SIGKILL` へ移行します。途中成果物とPlay URLは公開しません。
+調査データは合成データです。表示上の調査操作から実 shell、実 filesystem、実 network を実行しません。
 
-### XSSゲーム状態
+調査開始時に表示するのは取得元と調査操作です。証言などの文書を調べる対象には、未発見のEvidenceタイトルを転用せず、固定の調査先名を使います。資料のタイトルと本文は調査で発見後に表示し、未発見資料の取得は拒否します（初回法廷で明示的に提示する資料は別です）。
+
+最終Evaluationが不合格の場合、ゲームは公開せず停止します。Developer Detailには総括の`EVALUATION_REJECTED`に加えて、個別の評価エラーコード、対象field、理由、修正指針を表示します。例えば`INVESTIGATION_DISCLOSURE_FAILED`は調査前の資料公開または取得制御の問題であり、入力を変えずに再生成するだけでは直らない場合があります。Ground Truthや正解対応表など、評価対象の内部成果物全体は表示しません。
+
+自動Evidence生成では、AIは本文・出典・要件・証言と論証をdraftとして出力し、Backendが本文のUTF-8からSHA-256を計算します。その後、通常のEvidence Importで根拠の追跡、要件coverage、Contradiction、複数資料を使うExonerationを検証します。外部から取り込む完成済みEvidence JSONには引き続き正しいintegrityが必須であり、不正ハッシュや取込後の本文改変を自動修復しません。失敗通知を証拠の代用品にはしません。
+
+Evidence Import後には、法廷で選べる証言と技術証拠に、成立する異議と成立しない異議の両方があるか確認します。全組合せが正解の場合は`EVIDENCE_NO_INCORRECT_OBJECTION_PAIR`として、既存資料に裏付けられる観測内容の発言と、反駁対象の主張を分ける限定修正をEvidence Agentへ依頼します。既存の技術証拠・論証・証言は維持し、既存TESTIMONYへ裏付けのある発言を追記するだけです。修正を含むEvidence生成は最大2回で、不足が残る場合は公開せず停止します。正解の証拠を削って誤答扱いにしたり、無関係な資料を追加したりしません。
+
+「メール文のリンク先と実際に遷移するリンク先が異なること」を扱う場合は、保存メールの表示URLとHTMLソースの`href`、別途取得したWebアクセス記録の対象を比較する証拠を設計します。HTMLは文字列表示のみで実行しません。表示URLとhrefの相違をHTTPリダイレクトや操作者の特定とは扱いません。[合成証拠の例](docs/generation-data.md#11-phishingの証拠設計例)を参照してください。
+
+## 9. 裁判ゲームの進行
+
+自動生成したゲームは、オリジナルの「記録審理室」画面でプレイします。法廷は人物の立ち絵と証言の会話パネル、調査は青緑の調査デスクと資料ビューアーへ切り替わります。証言は一つずつ送り、指摘対象の発言と証拠を選んで「この証拠で主張を検証」を実行します。登場人物、現在の争点、解決状況、残り提示回数を表示します。既存作品の画面や素材を複製せず、リポジトリ内のオリジナルSVGとCSSを使います。
+
+調査では「調査先を選ぶ → 調査方法を実行 → 発見資料の原文を確認 → 証拠として登録」の順に操作します。メール本文・HTMLソース・ログは文字列として表示し、URLを開いたりHTMLを実行したりしません。未発見資料の内容や内部判定は公開しません。
+
+共通 Dialogue Template は次の Scene を持ちます。
 
 ```text
 INTRO
   → INITIAL_COURT
   → INVESTIGATION
   → COURT_EVIDENCE_ROUND
-      ├─ wrong evidence → 同じroundのINVESTIGATION
-      └─ correct evidence → 次roundまたはACQUITTED
+       ├─ 誤った提示・裏付け不足 → retry / INVESTIGATION
+       ├─ 提示せず追加調査 → INVESTIGATION
+       └─ 争点を解決 → 次の異なる争点 / 全争点解決でACQUITTED
+  → ACQUITTED
 ```
 
-汎用Generated Game Caseでは `TITLE → INITIAL_COURT → INVESTIGATION → RETRIAL_COURT` を基本とし、正しい異議で `ACQUITTED`、誤りで `GUILTY_RETRY` を経由します。
+汎用 Generated Game runtime の内部 state 名は `TITLE`、`INITIAL_COURT`、`INVESTIGATION`、`RETRIAL_COURT`、`OBJECTION`、`GUILTY_RETRY`、`ACQUITTED`、`BLOCKED` です。Dialogue Scene と runtime state を分けることで、固定演出と決定論的判定を混同しません。
 
-## 信頼境界とセキュリティ
+自動生成の法廷試行上限は各ラウンド3回です。不成立の異議は`GUILTY_RETRY`を経て調査へ戻れますが、3回続けると`BLOCKED`になります。最終Evaluationは実際の選択肢でこの経路を確認します。全組合せが正解で誤答操作自体がない場合も不合格とし、単なるretry設定不足とは区別した理由を表示します。
 
-- Codex出力、外部文書、ログ、URL、HTML、コードは未信頼データとして扱います。
-- Promptへ渡す入力は `<UNTRUSTED_INPUT_DATA>` 境界内でJSON化します。
-- Codex出力内のコマンドやURLは実行しません。
-- `child_process.spawn` は `shell: false` でcommandとargsを分離します。
-- Codexには `--sandbox read-only` と `--ask-for-approval never` を指定します。
-- stdoutの単一JSON object以外を拒否し、stdout/stderrは10 MiBで制限します。
-- stderrのcredentialらしい文字列はredactします。
-- Ground Truth、Judgment、正解対応、provenance、内部fingerprintをPlayer viewへ含めません。
-- Browser描画は `textContent` を使い、EvidenceをHTMLやscriptとして解釈しません。
-- Host、same-origin、Content-Type、request size、未知field、prototype pollution keyを検査します。
-- 静的配信は明示された `public/` assetだけに限定します。
-- 制作ログは `generationId`、`phase`、`attempt`、`duration`、`result`だけを記録します。
+新しい自動生成ゲームは、技術証拠を1件登録すると法廷へ戻れますが、帰廷できることと論証が成立することは別です。正しい資料を選んでも、その争点の照合に必要な資料が未登録なら不成立になります。最終争点では、検証済みExonerationの支持資料もすべて取得していることを要求します。失敗理由は正解を漏らさない共通文で表示します。提示前の追加調査では回数を消費せず、失敗後も取得済み資料・解決済み争点を保持します。解決後の争点へ同じ回答を再送しても進行しません。
 
-## 実行モード
+法廷と調査の移動、争点解決時に場面転換を表示します。小さい画面では縦配置になり、OSの「視差効果を減らす」設定では移動アニメーションを省略します。操作はボタンとキーボードで行えます。
 
-| mode | 用途 | 起動方法 |
+## 10. Difficulty
+
+| Difficulty | 調査チェーンの基準 | 異なる争点の数 |
 | --- | --- | --- |
-| `AUTHOR` | AUTO_CODEX制作画面と生成済みゲームのプレイ | `npm start` |
-| `GENERATED` | 保存済みGame Case ResultのPlayer確認 | `GAME_MODE=GENERATED GAME_CASE_PATH=private/game-case-result.json npm start` |
-| `FIXTURE` | 固定fixtureによる回帰確認 | `GAME_MODE=FIXTURE npm start` |
+| ★1 | 1 | 2 |
+| ★★ | 2 | 3 |
+| ★★★ | 3 | 4 |
 
-`GENERATED` modeのファイルはworkspace内のJSONに限定され、`public/` 配下やworkspace外のパスは拒否されます。各modeは明示的に分離され、Generated Gameの不成立時にFixtureへ暗黙フォールバックしません。
+新しい自動生成では `courtRoundCount = difficulty + 1` とし、内部 `courtIssues` に争点ごとの証言・判定ルール・必要資料を記録します。単一の主張の繰り返しではなく、Requirementに沿った異なる反駁対象を要求します。争点不足や重複はEvidence生成の最大2回の範囲で差し戻し、未解決なら生成を停止します。Evaluation は各争点に対応する別の回答と再調査経路を実行確認します。`evidenceCount` は調査チェーンの基準で、補助資料を含む取得総数の上限ではありません。★1でもメール・Webアクセス記録・証言など論証に必要な資料は通常プレイで取得・閲覧できます。
 
-## API
+旧Game Case（`courtIssues`なし）は記録済みのラウンド数・判定で読み込み可能です。新しい複数争点を遊ぶにはサーバーを再起動し、Scenarioからゲームを再生成してください。過去の生成物に未検証の証言や根拠を後付けする移行は行いません。再起動ではメモリ上の生成物・セッションが失われるため、必要な内容を控えてから実施してください。
 
-### Author API
+Scenario基盤は、取得可能と確認された各artifactをEvidence Requirementの`grounds`へ関連付け、既存NodeとLog Sourceに基づく取得要件を作ります。メールはメールサーバー、Webアクセス記録はWebサーバーから取得し、必要な取得元がなければ生成を停止します。証言者とその主張の対象である被告人を明示しますが、人物と端末操作者の同一性や非関与は補完しません。時系列では架空の表示時刻と資料内の時刻を区別し、結論は資料で裏付けられる範囲に限定します。
 
-`AUTHOR` modeだけで利用できます。
+## 11. Agent / Component
 
-| Method | Path | 役割 |
-| --- | --- | --- |
-| `POST` | `/api/author/start` | Author sessionを開始し、選択肢とtokenを返す |
-| `POST` | `/api/author/generate` | `networkId` と `difficulty` で自動生成を開始する |
-| `POST` | `/api/author/cancel` | 実行中の生成を中止する |
-| `GET` | `/api/author/status` | progress、簡略failure、Developer Detail、Play URLを返す |
+| Agent / Component | 責務 |
+| --- | --- |
+| Orchestrator | 入力検証、state、gate、retry、成果物統合 |
+| Makotomaru | canonical Scenario Configuration の提案 |
+| Scenario Builder / Agent | Backendの定型基盤でScenario、Ground Truth、Timeline、必要Evidenceを構築し、Review不合格時は記述と既存artifactへの不足参照を修正 |
+| Verification Agent | 別 Codex invocation と Backend 再計算による独立検証 |
+| Evidence Agent | VERIFIED Scenario に追跡可能な Evidence、Contradiction、Exoneration の生成 |
+| Investigation Builder | Target、Action、Discovery chain の構築 |
+| Dialogue Builder | 固定 Scene / speaker / line と Scenario slot の割当て |
+| Game Make | Internal/Public Game Case と runtime の構築 |
+| Evaluation | 正常、誤答、retry、round、到達性、漏えいの評価 |
 
-Author statusはScenario、Review、Evidence、Prompt、Schema、Ground Truthを返しません。
+これらは常駐する別サービスではなく、責務と工程 gate を分離した論理コンポーネントです。
 
-### Player API
+## 12. AI と決定論的処理の境界
 
-| Method | Path | 役割 |
-| --- | --- | --- |
-| `POST` | `/api/start` | Player sessionを開始する。AUTHOR modeでは `playId` が必要 |
-| `POST` | `/api/action` | 現在のゲーム状態で許可されたactionを実行する |
+AI を使用する処理:
 
-Author tokenとPlayer tokenは分離されています。セッション、生成成果物、runtimeはメモリ上だけに保持し、サーバー再起動時に失われます。
+- 真実丸による Configuration 提案
+- Review不合格時の Scenario 記述と既存artifactへの不足参照の修正
+- Scenario の独立 semantic review
+- Evidence artifact と必要な文章 slot
 
-## ディレクトリ構成
+Backend code が決定する処理:
+
+- Attack count、登録 ID、order、timeline
+- Node、Service、Log Source、reachability、Attack Graph
+- ScenarioのID、Ground Truth参照、Timeline、Evidence Requirement基盤
+- Schema、参照、fingerprint、工程 gate
+- Difficulty と Evidence/Round 数
+- Evidence discovery、取得条件、正誤判定、retry、最終 state
+- Public projection と Ground Truth / Answer leak 検査
+
+LLM の自己評価だけで `VERIFIED`、`READY`、`ACCEPTED` にはなりません。
+
+## 13. Scenario / Evidence / Game Contract
+
+- Scenario Configuration: `schemas/scenario-configuration.schema.json`
+- Makotomaru request/result: `schemas/makotomaru-request.schema.json`、`schemas/makotomaru-result.schema.json`
+- Scenario: `scenario-generation-input`、`scenario-import-package` と構成 artifact Schema
+- Verification: `scenario-verification-input`、`scenario-verification-review`、`scenario-verification-result`
+- Evidence: `evidence-generation-input`、`evidence-import-package`、`evidence-set`
+- Investigation: `investigation-action`、`investigation-target`、`evidence-discovery-rule`、`investigation-result`
+- Game: `game-progression-plan`、`game-case`、`public-game-case`、`game-case-result`
+- Evaluation: `game-evaluation-input`、`game-evaluation-result`
+
+Codex CLI 用 Structured Output Schema は canonical Schema から構成します。Codex の Schema 制約を通過しても信頼済みとは扱わず、canonical validator と工程固有 validator を再実行します。
+
+## 14. State Machine
+
+Author state:
+
+```text
+MODE_SELECTION
+  → MANUAL_CONFIGURATION | MAKOTOMARU_CONFIGURATION
+  → CHECKING_CODEX
+  → SCENARIO_DRAFT
+  → SCENARIO_VALIDATING
+  → SCENARIO_REVIEWING
+  → SCENARIO_REVISING (必要時)
+  → VERIFIED
+  → SCENARIO_PREVIEW
+  → USER_APPROVED
+  → EVIDENCE_BUILDING
+  → INVESTIGATION_BUILDING
+  → DIALOGUE_BUILDING
+  → GAME_BUILDING
+  → EVALUATING
+  → READY
+
+任意の実行状態 → FAILED | CANCELLED
+```
+
+`CHECKING_CODEX` は、開始直後にUIが選択画面へ戻らないことを保証する実行中状態です。`canCancel` が有効な間は生成中画面を表示し、ユーザ操作でキャンセルできます。キャンセルや失敗の後に、処理済みの部分成果物を `READY` として公開することはありません。
+
+Player state は前節の Generated Game runtime state を使用します。Author session、Player session、`playId` は分離され、`READY` 前の runtime は公開されません。
+
+## 15. Directory Structure
 
 ```text
 .
-├── data/                 攻撃定義と技術入力例
-├── docs/                 生成データ仕様
-├── prompts/              Codexへ渡す固定Prompt
-├── public/               Browser UIと静的asset
-├── schemas/              version付きJSON Schema
-├── scripts/              手動smoke test
-├── server/               HTTP、生成、検証、ゲームruntime
-│   ├── codex/            Codex CLI境界
-│   └── generation/       決定論的生成・検証工程
-└── tests/                Unit、integration、HTTP E2E
+├── data/                 Attack Definition と合成技術入力例
+├── docs/                 生成データと工程の補足仕様
+├── prompts/              固定 Codex prompt
+├── public/               Author UI、Player UI、独自 SVG asset
+├── schemas/              versioned JSON Schema
+├── scripts/              実 Codex smoke test
+├── server/
+│   ├── codex/            Codex CLI execution boundary
+│   └── generation/       validator、builder、converter、evaluator
+└── tests/                unit、integration、HTTP、E2E
 ```
 
-## ファイル概要
+## 16. Important Files
 
-### ルート
-
-| ファイル | 概要 |
+| File | 責務 |
 | --- | --- |
-| `AGENTS.md` | 本リポジトリで守る技術正確性、工程ゲート、セキュリティ境界 |
-| `README.md` | システム設計、起動、構成、運用方法 |
-| `package.json` | Node.js要件と `start`、`test`、`smoke:codex` script |
-| `docs/generation-data.md` | AUTO_CODEXの成果物、状態、信頼境界を定義する詳細仕様 |
+| `server/server.js` | HTTP、Author/Player API、session、公開境界、静的配信 |
+| `server/auto-generation-service.js` | 共通 Scenario/Game Pipeline と Author state |
+| `server/generation/scenario-configuration.js` | Configuration bootstrap、正規化、決定論的 validation、Preview |
+| `server/generation/scenario-template.js` | validated ConfigurationからSchema適合Scenario基盤を決定論的に構築 |
+| `server/generation/catalog.js` | `data/attacks/` の読込みと検証 |
+| `server/generation/attack-graph.js` | 因果関係を持つ Attack Graph の構築 |
+| `server/generation/scenario-validator.js` | Scenario artifact の canonical validation |
+| `server/generation/scenario-verifier.js` | Independent Verification と revision feedback |
+| `server/generation/evidence-validator.js` | Evidence provenance、Contradiction、Exoneration、漏えい検査 |
+| `server/generation/investigation-registry.js` | Attack 別 Investigation assignment |
+| `server/generation/dialogue-template.js` | 固定 Scene / speaker / line と slot assignment |
+| `server/generation/game-case-converter.js` | Internal/Public Game Case 変換 |
+| `server/generation/game-evaluator.js` | 正常・retry・round・到達性・漏えい評価 |
+| `server/codex/codex-runner.js` | safe spawn、timeout、cancel、出力制限 |
+| `public/author.html`, `public/author.js` | Wizard、Network Builder、SVG Diagram、Preview/Approval |
+| `public/index.html`, `public/app.js` | Player UI |
 
-### `server/`
+## 17. Security
 
-| ファイル | 概要 |
-| --- | --- |
-| `server/server.js` | HTTP server、静的配信、Author/Player API、session分離、入力制限 |
-| `server/auto-generation-service.js` | AUTO_CODEX全工程、状態遷移、revision、cancel、progress、公開view |
-| `server/xss-networks.js` | Network A～Dの技術構成と公開用ネットワーク情報 |
-| `server/xss-prototype.js` | XSS専用runtime、調査、法廷、公開projection、runtime評価 |
-| `server/generated-game.js` | 汎用Generated Game CaseのPlayer state machine |
-| `server/game.js` | 最小Fixture game、共通 `GameError`、公開view |
-| `server/dummy-case.js` | Fixture modeで使用する固定ケース |
+- Codex 出力、外部ログ、Web、メール、文書、URL、コードは未信頼データです。
+- Prompt のデータは `<UNTRUSTED_INPUT_DATA>` 境界へ JSON として渡します。
+- Codex は `shell:false`、read-only sandbox、approval 無効、ephemeral process で起動します。
+- stdout は単一 JSON object のみ受理し、出力サイズを制限します。
+- Evidence 内の command、URL、code は実行しません。
+- Author/Player の描画は `textContent` と SVG DOM API を使い、生成 HTML を解釈しません。
+- Ground Truth、Judgment、正解 mapping、provenance、fingerprint、Verification Result は Player view へ含めません。
+- Host、Origin、Content-Type、body size、未知 field、prototype pollution key、配信 path を検査します。
+- credential、token、account ID、email、password は生成物、状態、ログへ保存しません。
 
-### `server/codex/`
+## 18. Codex CLI
 
-| ファイル | 概要 |
-| --- | --- |
-| `codex-runner.js` | Codex CLIのsafe spawn、availability、timeout、cancel、出力上限、Schema一時化 |
-| `codex-json-runner.js` | Prompt、未信頼JSONデータ、validation feedbackを組み立てる薄いwrapper |
-| `codex-output-parser.js` | stdoutの単一JSON object検査とdiagnostic redaction |
-| `codex-errors.js` | unavailable、timeout、cancel、output、output-schema等のエラー分類 |
-| `codex-schema-adapter.js` | canonical SchemaをCodex Structured Outputs subsetへ変換・事前検査 |
-| `auto-output-schemas.js` | Scenario、Review、EvidenceのCodex用Schemaをcanonical Schemaから構成 |
+アプリは現在 Codex CLI でログイン済みの ChatGPT account をそのまま使用し、特定 account に固定依存しません。アプリ自身は logout、login、account switching、credential file の読取りや変更を行いません。
 
-### `server/generation/`
-
-| ファイル | 概要 |
-| --- | --- |
-| `schema.js` | リポジトリ内Schemaの読込みと共通ValidationError |
-| `catalog.js` | `data/attacks/` の攻撃定義を読み込み検証する |
-| `evaluator.js` | 条件、権限、service、reachability、ログ観測可能性を評価する |
-| `candidate-builder.js` | 選択攻撃をNetwork上の実在対象へ割り当てCandidateを作る |
-| `attack-graph.js` | Candidateから因果関係を持つAttack Graphを構築・再検証する |
-| `scenario-interface.js` | Scenario Generation Input、Prompt、Import Packageの入出力境界 |
-| `scenario-validator.js` | Ground Truth、Timeline、Characters、Objectives、Requirementsの整合検証 |
-| `scenario-verifier.js` | Independent Review、Attack Graph再構築、revision判定、Evidence handoff |
-| `evidence-interface.js` | Evidence Generation Input、Prompt、Import Packageの入出力境界 |
-| `evidence-validator.js` | Evidence由来、Contradiction、Exoneration、public contentを検証 |
-| `investigation-validator.js` | Investigation Action、Target、Discovery Rule、Resultを検証 |
-| `game-case-converter.js` | 検証済み上流成果物をGame Case Conversion Inputへ統合・変換 |
-| `game-case-validator.js` | Game Case、Public Game Case、Progression、法廷判定を検証 |
-| `game-make.js` | READY Game CaseからruntimeとEvaluation handoffを構築 |
-| `game-evaluator.js` | 正常・再試行・上限経路、上流fingerprint、公開境界を最終評価 |
-| `orchestrator.js` | 汎用工程ゲート、下流無効化、revision/retry上限を管理 |
-
-### `public/`
-
-| ファイル | 概要 |
-| --- | --- |
-| `author.html` | XSS、Network、Difficultyを選ぶ制作画面 |
-| `author.js` | Author API、progress、failure、Developer Detail、Play URLの描画 |
-| `index.html` | Player画面のHTML shell |
-| `app.js` | Player API操作とScene/State別UI描画 |
-| `style.css` | Author/Player共通style |
-| `visual-assets.js` | asset IDと表示用パスの対応 |
-| `assets/backgrounds/*.svg` | Intro、Investigation、Courtroom背景 |
-| `assets/characters/*.svg` | Defense、Prosecutor、Judgeの表情asset |
-| `assets/effects/objection.svg` | 法廷演出asset |
-| `assets/networks/*.svg` | Network A～Dの構成図 |
-
-### `data/` と `prompts/`
-
-| ファイル | 概要 |
-| --- | --- |
-| `data/attacks/reflected_xss.json` | 反射型XSSの前提、権限、効果、痕跡、参照 |
-| `data/attacks/phishing.json` | Phishing攻撃定義。汎用攻撃グラフ回帰テストでも使用 |
-| `data/attacks/sql_injection.json` | SQL Injection攻撃定義。複合候補・独立node検証でも使用 |
-| `data/examples/network.json` | 汎用Network Schemaの入力例 |
-| `data/examples/scenario-context.json` | 汎用Scenario Contextの入力例 |
-| `prompts/scenario-generation-v1.md` | Scenario Agentの固定指示と出力制約 |
-| `prompts/scenario-verification-v1.md` | Independent Reviewerの6 categoryと参照制約 |
-| `prompts/evidence-generation-v1.md` | Evidence Agentの由来、公開境界、出力制約 |
-
-### `schemas/`
-
-Schemaはすべてversion付きのBackend internal contractです。主な分類は次のとおりです。
-
-| 分類 | Schema |
-| --- | --- |
-| 技術入力 | `attack-definition`、`network`、`scenario-context`、`candidate-selection`、`candidate` |
-| Candidate / Graph | `candidate-builder-result`、`attack-graph`、`attack-graph-result` |
-| Scenario | `scenario-generation-input`、`scenario-import-package`、`scenario-import-result`、`scenario-draft`、`ground-truth`、`character`、`timeline`、`learning-objective`、`evidence-requirement` |
-| Scenario Validation | `scenario-validation-result`、`scenario-validation-feedback`、`scenario-revision-feedback` |
-| Independent Verification | `scenario-verification-input`、`scenario-verification-review`、`scenario-verification-result`、`evidence-agent-handoff` |
-| Evidence | `evidence-agent-input`、`evidence-generation-input`、`evidence-import-package`、`evidence-import-result`、`evidence-artifact`、`evidence-set`、`contradiction`、`exoneration`、`evidence-validation-feedback` |
-| Investigation | `investigation-action`、`investigation-target`、`evidence-discovery-rule`、`investigation-result` |
-| Game Case | `game-case-handoff`、`game-case-conversion-input`、`game-case`、`public-game-case`、`game-case-result` |
-| Progression | `game-progression-plan`、`game-progression`、`public-game-progression` |
-| Build / Evaluation | `ui-integration-handoff`、`game-make-result`、`evaluation-handoff`、`game-evaluation-input`、`game-evaluation-result` |
-| Orchestration | `orchestrator-input-validation-result`、`orchestrator-result` |
-| XSS runtime | `xss-prototype-selection`、`xss-prototype-evaluation` |
-
-実ファイル名はすべて `schemas/<name>.schema.json` です。
-
-### `scripts/`
-
-| ファイル | 概要 |
-| --- | --- |
-| `scripts/real-codex-smoke.js` | ログイン済みCodex CLIでXSS + Network A + ★1を1回生成する手動smoke test |
-
-### `tests/`
-
-| ファイル | 主な検証対象 |
-| --- | --- |
-| `agents-compliance.test.js` | Ground Truth先行、責務分離、公開境界、工程ゲート |
-| `attack-catalog.test.js` | 攻撃定義の読込みと技術成立性 |
-| `candidate-builder.test.js` | Network上の対象割当てと探索上限 |
-| `attack-graph.test.js` | 因果edge、分岐、合流、循環、不成立条件 |
-| `generation.test.js` | 汎用条件評価と入力制約 |
-| `scenario-interface.test.js` | Scenario入出力contractとImport結果 |
-| `scenario-validator.test.js` | Scenario構成要素間のcanonical整合性 |
-| `scenario-verifier.test.js` | Independent Verification、revision、reference review |
-| `evidence-agent.test.js` | Evidence生成入力、由来、矛盾、無罪論証、漏えい |
-| `investigation.test.js` | Investigation chain、取得条件、安全なsimulation |
-| `game-case.test.js` | Game Case変換、Progression、法廷判定、public projection |
-| `game-make.test.js` | build結果、runtime、Evaluation handoff |
-| `game-evaluator.test.js` | 独立Evaluationと正常・失敗経路 |
-| `orchestrator.test.js` | 工程順序、下流無効化、retry上限 |
-| `xss-prototype.test.js` | XSS固定Network、Dialogue、調査、法廷、asset |
-| `auto-generation.test.js` | AUTO_CODEX全工程、revision、repair、lock、cancel、timeout |
-| `codex-runner.test.js` | safe spawn、availability、parser、timeout、cancel、redaction |
-| `codex-schema-adapter.test.js` | 3出力SchemaのStructured Outputs変換 |
-| `author-server.test.js` | Author APIからREADY、Play URL、Player完了までのHTTP E2E |
-| `generated-server.test.js` | Generated modeのHTTP APIとsession分離 |
-| `server.test.js` | Fixture API、静的配信制限、Host/Origin/入力防御 |
-| `end-to-end.test.js` | 上流成果物からGame Case、UI buildまでの統合経路 |
-| `game.test.js` | 最小Fixture gameの状態遷移 |
-| `tests/helpers/*.js` | Mock Codexと検証済みScenario/Evidence/Game Case fixture |
-| `tests/fixtures/attack-catalog/*.json` | 攻撃カタログ用の合成Network、Context、Candidate |
-
-## Codex CLI境界
-
-Backendは次のCLI interfaceだけを使用します。
+主な実行境界は次のとおりです。
 
 ```text
 codex --version
 codex login status
-codex --ask-for-approval never exec --ephemeral --ignore-user-config --ignore-rules
-      --sandbox read-only --output-schema <temporary-schema> --color never -
+codex ... exec --ephemeral --sandbox read-only --output-schema <temporary-schema> -
 ```
 
-Promptはstdin、生成JSONはstdout、diagnosticはstderrとして扱います。既定timeoutは180000msで、必要な場合だけ次の環境変数で変更できます。
+真実丸、Scenario Review/Revision、Evidence はすべて、canonical Schemaを共通adapterでCodex Structured Outputs互換Schemaへ変換してから実行します。真実丸へ渡すAttack Definitionは、成立条件、必要権限、required service、node role、reachability、supported Investigation Type、observable artifactを保持しつつ、参照URLなどConfiguration選択に不要なfieldを除いた入力です。
+
+アプリケーションコードはCodex CLI呼出し時に `--model` を指定していません。実際に使用されるモデルは、現在ログインしているCodex CLIの設定・利用枠に従う既定モデルであり、アプリ内で特定モデルへ固定されているわけではありません。
+
+Codex CLIの非0終了は、usage/rate limit、HTTP、model、input size、output schema、timeout、その他CLI errorへ分類します。usageまたはrate limitは `CODEX_USAGE_LIMIT_REACHED` として停止し、通常UIには「Codexの利用上限に達しています。利用枠の回復後にもう一度実行してください。」と表示します。Developer Detailにはこの場合、safe error code、phase、HTTP status、retryableだけを表示し、credentialやtoken、account情報、stderr本文は表示しません。
+
+## 19. 起動方法
+
+必要環境は Node.js 22 以上と、ログイン済み Codex CLI です。
 
 ```sh
-CODEX_GENERATION_TIMEOUT_MS=240000 npm start
+cd /home/shu/MWSCup
+npm start
 ```
 
-## テスト
+`http://localhost:3000` を開くと Author UI へ移動します。既定は `AUTHOR` mode、listen address は `127.0.0.1:3000` です。
 
-Unit、integration、HTTP E2Eでは実Codex CLIを呼ばず、Codex境界をmockします。
+ポート3000が既存プロセスで使用中の場合は新しいサーバーを起動できません。既存の開発サーバーを利用するか、不要なプロセスを停止してから再実行してください。
+
+補助 mode:
+
+- `GAME_MODE=GENERATED GAME_CASE_PATH=private/game-case-result.json npm start`
+- `GAME_MODE=FIXTURE npm start`
+
+## 20. Test
+
+通常の test は実 Codex CLI を呼ばず、Codex execution boundary を mock します。
 
 ```sh
 npm test
 git diff --check
 ```
 
-実Codex smoke testは、全テスト成功後かつ `codex login status` が成功する場合に限り実行します。XSS + Network A + ★1を1回生成し、ログイン状態やcredentialを変更しません。
+現在のログイン account を変更せずに実 Codex を1回確認する任意 smoke test:
 
 ```sh
 npm run smoke:codex
 ```
 
-## 現在の制約
+## 21. Current Limitations
 
-- 通常制作画面の攻撃手法は反射型XSS固定です。
-- NetworkはA～D、難易度は★1～3です。
-- 生成成果物とsessionはメモリ保存で、永続化しません。
-- 同一サーバーで同時に実行できる生成は1件です。
-- localhost向けの単一process構成です。
-- 自動評価は最終的な人間による教材レビューを代替しません。
+- Attack catalog は現在 `phishing`、`reflected_xss`、`sql_injection` の3定義です。
+- Contract は Attack 1～3件を受け付けますが、現カタログで成立確認済みの複合 chain は `phishing → reflected_xss` です。3定義の単純並置は連結 Attack Graph にならないため拒否します。
+- 真実丸の Authentication category に直接対応する Attack Definition はまだありません。該当定義がない category は、登録済み定義からの安全な提案に限定されます。
+- Evidence と session はメモリ上だけに保持され、server 再起動で失われます。
+- 同一 server で同時に実行できる Codex generation は1件です。
+- localhost 向け単一 process 構成です。
+- 自動 Evaluation は構造、技術参照、操作経路、漏えいを検査しますが、人間による教材品質レビューを代替しません。

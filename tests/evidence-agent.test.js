@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import {
   EVIDENCE_PROMPT_TEMPLATE,
   buildEvidenceGenerationInput,
+  buildEvidenceGenerationDraftInput,
   importEvidencePackage,
+  materializeEvidenceGenerationDraft,
   validateEvidenceGenerationInput,
 } from '../server/generation/evidence-interface.js';
 import {
@@ -89,6 +92,87 @@ function updateDigest(item) {
   item.integrity.publicContentDigest = contentDigest(item.publicContent);
 }
 
+function generationDraft(input = generationInput()) {
+  const draft = evidencePackage(input);
+  for (const item of draft.evidenceArtifacts) delete item.integrity;
+  return draft;
+}
+
+test('CLI draft契約だけintegrityを除外し、外部Import契約と検証済み入力を保持する', () => {
+  const input = generationInput(); const before = structuredClone(input);
+  const draftInput = buildEvidenceGenerationDraftInput(input);
+  assert.deepEqual(input, before);
+  assert.deepEqual(draftInput.generationInputRef, evidencePackage(input).generationInputRef);
+  const draftSchema = draftInput.outputContract.jsonSchema.properties.evidenceArtifacts.items;
+  assert.equal(draftInput.outputContract.name, 'evidence-generation-draft');
+  assert.equal(draftSchema.additionalProperties, false);
+  assert.ok(!Object.hasOwn(draftSchema.properties, 'integrity'));
+  assert.ok(!draftSchema.required.includes('integrity'));
+  const canonicalSchema = input.outputContract.schemas.find(item => item.name === 'evidence-artifact').jsonSchema;
+  assert.ok(canonicalSchema.required.includes('integrity'));
+  assert.deepEqual(draftSchema.properties.publicContent, canonicalSchema.properties.publicContent);
+  draftInput.evidenceAgentInput.inputFingerprint = '0'.repeat(64);
+  assert.deepEqual(input, before);
+});
+
+test('自動Evidence本文のUTF-8を改行・日本語・HTMLを変更せずBackendでSHA-256化する', () => {
+  const input = generationInput(); const draft = generationDraft(input);
+  const body = '教材用合成メール\r\n表示URL: https://portal.example.invalid/help\n'
+    + '<a href="https://portal.example.invalid/notice?ref=training-01">案内</a>\n';
+  draft.evidenceArtifacts[0].publicContent = body;
+  const before = structuredClone(draft);
+  const pkg = materializeEvidenceGenerationDraft(draft);
+  assert.deepEqual(draft, before);
+  assert.equal(pkg.evidenceArtifacts[0].publicContent, body);
+  assert.deepEqual(pkg.evidenceArtifacts[0].integrity, { algorithm: 'SHA-256',
+    publicContentDigest: createHash('sha256').update(Buffer.from(body, 'utf8')).digest('hex') });
+  assert.equal(importEvidencePackage({ generationInput: input, evidencePackage: pkg }).status, 'VALID');
+  pkg.evidenceArtifacts[0].publicContent += '改変';
+  const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
+  assert.equal(result.status, 'INVALID');
+  assert.equal(result.errors[0].code, 'EVIDENCE_INTEGRITY_MISMATCH');
+});
+
+test('draftに持ち込まれたintegrityを上書き修復せず拒否する', () => {
+  const pkg = evidencePackage();
+  pkg.evidenceArtifacts[0].integrity.publicContentDigest = '0'.repeat(64);
+  const before = structuredClone(pkg);
+  assert.throws(() => materializeEvidenceGenerationDraft(pkg), {
+    code: 'UNKNOWN_FIELD', field: 'evidence-generation-draft.evidenceArtifacts[0].integrity',
+  });
+  assert.deepEqual(pkg, before);
+});
+
+test('draft本文の型不正・未知field・長さ違反をハッシュ生成で許容しない', () => {
+  for (const [mutate, code] of [
+    [item => { item.publicContent = null; }, 'INVALID_TYPE'],
+    [item => { item.untrustedExtra = 'ignored'; }, 'UNKNOWN_FIELD'],
+    [item => { item.publicContent = 'x'.repeat(20001); }, 'INVALID_STRING'],
+  ]) {
+    const draft = generationDraft(); mutate(draft.evidenceArtifacts[0]);
+    assert.throws(() => materializeEvidenceGenerationDraft(draft), { code });
+  }
+});
+
+test('failure noticeのハッシュが正しくても根拠・coverage・Contradiction・Exoneration不足を拒否する', () => {
+  const input = generationInput(); const draft = generationDraft(input);
+  const notice = draft.evidenceArtifacts[0];
+  Object.assign(notice, { evidenceId: 'generation_failure_notice', type: 'DOCUMENT',
+    title: '生成失敗', publicContent: '生成を完了できませんでした。',
+    sourceRefs: [{ sourceType: 'CHARACTER', sourceId: 'character_defendant', attackNodeId: null }],
+    requirementIds: ['requirement_attack'], purpose: ['ATTACK_TRACE'] });
+  draft.evidenceArtifacts = [notice]; draft.contradictions = []; draft.exonerations = [];
+  const result = importEvidencePackage({ generationInput: input,
+    evidencePackage: materializeEvidenceGenerationDraft(draft) });
+  assert.equal(result.status, 'INVALID');
+  assert.equal(result.evidenceSet, null);
+  assert.equal(result.gameCaseHandoff, null);
+  for (const code of ['EVIDENCE_GROUND_MISMATCH', 'EVIDENCE_REQUIREMENT_NOT_COVERED',
+    'CONTRADICTION_REQUIRED', 'EXONERATION_REQUIRED']) {
+    assert.ok(result.errors.some(item => item.code === code), code);
+  }
+});
+
 test('VERIFIED ScenarioからProvider非依存のEvidence Generation Inputを構築する', () => {
   const input = generationInput();
   assert.equal(input.status, 'READY');
@@ -124,6 +208,7 @@ test('VERIFIED以外または未解決issueのあるResultをBLOCKEDにする', 
   const input = buildEvidenceGenerationInput({ scenarioVerificationInput: fixture.verificationInput,
     verificationResult: fixture.verificationResult });
   assert.equal(input.status, 'BLOCKED');
+  assert.throws(() => buildEvidenceGenerationDraftInput(input), { code: 'EVIDENCE_GENERATION_BLOCKED' });
   const result = importEvidencePackage({ generationInput: input, evidencePackage: {} });
   assert.equal(result.status, 'BLOCKED');
   assert.equal(result.gameCaseHandoff, null);
@@ -291,4 +376,7 @@ test('Evidence Promptは技術境界・公開境界・証言分離を明記す�
   assert.match(EVIDENCE_PROMPT_TEMPLATE, /publicContent.*漏らしません/);
   assert.match(EVIDENCE_PROMPT_TEMPLATE, /技術証拠とTESTIMONYを区別/);
   assert.match(EVIDENCE_PROMPT_TEMPLATE, /JSONオブジェクトを1件だけ/);
+  assert.match(EVIDENCE_PROMPT_TEMPLATE, /integrity.*出力しません/);
+  assert.match(EVIDENCE_PROMPT_TEMPLATE, /表示文字列.*href/);
+  assert.match(EVIDENCE_PROMPT_TEMPLATE, /HTTPリダイレクトの証明ではありません/);
 });

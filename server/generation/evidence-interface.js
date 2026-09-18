@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { ValidationError, validateDocument } from './schema.js';
 import {
   canonical,
+  contentDigest,
   digest,
   evidenceAgentFingerprint,
   evidenceSetCore,
@@ -23,6 +24,16 @@ const OUTPUT_SCHEMA_NAMES = ['evidence-import-package', 'evidence-artifact', 'co
 const OUTPUT_SCHEMAS = new Map(await Promise.all(OUTPUT_SCHEMA_NAMES.map(async name => [name,
   JSON.parse(await readFile(new URL(`../../schemas/${name}.schema.json`, import.meta.url), 'utf8')),
 ])));
+
+// 自動生成の本文draftだけはハッシュをAIに要求しない。外部Importの正本Schemaは変更しない。
+export const EVIDENCE_GENERATION_DRAFT_SCHEMA = structuredClone(OUTPUT_SCHEMAS.get('evidence-import-package'));
+EVIDENCE_GENERATION_DRAFT_SCHEMA.title = 'Internal Evidence Generation Draft v1.0';
+const draftArtifactSchema = structuredClone(OUTPUT_SCHEMAS.get('evidence-artifact'));
+draftArtifactSchema.required = draftArtifactSchema.required.filter(key => key !== 'integrity');
+delete draftArtifactSchema.properties.integrity;
+Object.assign(EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.evidenceArtifacts, { items: draftArtifactSchema });
+EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.contradictions.items = structuredClone(OUTPUT_SCHEMAS.get('contradiction'));
+EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.exonerations.items = structuredClone(OUTPUT_SCHEMAS.get('exoneration'));
 
 function generationRef(input) {
   return input.evidenceAgentInput ? {
@@ -128,6 +139,38 @@ export function buildEvidenceGenerationInput({ scenarioVerificationInput, verifi
       issues: [blockIssue(error)], evidenceAgentInput: null, outputContract: null,
     });
   }
+}
+
+// CLI専用データ。承認・検証済み入力と外部Import用outputContractを改変しない。
+export function buildEvidenceGenerationDraftInput(input) {
+  validateEvidenceGenerationInput(input);
+  if (input.status !== 'READY') throw new ValidationError('EVIDENCE_GENERATION_BLOCKED',
+    'evidence-generation-input.status', '検証済みのEvidence入力が必要です。');
+  return {
+    evidenceGenerationInputId: input.evidenceGenerationInputId,
+    generationInputRef: generationRef(input),
+    evidenceAgentInput: structuredClone(input.evidenceAgentInput),
+    outputContract: { name: 'evidence-generation-draft', schemaVersion: '1.0',
+      jsonSchema: structuredClone(EVIDENCE_GENERATION_DRAFT_SCHEMA) },
+  };
+}
+
+// 初回生成境界でのみ本文のUTF-8 bytesを封印する。外部Packageの不正ハッシュを修復しない。
+export function materializeEvidenceGenerationDraft(draft) {
+  validateDocument('evidence-import-package', draft);
+  const evidencePackage = structuredClone(draft);
+  for (const [index, artifact] of evidencePackage.evidenceArtifacts.entries()) {
+    const field = `evidence-generation-draft.evidenceArtifacts[${index}]`;
+    if (Object.hasOwn(artifact, 'integrity')) throw new ValidationError('UNKNOWN_FIELD',
+      `${field}.integrity`, '自動生成draftにintegrityを指定しないでください。Backendが本文から計算します。');
+    if (typeof artifact.publicContent !== 'string') throw new ValidationError('INVALID_TYPE',
+      `${field}.publicContent`, '証拠本文は文字列で指定してください。');
+    artifact.integrity = { algorithm: 'SHA-256', publicContentDigest: contentDigest(artifact.publicContent) };
+    validateEvidenceArtifact(artifact);
+  }
+  evidencePackage.contradictions.forEach(item => validateDocument('contradiction', item));
+  evidencePackage.exonerations.forEach(item => validateDocument('exoneration', item));
+  return evidencePackage;
 }
 
 function resultBase(input, scenarioId = null, attackGraphRef = null) {

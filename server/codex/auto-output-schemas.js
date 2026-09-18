@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { EVIDENCE_GENERATION_DRAFT_SCHEMA } from '../generation/evidence-interface.js';
 
 async function loadSchema(name) {
   const value = await readFile(new URL(`../../schemas/${name}.schema.json`, import.meta.url), 'utf8');
@@ -39,6 +40,9 @@ export const AUTO_CODEX_OUTPUT_SCHEMAS = Object.freeze({
   }),
   evidence: Object.freeze({
     name: 'evidence-import-package', canonicalSchema: evidenceOutputSchema,
+  }),
+  evidenceDraft: Object.freeze({
+    name: 'evidence-generation-draft', canonicalSchema: structuredClone(EVIDENCE_GENERATION_DRAFT_SCHEMA),
   }),
   makotomaru: Object.freeze({
     name: 'makotomaru-result', canonicalSchema: makotomaruOutputSchema,
