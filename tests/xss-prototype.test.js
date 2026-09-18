@@ -1,16 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { once } from 'node:events';
 import { buildXssPrototype, createXssPrototypeGame, actXssPrototype,
   evaluateXssPrototype, xssPrototypePlayerView } from '../server/xss-prototype.js';
 import { publicXssNetworks, xssTechnicalSelection } from '../server/xss-networks.js';
 import { buildCandidates } from '../server/generation/candidate-builder.js';
 import { loadCatalog } from '../server/generation/catalog.js';
-import { createAuthorSession, prepareXssScenario, importAuthorScenario,
-  importAuthorReview, buildAuthorXssPrototype } from '../server/author-service.js';
-import { verifiedScenarioFixture, semanticReview } from './helpers/verified-scenario.js';
-import { createAppServer } from '../server/server.js';
 
 const verified = { status: 'VERIFIED' };
 
@@ -74,43 +69,12 @@ test('Network SVG 4種類とoriginal visual assetが存在しscriptを含まな�
       new URL(`../public/assets/${path}`, import.meta.url), 'utf8'), /<svg/);
 });
 
-test('Author通常画面はXSS・Network Card・Difficultyだけを表示しJSON入力をDeveloper Modeへ分離する', async () => {
+test('Author通常画面はXSS・Network Card・Difficulty・生成ボタンだけを入力にする', async () => {
   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
   const script = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
-  assert.match(html, /XSS \/ Network \/ Difficulty/);
-  assert.match(html, /prototype-network-list/); assert.match(html, /prototype-difficulty-list/);
-  assert.match(html, /Developer Mode/); assert.match(html, /build-xss-prototype/);
-  assert.match(script, /networkId.*prototype-network/s);
-  assert.match(script, /difficulty.*prototype-difficulty/s);
-  assert.match(script, /\[0, 1, 2, 3, 7\]/);
-});
-
-test('Scenario生成はXSS・Network・Difficulty・technicalConstraintsを明示する', () => {
-  const session = createAuthorSession();
-  const view = prepareXssScenario(session, { networkId: 'network-c', difficulty: 2 });
-  assert.equal(view.scenarioOptions.length, 1);
-  assert.equal(view.prototypeGenerationBrief.attackType, 'reflected_xss');
-  assert.equal(view.prototypeGenerationBrief.selectedNetworkId, 'network-c');
-  assert.equal(view.prototypeGenerationBrief.difficulty, 2);
-  assert.equal(view.prototypeGenerationBrief.technicalConstraints.simulationOnly, true);
-});
-
-test('Independent Verification失敗中はBuildせずVERIFIED後だけBuildする', () => {
-  const session = createAuthorSession();
-  let view = prepareXssScenario(session, { networkId: 'network-b', difficulty: 1 });
-  view = buildAuthorXssPrototype(session);
-  assert.equal(view.currentState, 'BLOCKED');
-
-  const second = createAuthorSession(); prepareXssScenario(second,
-    { networkId: 'network-b', difficulty: 1 });
-  const option = second.scenarioOptions[0];
-  const fixture = verifiedScenarioFixture(option.generationInput);
-  importAuthorScenario(second, { optionId: option.optionId,
-    scenarioPackage: fixture.scenarioPackage });
-  importAuthorReview(second, semanticReview(second.verificationInput));
-  view = buildAuthorXssPrototype(second);
-  assert.equal(view.currentState, 'ACCEPTED');
-  assert.equal(view.prototypeEvaluation.status, 'ACCEPTED');
+  assert.match(html, /XSS/); assert.match(html, /network-list/); assert.match(html, /difficulty-list/);
+  assert.match(html, /ゲームを生成/); assert.doesNotMatch(html, /textarea|Developer Mode|Import/);
+  assert.match(script, /networkId/); assert.match(script, /difficulty/);
 });
 
 test('Introは事件・疑われた理由・罪状だけを公開しGround Truthを漏らさない', () => {
@@ -194,47 +158,4 @@ test('XSS調査実装はshell・filesystem・network accessを呼び出さない
   assert.doesNotMatch(source, /node:child_process|exec\(|spawn\(|node:fs|node:http|node:https/);
   const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.doesNotMatch(app, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
-});
-
-test('Author HTTP APIからXSSゲームをBuildしScene APIでmulti-round ACQUITTEDへ進む', async t => {
-  const server = createAppServer({ mode: 'AUTHOR' }); server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const post = async (path, body, token) => {
-    const response = await fetch(base + path, { method: 'POST', headers: {
-      'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify(body) });
-    return { response, data: await response.json() };
-  };
-  let result = await post('/api/author/start', {}); const authorToken = result.data.token;
-  assert.equal(result.data.bootstrap.prototype.networks.length, 4);
-  result = await post('/api/author/prepare-scenario',
-    { networkId: 'network-b', difficulty: 2 }, authorToken);
-  const option = result.data.author.scenarioOptions[0];
-  const fixture = verifiedScenarioFixture(option.generationInput);
-  result = await post('/api/author/import-scenario', { optionId: option.optionId,
-    scenarioPackage: fixture.scenarioPackage }, authorToken);
-  result = await post('/api/author/import-review',
-    { semanticReview: semanticReview(result.data.author.verificationInput) }, authorToken);
-  assert.equal(result.data.author.verificationResult.status, 'VERIFIED');
-  result = await post('/api/author/build-xss-prototype', {}, authorToken);
-  assert.equal(result.data.author.prototypeEvaluation.status, 'ACCEPTED');
-  const playId = new URL(`http://localhost${result.data.author.playUrl}`).searchParams.get('game');
-  result = await post('/api/start', { playId }); const playerToken = result.data.token;
-  const views = [result.data.game];
-  for (const body of [{ action: 'begin' }, ...Array.from({ length: 4 }, () => ({ action: 'next-dialogue' })),
-    { action: 'investigate', choiceId: 'choice_1_encoded' }, { action: 'court' },
-    { action: 'present-evidence', evidenceId: 'xss_evidence_1' }, { action: 'next-round' },
-    { action: 'investigate', choiceId: 'choice_2_encoded' }, { action: 'court' },
-    { action: 'present-evidence', evidenceId: 'xss_evidence_2' }, { action: 'finish' }]) {
-    result = await post('/api/action', body, playerToken);
-    assert.equal(result.response.status, 200, JSON.stringify(result.data)); views.push(result.data.game);
-  }
-  assert.equal(result.data.game.currentScene, 'ACQUITTED');
-  assert.equal(result.data.game.gameClear, 'GAME CLEAR');
-  assert.doesNotMatch(JSON.stringify(views),
-    /groundTruth|correctEvidenceIds|classification|verificationStatus|fingerprint/);
-  assert.equal((await fetch(base + '/assets/networks/network-b.svg')).status, 200);
-  assert.equal((await fetch(base + '/visual-assets.js')).status, 200);
 });

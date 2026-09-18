@@ -1,192 +1,131 @@
 # セキュリティインシデント調査ゲーム
 
-セキュリティインシデントを題材に、被告人に不利な主張を技術証拠で検証し、法廷で矛盾を指摘するローカルWebゲームです。探偵パートでは調査対象と調査方法を選び、合成データ上の調査結果からEvidenceを発見・取得します。HTML、CSS、JavaScript、Node.js 22以上で動作し、外部依存ライブラリはありません。
-
-現在の通常制作フローはXSSプロトタイプです。攻撃は`reflected_xss`に固定し、4種類の固定Networkと難易度★1～3だけをGUIで選択します。Network JSON、Scenario Context JSON、Game Progression JSONは通常画面では入力しません。Scenarioと独立Verification Reviewは利用者自身のCodexで生成し、Backendは既存SchemaとValidatorで検証します。従来のPhase 1～12制作パイプラインはDeveloper Modeとして維持しています。
-
-## MVPの起動と利用手順
-
-1. WSLでリポジトリへ移動します。
-
-   ```sh
-   cd /home/shu/MWSCup
-   ```
-
-2. サーバーを起動します。`npm start`は制作向け`AUTHOR` modeで`127.0.0.1:3000`を使用します。
-
-   ```sh
-   npm start
-   ```
-
-3. Windowsのブラウザで`http://localhost:3000`を開きます。制作画面の直接URLは`http://localhost:3000/author`です。
-4. 固定AttackのXSSを確認し、Network A～DとDifficulty ★1～3を選んで「Scenario生成準備」を押します。
-5. 表示されたScenario PromptとGeneration Inputを同じCodex作業へ渡します。入力には`attackType`、`selectedNetworkId`、固定Network定義、`difficulty`、技術制約、既存Schema準拠のScenario Generation Inputが含まれます。
-6. Codexが返したScenario Import Package JSONを貼り付けるか、JSON内容を保持する`.json`／`.txt`ファイルから読み込みます。
-7. 表示されたVerification PromptとVerification Inputを、Scenario生成とは分離したCodex作業へ渡します。返却されたScenario Verification Review JSONをImportし、`VERIFIED`を確認します。
-8. `VERIFIED`後に「XSSゲームをBuildしてEvaluation」を押します。XSS Investigation Agentが固定NetworkとDifficultyから1～3段の合成Evidence Chainを構成します。
-9. `ACCEPTED`になった場合だけ「ゲームをプレイ」が有効になります。
-
-Prompt/Inputは画面からコピーでき、Generation InputはJSONファイルとして保存できます。ブラウザやBackendがCodex、OpenAI、その他のLLM APIを自動実行することはありません。
-
-制作セッションと生成ゲームはNode.jsのメモリだけに保存します。制作セッションは最終操作から4時間、プレイヤーセッションは1時間で失効し、サーバー再起動ですべて失われます。
-
-## 制作フローとゲート
+セキュリティインシデントを題材に、技術証拠を調査し、被告人への主張の矛盾を法廷で示すローカル Web ゲームです。通常の制作画面は AUTO_CODEX 専用です。利用者は XSS、Network A～D、難易度★1～3を確認・選択し、「ゲームを生成」を1回押します。Prompt、Schema、JSON のコピーや Import はありません。
 
 ```text
-XSS + Fixed Network A-D + Difficulty 1-3
-→ Candidate Builder → Combination Validator → Attack Graph
-→ WAITING_EXTERNAL_SCENARIO → Scenario Import
-→ WAITING_EXTERNAL_REVIEW → Independent Verification → VERIFIED
-→ XSS Investigation Agent → Synthetic Evidence Chain
-→ XSS Prototype Evaluation → ACCEPTED → Play
+Attack + Network + Difficulty
+→ Codex CLI availability/auth check
+→ Scenario Generation
+→ Scenario Schema / Reference / Technical Validation
+→ Independent Verification (separate invocation)
+→ Automatic Revision (最大3回)
+→ Evidence Generation / Validation
+→ XSS Investigation
+→ Deterministic Dialogue Conversion
+→ Game Build
+→ Evaluation
+→ GAME READY
 ```
 
-Developer Modeでは、従来のEvidence Import、Game Progression GUI Builder、Game Case、Game Make、Evaluation、Orchestratorの経路も引き続き利用できます。既存Contractと状態の意味は変更していません。
+## 前提と起動
 
-- Scenario Importの`VALID`と独立Verificationの`VERIFIED`は別状態です。Scenario Generator自身の自己評価をReviewとして利用できません。
-- 複数のCandidate / Attack Graphはすべて候補として表示し、制作ユーザがCodexへ渡した1件を明示選択します。
-- `UNKNOWN`や`UNSATISFIED`を成立済みにせず、成立するCandidateがない場合はPromptを生成しません。
-- Evidence Import後のGame Progression PlanはGUIで選択した既存IDへの参照だけからFrontendが構成します。Evidence本文からInitial Court配置、Objection rule、Investigation Target／Action／Discovery Rule、retry上限を推測しません。生成JSONは閉じた「詳細設定：JSONを表示」で開発・研究用に確認できますが、直接編集しません。
-- `PLAYER_OBTAINABLE`なInvestigation Evidenceには明示的なDiscovery Ruleが必要です。開始Targetから到達不能、prerequisite循環、存在しないNetwork／Scenario／Evidence参照がある場合はGame Case変換前に停止します。
-- 途中のゲートが失敗した場合、後続成果物は生成せず、上流を変更した場合は下流成果物を再利用しません。
+- Node.js 22以上
+- Codex CLI
+- 各利用者が自分のPC上の Codex CLI へ自分の ChatGPT アカウントでログイン済みであること
 
-## XSSプロトタイプのゲーム進行
-
-通常制作で生成されるXSSプロトタイプの進行は次のとおりです。
-
-```text
-INTRO → INITIAL_COURT → INVESTIGATION
-      → Synthetic Log → grep風4択 → Evidence取得
-      → COURT_EVIDENCE_ROUND
-正解Evidence → OBJECTION → 次RoundまたはACQUITTED → GAME CLEAR
-不正解Evidence → 同じRoundのINVESTIGATION
-```
-
-Difficulty ★1／★2／★3は、それぞれ必要EvidenceとCourt Roundが1／2／3件です。grep風の選択肢は表示文字列を使う内部Simulationであり、実際のgrep、shell、ファイル、OS、ネットワーク、ブラウザ履歴へアクセスしません。ログもすべて合成データです。
-
-従来のGenerated Game進行はDeveloper Mode向けに維持しています。
-
-```text
-TITLE → INITIAL_COURT → INVESTIGATION
-      → Target → Action → Discovery → Collection
-      → RETRIAL_COURT → OBJECTION
-OBJECTION成功 → ACQUITTED
-OBJECTION失敗 → GUILTY_RETRY → INVESTIGATION
-試行上限到達 → BLOCKED
-```
-
-1. タイトルで事件を開始する。
-2. 第1法廷で検察側の主張、提示証拠、暫定判断を確認する。
-3. 探偵パートで現在利用可能なTargetを選ぶ。
-4. Targetで利用可能なActionを実行し、公開調査結果を確認する。
-5. Discovery Ruleの条件を満たして発見したEvidenceを証拠品として取得する。
-6. 第2法廷で矛盾するstatementと取得済みEvidenceを1件ずつ選ぶ。
-7. 「異議あり！！」を実行する。
-8. 正解なら無罪、不正解なら探偵パートへ戻る。Planで明示された試行上限に達すると停止する。
-
-Evidence状態は`UNKNOWN`、`DISCOVERED`、`COLLECTED`を分離します。`UNKNOWN`のタイトルと本文はPlayer応答へ出さず、未発見Evidence IDを直接`collect`しても取得できません。法廷で提示できるのは`COLLECTED`だけです。
-
-第1法廷の人物帰属は`ALLEGATION_ONLY`です。アカウント、端末、IP等の記録を、操作人物の確定事実として表示しません。
-
-## 実行モード
-
-通常のMVP制作は環境変数なしの`AUTHOR` modeを使用します。
-
-既に作成したPhase 8.1の`READY` Game Case Result JSONを直接確認する場合は、workspace内の非公開パスを指定します。
+アプリは Codex CLI が現在使用している保存済み認証をそのまま利用します。ChatGPT のログイン画面は実装せず、email、password、access token、refresh token、credential file、account ID を読み取り・保存・表示しません。アカウントを切り替えた場合も、Codex CLI のログインが正常ならコード変更は不要です。
 
 ```sh
-GAME_MODE=GENERATED GAME_CASE_PATH=private/game-case-result.json npm start
+cd /home/shu/MWSCup
+codex login status
+npm start
 ```
 
-Phase 1回帰確認だけに固定fixtureを使用します。
+ブラウザで `http://localhost:3000` を開きます。`npm start` は `AUTHOR` mode で `127.0.0.1:3000` を使用します。
 
-```sh
-GAME_MODE=FIXTURE npm start
+Codex CLI が存在しない、または未ログインの場合は生成を開始せず、「Codex CLIでChatGPTアカウントへログインしてください」と表示します。アプリから `login`、`logout`、アカウント切替、credential 変更は行いません。
+
+## AUTO_CODEX の状態
+
+`IDLE`、`CHECKING_CODEX`、`GENERATING_SCENARIO`、`VALIDATING_SCENARIO`、`REVIEWING_SCENARIO`、`REVISING_SCENARIO`、`GENERATING_EVIDENCE`、`BUILDING_INVESTIGATION`、`BUILDING_DIALOGUE`、`BUILDING_GAME`、`EVALUATING`、`READY`、`FAILED`、`CANCELLED` を使用します。
+
+通常画面は工程と進捗だけを表示します。「詳細」を開いた場合だけ `phase`、`attempt`、`errorCode`、`field`、`reason`、`correctionHint` を表示します。Ground Truth、Prompt、内部 JSON、正解 ID は表示しません。
+
+同一ローカルサーバでは1生成だけを許可します。生成中の再実行は `GENERATION_LOCKED` で拒否します。「生成を中止」は実行中の Codex subprocess を停止し、途中成果物を Player へ公開しません。Codex timeout は `CODEX_GENERATION_TIMEOUT_MS`（既定180000ms）で変更できます。
+
+## CodexRunner
+
+Backend は `child_process.spawn` で次の公式 CLI interfaceだけを使用します。
+
+```text
+codex --version
+codex login status
+codex --ask-for-approval never exec --ephemeral --ignore-user-config --ignore-rules
+           --sandbox read-only
+           --output-schema <schema> --color never -
 ```
 
-Generated ModeまたはAuthor Modeで不正・未完成な成果物をdummy fixtureへフォールバックしません。`public/`配下のJSONはGenerated Modeの入力に指定できません。
+- `shell: false`。command と args を分離する。
+- Prompt は stdin へ渡す。
+- stdout の単一 JSON objectだけを採用する。
+- stderr、exit code、timeout、AbortSignal、出力サイズを検査する。
+- Scenario、Review、Evidence は会話を共有しない独立した `codex exec --ephemeral` invocationとする。
+- LLM出力に `rm`、`curl`、`bash`、`node` 等が含まれても、データとして Validator へ渡すだけで実行しない。
+- 入力中の HTML、URL、ログ、コード、説明は `<UNTRUSTED_INPUT_DATA>` 境界内の未信頼データとして渡す。
 
-## APIと公開境界
+## Validation と Revision
 
-Author APIは`AUTHOR` modeだけで公開します。
+Scenario出力は既存 `scenario-import-package` Contractに対して JSON parse、Schema、参照、技術境界を検査します。Validation失敗と `NEEDS_REVISION` は machine-readable feedbackへ変換して Scenario Generatorへ戻します。
+
+Independent ReviewerはScenario Generatorとは別の Codex invocationです。Reviewerには Scenario Verification Input と Reviewer Promptだけを渡します。Review Schema不正時は別 invocationでJSON形式・型・required fieldだけを1回 repairし、技術的事実は追加しません。
+
+`MISSING`、`REFERENCE`、`SCHEMA`、`EVIDENCE_*` 等は `REPAIRABLE_BLOCKED`、CLI不能、内部状態破損、成立不能な技術契約、最大試行超過等は `HARD_BLOCKED` として扱います。Scenario試行回数は既定3回です。
+
+`VERIFIED` 後だけ Evidence Generationへ進みます。Evidenceは既存 Evidence Validatorで由来、Ground Truth参照、Contradiction、Exoneration、公開境界を検査します。難易度1～3に対応して、関連する1～3段の Investigation/Evidence Chainを構成します。
+
+Dialogueは固定の `JUDGE`、`PROSECUTOR`、`DEFENSE` Templateと、検証済みScenario・Evidenceから抽出した変数で決定論的に構築します。
+
+Evaluationが `ACCEPTED` の場合だけ推測困難な Play URLを発行します。EvaluationはEvidence数、chain到達性、4択調査、wrong Evidence retry、正解Round進行、最終 `ACQUITTED`、内部情報漏えいを実プレイ相当の経路で確認します。
+
+## API
+
+Author APIは `AUTHOR` modeだけで公開します。
 
 - `POST /api/author/start`
-- `POST /api/author/prepare-scenario`
-- `POST /api/author/import-scenario`
-- `POST /api/author/import-review`
-- `POST /api/author/prepare-evidence`
-- `POST /api/author/import-evidence`
-- `POST /api/author/preview-progression`
-- `POST /api/author/build`
-- `POST /api/author/build-xss-prototype`
+- `POST /api/author/generate`
+- `POST /api/author/cancel`
 - `GET /api/author/status`
 
-Player APIは既存の`POST /api/start`と`POST /api/action`を維持します。Author ModeのPlayer開始には、`ACCEPTED`後に発行された推測困難なPlay URLの`playId`が必要です。Author tokenとPlayer tokenは別セッションで、相互利用できません。
+旧 `prepare-scenario`、Scenario/Review/Evidence Import、Game Progression入力、MANUAL/AUTO切替 API は削除済みです。
 
-Investigation Actionは既存`POST /api/action`へ次の形で送ります。実OS、ファイル、ネットワーク、外部コマンドは操作せず、Internal Game CaseのDiscovery Ruleだけを評価します。
+Player APIは `POST /api/start` と `POST /api/action` です。Player開始には `READY` 後の `playId` が必要です。Author token と Player token は分離されています。
 
-```json
-{
-  "action": "investigate",
-  "targetId": "target_web_server",
-  "investigationActionId": "action_audit_log"
-}
-```
+制作セッション、成果物、ゲームセッションはメモリ上だけに保持します。サーバー再起動で失われます。
 
-Player応答と画面は許可済みの公開投影だけから構築します。Ground Truth、Internal Judgment、正解対応、Discovery Rule、prerequisite、正解Target／Action、`requiredForCourtIds`、Contradiction／Exoneration内部参照、Attack Graph、provenance、sourceRefs、fingerprint、Verification Result、Validation Feedbackを返しません。Target名、Action名、Result、Evidenceを含む文字列は`textContent`で描画し、HTML、script、URL、command、prompt風の文章を実行しません。
+## セキュリティ境界
 
-Author JSON requestとファイル入力は2 MiBに制限し、Schema、型、未知field、危険なprototype keyを検証します。Player APIのrequest上限は4 KiBです。同一Originとlocalhost Hostだけを受理します。
-
-## 実装済みパイプライン
-
-| Phase | 実装 |
-| --- | --- |
-| 2 | Attack Definition、Network、Scenario Context、3値評価、Combination Validator |
-| 3 | 因果根拠付きAttack Graph。一本道、分岐、合流、並列、独立nodeを保持 |
-| 4 | Target Assignment / Candidate Builder。静的domain縮約、全候補探索、100,000状態上限 |
-| 5A / 5B | Scenario Contract、Provider非依存の外部Scenario生成、Import、Feedback |
-| 6 | Attack Graph再構築を含むDeterministic Verificationと独立意味レビュー |
-| 7 | 外部Evidence生成、Evidence Artifact／Set、Contradiction、Exoneration検証 |
-| 8 / 8.1 | Internal／Public Game Case変換、Judgment、明示Game Progression Plan |
-| 9 | Generated Game Loader、既存UI接続、Backend Judgment、retry、Game Make Result |
-| 10 | 正常・失敗・上限経路、解答可能性、情報漏えい、操作性の独立Evaluation |
-| 11 | ゲート順序、主要状態、外部待機、fingerprint、差し戻し、下流無効化を管理するOrchestrator |
-| 12 | Target + ActionによるEvidence Discovery、prerequisite／unlock、UNKNOWN／DISCOVERED／COLLECTED、到達可能性検査、Author／Player UI |
-| XSS Prototype | XSS固定、Network A～D、Difficulty、独立Verification、Synthetic Log、4択調査、1～3 Evidence Chain、複数Court Round、SVG/CSS Scene UI |
-| MVP | 通常5画面Wizard。Developer Modeには従来8画面WizardとGame Progression GUI Builderを維持 |
-
-データ形式、状態、公開境界の詳細は[生成データ仕様](docs/generation-data.md)を参照してください。
+- 実ネットワーク、実ログ、実ファイル、第三者システムへ攻撃・scan・HTTPアクセスを行わない。
+- Investigationのgrep風4択は合成データ上の表示であり、コマンドを実行しない。
+- Player投影へGround Truth、Judgment、Verification、正解対応、provenance、内部参照を含めない。
+- 文字列は `textContent` で描画し、HTMLやscriptとして解釈しない。
+- localhost Host、same-origin、request size、prototype pollution keyをBackendで検査する。
+- 開発ログは `generationId`、`phase`、`attempt`、`duration`、`result`だけを記録し、credentialやアカウント情報を記録しない。
 
 ## テスト
+
+Unit/E2Eでは実Codex CLIを呼ばず、`CodexRunner` をmockします。
 
 ```sh
 npm test
 git diff --check
 ```
 
-テストにはPhase 1からの回帰、全JSON Schema、正常・異常E2E、Author API、Generated HTTP playthrough、セッション分離、公開境界、AGENTS.md Complianceを含みます。実LLM APIや第三者システムへ通信しません。
+テストはCodex availability、account非依存、safe spawn、malformed JSON、Scenario Validation、独立Review、Review repair、revision loop、Evidence、Investigation、Dialogue、Game Build、Evaluation、lock、cancel、timeout、情報漏えい、prompt injection境界を含みます。
 
-## XSSプロトタイプのブラウザ確認
+実Codex smoke testは、unit test成功後かつ現在の `codex login status` が成功する場合だけ、XSS + Network A + ★1を1回実行します。ログイン、ログアウト、アカウント切替、credential変更は自動実行しません。
 
-1. `npm start`を実行し、`http://localhost:3000/author`を開きます。
-2. Network Card A～DとDifficulty ★1～3を選択し、Network JSONが通常表示されないことを確認します。
-3. Scenario ImportとIndependent Verificationを行い、`VERIFIED`にします。差し戻し時はScenarioを再生成できます。
-4. XSSゲームをBuildし、`ACCEPTED`後に「ゲームをプレイ」を開きます。
-5. INTRO、INITIAL_COURT、INVESTIGATION、COURT_EVIDENCE_ROUNDのうち現在Sceneだけが表示されることを確認します。
-6. Network図の強調対象、Synthetic Log、4択を確認します。正解調査でEvidenceが取得され、不正解調査では正解情報が表示されないことを確認します。
-7. Courtで誤ったEvidenceを選ぶと「異議あり」が出ず同じRoundへ戻り、正しいEvidenceだけで異議演出が出ることを確認します。
-8. 選択Difficultyと同数のRound後、`ACQUITTED`と`GAME CLEAR`を確認します。
+```sh
+npm run smoke:codex
+```
 
-Action実行はすべてゲーム内シミュレーションです。ブラウザやBackendがshell、実ファイル、SSH、HTTP、実ログ、パケット取得を実行することはありません。
+## その他の実行モード
 
-## 現在残る未実装項目
+既存 `Game Case Result` をPlayerで確認する場合だけ次を使用できます。
 
-- 制作セッション、生成成果物、ゲームセッションのDB永続保存
-- ユーザ認証、アカウント、権限、プロジェクト共有、共同編集
-- 外部Codexとの搬送やProvider API呼出しの自動化
-- Network構成図用の視覚エディタ
-- 決定論的検査では判定できない教材文章の最終的な人間レビュー
-- 本番向けクラウド配布、秘密管理、監査ログ、運用監視
-- Unity対応
+```sh
+GAME_MODE=GENERATED GAME_CASE_PATH=private/game-case-result.json npm start
+```
 
-Fixture Modeは回帰テスト専用です。Author／Generated Modeと暗黙に混在しません。
+回帰fixtureは `GAME_MODE=FIXTURE npm start` です。これらはAUTO Author modeと混在しません。
+
+既知の制限は、メモリ保存のみ、XSS固定、Network A～D固定、ローカル単一生成、最終的な人間レビューを代替しないことです。

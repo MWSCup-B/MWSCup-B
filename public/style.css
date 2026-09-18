@@ -70,6 +70,12 @@ code { font-family: ui-monospace, monospace; }
 .difficulty-options { display: flex; gap: .8rem; flex-wrap: wrap; }
 .difficulty-option { border: 2px solid #ccd7df; border-radius: .7rem; padding: .8rem 1.2rem; background: #fff; cursor: pointer; }
 .difficulty-option:has(input:checked) { border-color: #a8761f; background: #fff5d8; }
+.generation-progress { list-style: none; padding: 0; display: grid; gap: .55rem; }
+.generation-progress li { padding: .65rem .8rem; border-left: .4rem solid #9aa8b1; background: #f1f4f6; }
+.generation-progress li.complete { border-color: #23704c; color: #185238; }
+.generation-progress li.running { border-color: #b87b16; background: #fff5d8; }
+.detail-list article p { margin: .25rem 0; }
+#form-error, #failure-message { color: #a21b1b; }
 .prototype-scene { min-height: min(78vh, 900px); max-width: 1500px; border-radius: 1rem; padding: clamp(1rem, 2.5vw, 2.5rem); background-size: cover; background-position: center; color: #f5f8fa; overflow: hidden; box-shadow: 0 1rem 3rem #07111d55; }
 .scene-enter { animation: scene-fade .32s ease-out both; }
 @keyframes scene-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

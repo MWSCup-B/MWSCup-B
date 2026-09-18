@@ -42,6 +42,7 @@ JSONオブジェクトを1件だけ出力してください。説明文、Markdo
 
 - EXONERATION_PROOFは単一のアカウント、端末、IP情報だけから人物を断定しません。
 - defendant役のCharacter、既存Ground Truth fact、2件以上の同一Scenario内Artifactへ追跡可能にします。
+- Contradictionの`conflictingEvidenceIds`は、対応するExonerationの`supportingEvidenceIds`にも含め、法廷判定を同じ検証済み技術Evidenceから再現可能にします。
 - 入力にない人物同一性や実行者の断定を生成しません。
 
 ## 出力前確認

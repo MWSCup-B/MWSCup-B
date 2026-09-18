@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "smoke:codex": "node scripts/real-codex-smoke.js"
   },
   "engines": { "node": ">=22" }
 }

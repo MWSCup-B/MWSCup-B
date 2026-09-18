@@ -71,7 +71,8 @@ function publicEvidence(item) {
     sourceName: item.sourceName };
 }
 
-export function buildXssPrototype({ selection, verificationResult }) {
+export function buildXssPrototype({ selection, verificationResult, scenarioPackage = null,
+  evidenceSet = null }) {
   if (!selection || selection.attackType !== 'reflected_xss') throw new GameError(
     'XSS_SELECTION_REQUIRED', 'selection.attackType', 'XSSプロトタイプはreflected_xssのみ利用できます。');
   if (verificationResult?.status !== 'VERIFIED') throw new GameError(
@@ -80,18 +81,27 @@ export function buildXssPrototype({ selection, verificationResult }) {
   if (!network || !Number.isInteger(selection.difficulty) || selection.difficulty < 1
     || selection.difficulty > 3) throw new GameError('INVALID_XSS_SELECTION', 'selection',
     '固定Network A～Dと難易度1～3を選択してください。');
-  const variables = CASE_VARIABLES[network.networkId];
+  const baseVariables = CASE_VARIABLES[network.networkId];
+  const firstTimestamp = scenarioPackage?.timeline?.narrativeTimestamps?.[0]?.displayTimestamp;
+  const generatedEvidence = evidenceSet?.evidenceArtifacts ?? [];
+  if (evidenceSet && generatedEvidence.length < selection.difficulty) throw new GameError(
+    'EVIDENCE_CHAIN_INCOMPLETE', 'evidenceSet.evidenceArtifacts',
+    '難易度に必要なEvidence Chainが不足しています。', 409);
+  const variables = { ...baseVariables,
+    ...(firstTimestamp ? { incidentTime: firstTimestamp } : {}),
+    ...(generatedEvidence[0]?.title
+      ? { prosecutionEvidence: generatedEvidence[0].title } : {}) };
   validateDocument('xss-prototype-selection', { schemaVersion: '1.0',
     attackType: selection.attackType, selectedNetworkId: selection.selectedNetworkId,
     difficulty: selection.difficulty, requiredEvidenceCount: selection.requiredEvidenceCount });
   const evidenceChain = network.investigation.slice(0, selection.difficulty).map(([nodeId, sourceName], index) => ({
     evidenceId: `xss_evidence_${index + 1}`, round: index + 1, nodeId, sourceName,
-    title: `${sourceName}の調査記録`,
-    publicContent: index === 0
+    title: generatedEvidence[index]?.title ?? `${sourceName}の調査記録`,
+    publicContent: generatedEvidence[index]?.publicContent ?? (index === 0
       ? 'エンコードされたスクリプト入力を含む検索リクエストが記録されています。'
       : index === 1
         ? '同じリクエスト系列が外部経路から中継された時刻情報が記録されています。'
-        : 'ブラウザ側または集約ログの時系列に、外部リンクからの遷移が記録されています。',
+        : 'ブラウザ側または集約ログの時系列に、外部リンクからの遷移が記録されています。'),
     technicalCounterArgument: variables.counter[index], choices: choices(index),
     syntheticLog: LOG_LINES.map((line, lineIndex) => `${String(lineIndex + 1).padStart(2, '0')} ${line}`),
   }));
@@ -103,6 +113,8 @@ export function buildXssPrototype({ selection, verificationResult }) {
     assets: { characters: CHARACTER_ASSETS, backgrounds: BACKGROUND_ASSETS,
       effect: { objection: 'effect_objection' } },
     internal: { verificationStatus: verificationResult.status,
+      sourceScenarioId: scenarioPackage?.scenarioDraft?.scenarioId ?? null,
+      sourceEvidenceSetId: evidenceSet?.evidenceSetId ?? null,
       simulationOnly: true, correctEvidenceIds: evidenceChain.map(item => item.evidenceId) },
   };
 }

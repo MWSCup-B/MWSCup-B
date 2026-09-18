@@ -6,10 +6,10 @@ import { extname, relative, resolve } from 'node:path';
 import { createGame, playerView, act, GameError } from './game.js';
 import { buildGeneratedGame } from './generation/game-make.js';
 import { actGenerated, createGeneratedGame, generatedPlayerView } from './generated-game.js';
-import { authorBootstrap, authorView, buildAuthorGame, createAuthorSession,
-  buildAuthorXssPrototype,
-  importAuthorEvidence, importAuthorReview, importAuthorScenario, prepareEvidence,
-  prepareScenario, prepareXssScenario, previewAuthorProgression } from './author-service.js';
+import { AutoGenerationManager, autoAuthorBootstrap, autoAuthorView,
+  createAutoAuthorSession } from './auto-generation-service.js';
+import { CodexRunner } from './codex/codex-runner.js';
+import { CodexJsonRunner } from './codex/codex-json-runner.js';
 import { actXssPrototype, createXssPrototypeGame, xssPrototypePlayerView }
   from './xss-prototype.js';
 
@@ -19,7 +19,6 @@ const assets = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/author', ['author.html', 'text/html; charset=utf-8']],
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
-  ['/author-builder.js', ['author-builder.js', 'text/javascript; charset=utf-8']],
   ['/visual-assets.js', ['visual-assets.js', 'text/javascript; charset=utf-8']],
 ]);
 for (const path of [
@@ -43,7 +42,7 @@ const xssActionFields = new Map([
   ['present-evidence', ['action', 'evidenceId']], ['next-round', ['action']], ['finish', ['action']],
 ]);
 
-export function createAppServer({ mode, gameCaseResult = null } = {}) {
+export function createAppServer({ mode, gameCaseResult = null, codexRunner = null } = {}) {
   if (!['FIXTURE', 'GENERATED', 'AUTHOR'].includes(mode)) {
     throw new GameError('GAME_MODE_REQUIRED', 'mode',
       'AUTHOR、FIXTURE、GENERATEDのいずれかを明示してください。', 500);
@@ -53,6 +52,16 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
   const sessions = new Map();
   const authorSessions = new Map();
   const playableGames = new Map();
+  const autoManager = new AutoGenerationManager({ jsonRunner: codexRunner
+    ?? new CodexJsonRunner(new CodexRunner({ cwd: process.cwd() })) });
+  function publishIfReady(record, token) {
+    if (record.session.auto?.state !== 'READY' || !record.session.runtime) return;
+    if (!record.session.playId) {
+      const playId = randomBytes(24).toString('hex');
+      record.session.playId = playId;
+      playableGames.set(playId, { runtime: record.session.runtime, ownerToken: token });
+    }
+  }
   return createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -73,8 +82,7 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
       }
       const asset = assets.get(pathname);
       if (req.method === 'GET' && asset) {
-        if ((pathname === '/author' || pathname === '/author.js'
-          || pathname === '/author-builder.js') && mode !== 'AUTHOR') {
+        if ((pathname === '/author' || pathname === '/author.js') && mode !== 'AUTHOR') {
           throw new GameError('NOT_FOUND', 'path', '対象が見つかりません。', 404);
         }
         const data = await readFile(new URL(`../public/${asset[0]}`, import.meta.url));
@@ -87,8 +95,9 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
       cleanupAuthorSessions(authorSessions, playableGames, now);
       if (mode === 'AUTHOR' && pathname.startsWith('/api/author/')) {
         if (pathname === '/api/author/status' && req.method === 'GET') {
-          const { session } = requireAuthorSession(req, authorSessions);
-          sendJson(res, 200, { author: authorView(session) });
+          const { session, token, record } = requireAuthorSession(req, authorSessions);
+          publishIfReady(record, token);
+          sendJson(res, 200, { author: autoAuthorView(session) });
           return;
         }
         if (req.method !== 'POST') throw new GameError('NOT_FOUND', 'path',
@@ -99,58 +108,20 @@ export function createAppServer({ mode, gameCaseResult = null } = {}) {
           if (authorSessions.size >= 100) throw new GameError('AUTHOR_SESSION_LIMIT',
             'session', '制作セッション数が上限に達しました。', 503);
           const token = randomBytes(32).toString('hex');
-          const session = createAuthorSession();
+          const session = createAutoAuthorSession();
           authorSessions.set(token, { session, updatedAt: now });
-          sendJson(res, 200, { token, bootstrap: authorBootstrap(), author: authorView(session) });
+          sendJson(res, 200, { token, bootstrap: autoAuthorBootstrap(),
+            author: autoAuthorView(session) });
           return;
         }
         const { token, record } = requireAuthorSession(req, authorSessions);
         let author;
-        if (pathname === '/api/author/prepare-scenario') {
-          if (Object.hasOwn(body, 'networkId') || Object.hasOwn(body, 'difficulty')) {
-            validateFields(body, ['networkId', 'difficulty']);
-            author = prepareXssScenario(record.session, body);
-          } else {
-            validateFields(body, ['selectedAttackIds', 'network', 'scenarioContext']);
-            author = prepareScenario(record.session, body);
-          }
-        } else if (pathname === '/api/author/import-scenario') {
-          validateFields(body, ['optionId', 'scenarioPackage']);
-          author = importAuthorScenario(record.session, body);
-        } else if (pathname === '/api/author/import-review') {
-          validateFields(body, ['semanticReview']);
-          author = importAuthorReview(record.session, body.semanticReview);
-        } else if (pathname === '/api/author/prepare-evidence') {
-          validateFields(body, []); author = prepareEvidence(record.session);
-        } else if (pathname === '/api/author/import-evidence') {
-          validateFields(body, ['evidencePackage']);
-          author = importAuthorEvidence(record.session, body.evidencePackage);
-        } else if (pathname === '/api/author/preview-progression') {
-          validateFields(body, ['progressionPlan']);
-          const preview = previewAuthorProgression(record.session, body.progressionPlan);
-          record.updatedAt = now;
-          sendJson(res, 200, { preview, author: authorView(record.session) });
-          return;
-        } else if (pathname === '/api/author/build') {
-          validateFields(body, ['progressionPlan']);
+        if (pathname === '/api/author/generate') {
+          validateFields(body, ['networkId', 'difficulty']);
           if (record.session.playId) playableGames.delete(record.session.playId);
-          author = buildAuthorGame(record.session, body.progressionPlan);
-          if (record.session.workflow?.currentState === 'ACCEPTED' && record.session.runtime) {
-            const playId = randomBytes(24).toString('hex');
-            record.session.playId = playId;
-            playableGames.set(playId, { runtime: record.session.runtime, ownerToken: token });
-            author = authorView(record.session);
-          }
-        } else if (pathname === '/api/author/build-xss-prototype') {
-          validateFields(body, []);
-          if (record.session.playId) playableGames.delete(record.session.playId);
-          author = buildAuthorXssPrototype(record.session);
-          if (record.session.workflowState === 'ACCEPTED' && record.session.runtime) {
-            const playId = randomBytes(24).toString('hex');
-            record.session.playId = playId;
-            playableGames.set(playId, { runtime: record.session.runtime, ownerToken: token });
-            author = authorView(record.session);
-          }
+          author = autoManager.start(record.session, body);
+        } else if (pathname === '/api/author/cancel') {
+          validateFields(body, []); author = autoManager.cancel(record.session);
         } else throw new GameError('NOT_FOUND', 'path', '対象が見つかりません。', 404);
         record.updatedAt = now;
         sendJson(res, 200, { author });
