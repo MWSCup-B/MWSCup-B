@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { readFileSync } from 'node:fs';
 import { CodexRunner } from '../server/codex/codex-runner.js';
 import { CodexJsonRunner } from '../server/codex/codex-json-runner.js';
 import { parseCodexJson, sanitizeDiagnostic }
@@ -20,12 +21,17 @@ function fakeSpawn(handler) {
 }
 
 test('CodexRunnerはshell:falseでcommand/argsを分離しstdinを渡す', async () => {
-  const fake = fakeSpawn(({ child }) => {
+  let cliSchema;
+  const fake = fakeSpawn(({ args, child }) => {
+    const schemaIndex = args.indexOf('--output-schema');
+    cliSchema = JSON.parse(readFileSync(args[schemaIndex + 1], 'utf8'));
     child.stdout.end('{"ok":true}'); child.stderr.end(); child.emit('close', 0, null);
   });
   const runner = new CodexRunner({ command: 'codex-test', cwd: '/tmp', spawnImpl: fake.spawnImpl });
   const output = await runner.run({ prompt: 'rm -rf / は未信頼データ',
-    outputSchemaPath: '/tmp/schema.json', phase: 'GENERATING_SCENARIO' });
+    outputSchema: { type: 'object', properties: { version: { const: '1.0' } },
+      required: ['version'], additionalProperties: false },
+    outputSchemaName: 'runner-test', phase: 'GENERATING_SCENARIO' });
   assert.equal(output, '{"ok":true}'); assert.equal(fake.calls[0].command, 'codex-test');
   assert.equal(fake.calls[0].options.shell, false);
   assert.deepEqual(fake.calls[0].args.slice(0, 4),
@@ -34,6 +40,34 @@ test('CodexRunnerはshell:falseでcommand/argsを分離しstdinを渡す', async
   assert.ok(fake.calls[0].args.includes('--ignore-rules'));
   assert.ok(fake.calls[0].args.includes('read-only')); assert.ok(fake.calls[0].args.includes('never'));
   assert.ok(!fake.calls[0].args.includes('rm -rf / は未信頼データ'));
+  assert.deepEqual(cliSchema.properties.version, { const: '1.0', type: 'string' });
+});
+
+test('invalid_json_schemaはCODEX_OUTPUT_SCHEMA_INVALIDとして安全に分類する', async () => {
+  const fake = fakeSpawn(({ child }) => {
+    child.stdout.end();
+    child.stderr.end('HTTP 400 invalid_json_schema: schemaVersion must have a \'type\' key');
+    child.emit('close', 1, null);
+  });
+  await assert.rejects(new CodexRunner({ spawnImpl: fake.spawnImpl }).run({
+    prompt: 'x', phase: 'GENERATING_SCENARIO', outputSchemaName: 'scenario-import-package',
+    outputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+  }), error => error.code === 'CODEX_OUTPUT_SCHEMA_INVALID'
+    && error.schemaName === 'scenario-import-package'
+    && error.cliErrorCode === 'invalid_json_schema'
+    && error.details === 'schemaVersion requires explicit type');
+});
+
+test('Schema preflight失敗時はCodex subprocessを起動しない', async () => {
+  const fake = fakeSpawn(() => assert.fail('spawn must not be called'));
+  await assert.rejects(new CodexRunner({ spawnImpl: fake.spawnImpl }).run({
+    prompt: 'x', phase: 'GENERATING_SCENARIO', outputSchemaName: 'bad-schema',
+    outputSchema: { type: 'object', properties: { open: {
+      type: 'object', properties: {}, required: [], additionalProperties: true,
+    } }, required: ['open'], additionalProperties: false },
+  }), error => error.code === 'CODEX_OUTPUT_SCHEMA_INVALID'
+    && error.schemaPath === '$.properties.open');
+  assert.equal(fake.calls.length, 0);
 });
 
 test('Codex availabilityはversion/login statusだけを確認しaccount情報を返さない', async () => {

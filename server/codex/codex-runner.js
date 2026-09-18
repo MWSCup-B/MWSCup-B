@@ -1,9 +1,20 @@
 import { spawn } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CodexCancelledError, CodexError, CodexTimeoutError,
-  CodexUnavailableError, CodexOutputError } from './codex-errors.js';
+  CodexUnavailableError, CodexOutputError, CodexOutputSchemaError } from './codex-errors.js';
 import { sanitizeDiagnostic } from './codex-output-parser.js';
+import { adaptCodexOutputSchema } from './codex-schema-adapter.js';
 
 const MAX_CAPTURE_BYTES = 10 * 1024 * 1024;
+
+function schemaFailureDetail(stderr) {
+  const safe = sanitizeDiagnostic(stderr);
+  const missingType = safe.match(/([A-Za-z0-9_.\[\]$-]+) must have a ['"]type['"] key/i);
+  if (missingType) return `${missingType[1]} requires explicit type`;
+  return 'Codex rejected the output schema as invalid_json_schema.';
+}
 
 function collect(stream, onLimit) {
   let value = '';
@@ -106,18 +117,60 @@ export class CodexRunner {
     return { available: true, version: sanitizeDiagnostic(version.stdout).trim() };
   }
 
-  async run({ prompt, outputSchemaPath, phase, signal, timeoutMs = this.timeoutMs }) {
+  async #materializeOutputSchema({ outputSchemaPath, outputSchema, outputSchemaName, phase }) {
+    if (!outputSchemaPath && outputSchema === undefined) return null;
+    const schemaName = outputSchemaName ?? (outputSchemaPath
+      ? outputSchemaPath.split(/[\\/]/).at(-1)?.replace(/\.schema\.json$/, '')
+      : 'codex-output');
+    let canonicalSchema = outputSchema;
+    if (canonicalSchema === undefined) {
+      try { canonicalSchema = JSON.parse(await readFile(outputSchemaPath, 'utf8')); }
+      catch (error) {
+        throw new CodexOutputSchemaError('出力Schemaを読み込めませんでした。', {
+          phase, schemaName, cliErrorCode: 'schema_read_failed',
+          details: 'Output schema could not be loaded.', cause: error,
+        });
+      }
+    }
+    const adapted = adaptCodexOutputSchema(canonicalSchema, { schemaName, phase });
+    const directory = await mkdtemp(join(tmpdir(), 'mwscup-codex-schema-'));
+    const path = join(directory, 'output-schema.json');
+    try { await writeFile(path, `${JSON.stringify(adapted)}\n`, { encoding: 'utf8', mode: 0o600 }); }
+    catch (error) {
+      await rm(directory, { recursive: true, force: true });
+      throw new CodexOutputSchemaError('出力Schemaの一時ファイルを作成できませんでした。', {
+        phase, schemaName, cliErrorCode: 'schema_write_failed',
+        details: 'Output schema could not be materialized.', cause: error,
+      });
+    }
+    return { path, schemaName, cleanup: () => rm(directory, { recursive: true, force: true }) };
+  }
+
+  async run({ prompt, outputSchemaPath, outputSchema, outputSchemaName, phase, signal,
+    timeoutMs = this.timeoutMs }) {
     // --ask-for-approval is a root option in current Codex CLI releases and must precede `exec`.
     // Ignoring user config/rules keeps the invocation contract stable while preserving CODEX_HOME
     // authentication, as documented by the CLI itself.
-    const args = ['--ask-for-approval', 'never', 'exec', '--ephemeral',
-      '--ignore-user-config', '--ignore-rules', '--sandbox', 'read-only', '--color', 'never'];
-    if (outputSchemaPath) args.push('--output-schema', outputSchemaPath);
-    args.push('-');
-    const result = await this.#spawn(args, { input: prompt, signal, timeoutMs, phase });
-    if (result.exitCode !== 0) throw new CodexError('CODEX_EXEC_FAILED',
-      'Codex CLIの実行に失敗しました。', { phase, retryable: false,
-        details: sanitizeDiagnostic(result.stderr) });
-    return result.stdout;
+    const materialized = await this.#materializeOutputSchema({ outputSchemaPath, outputSchema,
+      outputSchemaName, phase });
+    try {
+      const args = ['--ask-for-approval', 'never', 'exec', '--ephemeral',
+        '--ignore-user-config', '--ignore-rules', '--sandbox', 'read-only', '--color', 'never'];
+      if (materialized) args.push('--output-schema', materialized.path);
+      args.push('-');
+      const result = await this.#spawn(args, { input: prompt, signal, timeoutMs, phase });
+      if (result.exitCode !== 0 && /invalid_json_schema/i.test(result.stderr)) {
+        throw new CodexOutputSchemaError('Codexが生成用出力Schemaを受理しませんでした。', {
+          phase, schemaName: materialized?.schemaName ?? outputSchemaName ?? 'unknown',
+          cliErrorCode: 'invalid_json_schema', details: schemaFailureDetail(result.stderr),
+        });
+      }
+      if (result.exitCode !== 0) throw new CodexError('CODEX_EXEC_FAILED',
+        'Codex CLIの実行に失敗しました。', { phase, retryable: false,
+          details: sanitizeDiagnostic(result.stderr) });
+      return result.stdout;
+    } finally {
+      await materialized?.cleanup();
+    }
   }
 }

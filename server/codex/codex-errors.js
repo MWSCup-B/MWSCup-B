@@ -33,3 +33,17 @@ export class CodexOutputError extends CodexError {
     super(code, message, { phase, retryable: true, details });
   }
 }
+
+export class CodexOutputSchemaError extends CodexError {
+  constructor(message = '生成用出力SchemaがCodexと互換ではありません。', {
+    phase = 'GENERATING_SCENARIO', schemaName = 'unknown', schemaPath = '$',
+    cliErrorCode = 'invalid_json_schema', details = null, cause = null,
+  } = {}) {
+    super('CODEX_OUTPUT_SCHEMA_INVALID', message, {
+      phase, retryable: false, details, cause,
+    });
+    this.schemaName = schemaName;
+    this.schemaPath = schemaPath;
+    this.cliErrorCode = cliErrorCode;
+  }
+}

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { AutoGenerationManager, autoAuthorBootstrap, autoAuthorView,
   classifyBlocked, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
+import { CodexOutputSchemaError } from '../server/codex/codex-errors.js';
 
 async function generated(options = {}, selection = { networkId: 'network-c', difficulty: 3 },
   maxAttempts = 3) {
@@ -33,6 +34,13 @@ test('XSS + Network C + ★3をReview修正後にGAME READYまで自動実行す
   assert.equal(session.evaluationResult.status, 'ACCEPTED');
   assert.equal(runner.scenarioCalls, 2); assert.equal(runner.reviewCalls, 2);
   assert.equal(runner.evidenceCalls, 1);
+  assert.equal(session.scenarioImportResult.status, 'VALID');
+  assert.equal(session.evidenceImportResult.status, 'VALID');
+  assert.deepEqual([...new Set(runner.calls.filter(item => item.kind === 'invocation')
+    .map(item => item.outputSchemaName))].sort(),
+  ['evidence-import-package', 'scenario-import-package', 'scenario-verification-review']);
+  assert.ok(runner.calls.filter(item => item.kind === 'invocation')
+    .every(item => item.hasOutputSchema));
   assert.ok(view.progress.every(item => item.status === 'COMPLETE'
     || item.id === 'revision'));
   const reviews = runner.calls.filter(item => item.phase === 'REVIEWING_SCENARIO');
@@ -65,11 +73,52 @@ test('Reviewer Schema違反は形式だけを別Invocationでrepairする', asyn
   assert.match(repair.feedback.correctionHint, /技術的事実を追加しない/);
 });
 
+test('Reviewer category参照違反は正確な参照規則を渡して別Invocationでrepairする', async () => {
+  const { runner, view } = await generated({ reviewerGroundFailure: true });
+  assert.equal(view.currentState, 'READY'); assert.equal(runner.reviewCalls, 2);
+  const repair = runner.calls.filter(item => item.phase === 'REVIEWING_SCENARIO')[1];
+  assert.equal(repair.feedback.code, 'IRRELEVANT_REVIEW_GROUND');
+  const identity = repair.feedback.referenceRules.IDENTITY_ATTRIBUTION;
+  assert.ok(identity.subjectRefs.every(ref => ref.startsWith('character:')));
+  assert.ok(identity.sourceRefs.every(ref => /^(groundTruth\.fact:|attackGraph\.node:|scenarioContext\.)/.test(ref)));
+  const reference = repair.feedback.referenceRules.REFERENCE_CONTENT_ALIGNMENT;
+  assert.ok(reference.subjectRefs.length > 0);
+  assert.deepEqual(reference.subjectRefs, reference.sourceRefs);
+  assert.ok(reference.subjectRefs.every(ref => ref.startsWith('referenceMaterial:')));
+  assert.ok(view.developerDetails.some(item => item.errorCode === 'IRRELEVANT_REVIEW_GROUND'));
+});
+
 test('Codex unavailableはLLM InvocationなしでFAILEDにする', async () => {
   const { runner, view } = await generated({ unavailable: true });
   assert.equal(view.currentState, 'FAILED'); assert.equal(view.failure.code, 'CODEX_UNAVAILABLE');
   assert.equal(runner.calls.filter(item => item.kind === 'invocation').length, 0);
   assert.match(view.failure.message, /ログイン/);
+});
+
+test('output schemaエラーは専用分類と安全なDeveloper Detailを公開する', async () => {
+  const jsonRunner = {
+    checkAvailability: async () => ({ available: true, version: 'codex-cli test' }),
+    runJson: async ({ phase }) => { throw new CodexOutputSchemaError(
+      'Codexが生成用出力Schemaを受理しませんでした。', {
+        phase, schemaName: 'scenario-import-package', cliErrorCode: 'invalid_json_schema',
+        details: 'schemaVersion requires explicit type',
+      }); },
+  };
+  const manager = new AutoGenerationManager({ jsonRunner });
+  const session = createAutoAuthorSession();
+  manager.start(session, { networkId: 'network-a', difficulty: 1 });
+  await manager.waitForIdle();
+  const view = autoAuthorView(session);
+  assert.equal(view.currentState, 'FAILED');
+  assert.equal(view.failure.code, 'CODEX_OUTPUT_SCHEMA_INVALID');
+  assert.equal(view.failure.message, '生成用データ形式の内部エラーが発生しました。');
+  assert.deepEqual(view.developerDetails[0], {
+    phase: 'GENERATING_SCENARIO', attempt: 1,
+    code: 'CODEX_OUTPUT_SCHEMA_INVALID', errorCode: 'CODEX_OUTPUT_SCHEMA_INVALID',
+    field: 'generation', schemaName: 'scenario-import-package',
+    cliErrorCode: 'invalid_json_schema', reason: 'schemaVersion requires explicit type',
+    correctionHint: '入力条件を変えずに、もう一度生成してください。',
+  });
 });
 
 test('Accountに依存する識別情報を状態へ保存・公開しない', async () => {

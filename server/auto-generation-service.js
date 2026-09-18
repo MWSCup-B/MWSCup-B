@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import { GameError } from './game.js';
 import { ValidationError } from './generation/schema.js';
 import { loadCatalog } from './generation/catalog.js';
@@ -7,8 +6,9 @@ import { buildCandidates } from './generation/candidate-builder.js';
 import { buildAttackGraphs } from './generation/attack-graph.js';
 import { buildScenarioGenerationInputs, importScenarioPackage,
   SCENARIO_PROMPT_TEMPLATE } from './generation/scenario-interface.js';
-import { buildScenarioVerificationInput, SCENARIO_VERIFICATION_PROMPT,
-  validateScenarioVerificationReview, verifyScenario } from './generation/scenario-verifier.js';
+import { buildScenarioReviewReferenceRules, buildScenarioVerificationInput,
+  SCENARIO_VERIFICATION_PROMPT, validateScenarioVerificationReview,
+  verifyScenario } from './generation/scenario-verifier.js';
 import { buildEvidenceGenerationInput, EVIDENCE_PROMPT_TEMPLATE,
   importEvidencePackage } from './generation/evidence-interface.js';
 import { buildGameCaseConversionInput, buildGameProgressionPlan,
@@ -21,6 +21,7 @@ import { buildXssPrototype, evaluateXssPrototype } from './xss-prototype.js';
 import { CodexCancelledError, CodexError, CodexOutputError }
   from './codex/codex-errors.js';
 import { sanitizeDiagnostic } from './codex/codex-output-parser.js';
+import { AUTO_CODEX_OUTPUT_SCHEMAS } from './codex/auto-output-schemas.js';
 
 const catalog = await loadCatalog();
 
@@ -31,12 +32,6 @@ export const AUTO_STATES = Object.freeze([
   'READY', 'FAILED', 'CANCELLED',
 ]);
 
-const SCENARIO_SCHEMA = fileURLToPath(new URL('../schemas/scenario-import-package.schema.json',
-  import.meta.url));
-const REVIEW_SCHEMA = fileURLToPath(new URL('../schemas/scenario-verification-review.schema.json',
-  import.meta.url));
-const EVIDENCE_SCHEMA = fileURLToPath(new URL('../schemas/evidence-import-package.schema.json',
-  import.meta.url));
 const DEFAULT_MAX_ATTEMPTS = 3;
 
 const PHASES = Object.freeze([
@@ -76,7 +71,10 @@ function detail(issue, phase, attempt) {
   const errorCode = issue?.code ?? 'AUTO_GENERATION_FAILED';
   return { phase, attempt, code: errorCode, errorCode,
     field: issue?.field ?? 'generation',
-    reason: sanitizeDiagnostic(issue?.reason ?? issue?.message ?? '生成処理に失敗しました。'),
+    schemaName: issue?.schemaName ?? null,
+    cliErrorCode: issue?.cliErrorCode ?? null,
+    reason: sanitizeDiagnostic(issue?.reason ?? issue?.details ?? issue?.message
+      ?? '生成処理に失敗しました。'),
     correctionHint: sanitizeDiagnostic(issue?.correctionHint
       ?? '入力条件を変えずに、もう一度生成してください。') };
 }
@@ -100,6 +98,7 @@ function publicFailure(code) {
   if (code === 'CODEX_TIMEOUT') return 'Codexの応答が時間内に完了しませんでした。';
   if (code === 'MAX_REVISION_EXCEEDED') return '技術的に成立するScenarioを生成できませんでした。';
   if (code === 'GENERATION_CANCELLED') return 'ゲーム生成を中止しました。';
+  if (code === 'CODEX_OUTPUT_SCHEMA_INVALID') return '生成用データ形式の内部エラーが発生しました。';
   return 'ゲームの自動生成に失敗しました。';
 }
 
@@ -258,7 +257,9 @@ function feedbackFromIssues(issues, classification) {
 
 async function reviewWithRepair({ jsonRunner, verificationInput, signal, session, attempt }) {
   const run = feedback => jsonRunner.runJson({ instruction: SCENARIO_VERIFICATION_PROMPT,
-    data: verificationInput, feedback, outputSchemaPath: REVIEW_SCHEMA,
+    data: verificationInput, feedback,
+    outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.review.canonicalSchema,
+    outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.review.name,
     phase: 'REVIEWING_SCENARIO', signal });
   let review;
   try {
@@ -272,9 +273,11 @@ async function reviewWithRepair({ jsonRunner, verificationInput, signal, session
       field: error.field ?? 'review', reason: error.message,
       correctionHint: '技術的事実を変更せず、JSON形式とrequired fieldだけを修正してください。' },
     'REVIEWING_SCENARIO', attempt));
+    const referenceRules = buildScenarioReviewReferenceRules(verificationInput);
     review = await run({ repairOnly: true, code: error.code ?? 'REVIEWER_SCHEMA_INVALID',
       field: error.field ?? 'review', reason: error.message,
-      correctionHint: '形式、型、required fieldだけを修正し、技術的事実を追加しないでください。' });
+      correctionHint: '形式、型、required field、category別の参照規則だけを修正し、技術的事実を追加しないでください。',
+      referenceRules });
     validateScenarioVerificationReview(review, verificationInput);
     session.verificationResult = verifyScenario({ verificationInput, semanticReview: review });
     return session.verificationResult;
@@ -352,7 +355,9 @@ export class AutoGenerationManager {
           () => this.jsonRunner.runJson({ instruction: SCENARIO_PROMPT_TEMPLATE,
             data: { scenarioGenerationInput: session.generationInput,
               requestedDifficulty: selection.difficulty }, feedback: revisionFeedback,
-            outputSchemaPath: SCENARIO_SCHEMA, phase: session.auto.state, signal }));
+            outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.scenario.canonicalSchema,
+            outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.scenario.name,
+            phase: session.auto.state, signal }));
       } catch (error) {
         if (!(error instanceof CodexOutputError)) throw error;
         const issue = { code: error.code, field: 'scenario-import-package',
@@ -422,7 +427,9 @@ export class AutoGenerationManager {
           () => this.jsonRunner.runJson({ instruction: EVIDENCE_PROMPT_TEMPLATE,
             data: { evidenceGenerationInput: session.evidenceGenerationInput,
               requestedEvidenceChainLength: selection.difficulty }, feedback: evidenceFeedback,
-            outputSchemaPath: EVIDENCE_SCHEMA, phase: 'GENERATING_EVIDENCE', signal }));
+            outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.evidence.canonicalSchema,
+            outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.evidence.name,
+            phase: 'GENERATING_EVIDENCE', signal }));
       } catch (error) {
         if (!(error instanceof CodexOutputError)) throw error;
         const issue = { code: error.code, field: 'evidence-import-package',

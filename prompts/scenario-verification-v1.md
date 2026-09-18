@@ -25,10 +25,13 @@ Scenario Generatorの自己評価、合否申告、推論過程は使用しな�
 
 `PASS`または`NOT_APPLICABLE`では`correctionHint`をnullにしてください。`FAIL`または`UNKNOWN`では、技術入力を変更しない修正案を`correctionHint`に指定してください。根拠を確認できない項目を`PASS`にしないでください。
 
-- Evidence Requirementのレビューでは`evidenceRequirement:`をsubjectとし、そのgroundに対応する`attackGraph.artifact:`、`timeline.event:`、`groundTruth.fact:`、`character:`のいずれかをsourceにしてください。
-- Learning Objectiveのレビューでは`learningObjective:`をsubjectとし、`attackGraph.node:`、`attackDefinition:`、`referenceMaterial:`のいずれかをsourceにしてください。
-- 人物帰属レビューでは`character:`をsubjectとし、技術的根拠をsourceにしてください。
-- 参考資料本文レビューでは`CONTENT_AVAILABLE`な全`referenceMaterial:`をsourceに含めてください。
+- `EVIDENCE_GROUND_ALIGNMENT`では`evidenceRequirement:`をsubjectとし、そのgroundに対応する`attackGraph.artifact:`、`timeline.event:`、`groundTruth.fact:`、`character:`のいずれかをsourceにしてください。
+- `LEARNING_OBJECTIVE_ALIGNMENT`では`learningObjective:`をsubjectとし、`attackGraph.node:`、`attackDefinition:`、`referenceMaterial:`のいずれかをsourceにしてください。
+- `FACT_NARRATIVE_SEPARATION`では`groundTruth.fact:`、`scenarioDraft:`、`evidenceRequirement:`、`character:`のいずれかをsubjectとし、`attackGraph.node:`、`attackGraph.edge:`、`groundTruth.fact:`のいずれかをsourceにしてください。
+- `IDENTITY_ATTRIBUTION`では`character:`をsubjectとし、`groundTruth.fact:`、`attackGraph.node:`、`scenarioContext.`のいずれかをsourceにしてください。
+- `INVESTIGATION_COVERAGE`では`evidenceRequirement:`をsubjectとし、`attackGraph.artifact:`、`timeline.event:`、`groundTruth.fact:`、`character:`のいずれかをsourceにしてください。
+- `REFERENCE_CONTENT_ALIGNMENT`では、本文の有無やoutcomeにかかわらず`referenceMaterial:`をsubjectとsourceにしてください。`CONTENT_AVAILABLE`な全`referenceMaterial:`をsourceに含めてください。本文がなく`NOT_APPLICABLE`にする場合も、metadata-onlyの`referenceMaterial:`をsubjectとsourceに指定してください。
+- `<VALIDATION_FEEDBACK>`に`referenceRules`がある修復実行では、各categoryの`subjectRefs`と`sourceRefs`に列挙された値だけを対応するcheckへ使用してください。
 - Learning ObjectiveまたはEvidence Requirementが空の場合、その項目を`PASS`にせず、不足として`FAIL`または`UNKNOWN`にしてください。
 
 このレビューは`VERIFIED`を決定しません。BackendのDeterministic Verificationが構造、参照、技術成立性、独立性を再検証し、最終状態を集計します。

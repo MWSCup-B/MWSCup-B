@@ -197,21 +197,11 @@ export function validateScenarioVerificationInput(input) {
   return input;
 }
 
-export function validateScenarioVerificationReview(review, input) {
-  validateDocument('scenario-verification-review', review);
-  if (review.subjectFingerprint !== input.inputFingerprint) fail('REVIEW_SUBJECT_MISMATCH',
-    'scenario-verification-review.subjectFingerprint', '独立レビューが別のVerification Inputを参照しています。');
-  ensureUnique(review.checks, item => item.checkId, 'scenario-verification-review.checks.checkId');
-  ensureUnique(review.checks, item => item.category, 'scenario-verification-review.checks.category');
-  if (!sameValues(review.checks.map(item => item.category).sort(), [...SEMANTIC_CATEGORIES].sort())) {
-    fail('INCOMPLETE_SEMANTIC_REVIEW', 'scenario-verification-review.checks',
-      '独立意味的レビューの必須6項目が揃っていません。');
-  }
-  const allowedRefs = new Set(input.allowedReviewRefs);
-  const hasContent = input.referenceMaterials.some(item => item.availability === 'CONTENT_AVAILABLE');
+export function buildScenarioReviewReferenceRules(input) {
+  const allowedRefs = input.allowedReviewRefs;
   const hasObjectives = input.scenarioPackage.learningObjectives.objectives.length > 0;
   const hasRequirements = input.scenarioPackage.evidenceRequirements.requirements.length > 0;
-  const prefixRules = {
+  const prefixes = {
     EVIDENCE_GROUND_ALIGNMENT: {
       subject: hasRequirements ? ['evidenceRequirement:'] : ['scenarioDraft:'],
       source: ['attackGraph.artifact:', 'timeline.event:', 'groundTruth.fact:', 'character:'],
@@ -232,8 +222,31 @@ export function validateScenarioVerificationReview(review, input) {
       subject: hasRequirements ? ['evidenceRequirement:'] : ['scenarioDraft:'],
       source: ['attackGraph.artifact:', 'timeline.event:', 'groundTruth.fact:', 'character:'],
     },
-    REFERENCE_CONTENT_ALIGNMENT: { subject: ['referenceMaterial:'], source: ['referenceMaterial:'] },
+    REFERENCE_CONTENT_ALIGNMENT: {
+      subject: ['referenceMaterial:'], source: ['referenceMaterial:'],
+    },
   };
+  return Object.fromEntries(Object.entries(prefixes).map(([category, rule]) => [category, {
+    subjectRefs: allowedRefs.filter(ref => rule.subject.some(prefix => ref.startsWith(prefix))),
+    sourceRefs: allowedRefs.filter(ref => rule.source.some(prefix => ref.startsWith(prefix))),
+  }]));
+}
+
+export function validateScenarioVerificationReview(review, input) {
+  validateDocument('scenario-verification-review', review);
+  if (review.subjectFingerprint !== input.inputFingerprint) fail('REVIEW_SUBJECT_MISMATCH',
+    'scenario-verification-review.subjectFingerprint', '独立レビューが別のVerification Inputを参照しています。');
+  ensureUnique(review.checks, item => item.checkId, 'scenario-verification-review.checks.checkId');
+  ensureUnique(review.checks, item => item.category, 'scenario-verification-review.checks.category');
+  if (!sameValues(review.checks.map(item => item.category).sort(), [...SEMANTIC_CATEGORIES].sort())) {
+    fail('INCOMPLETE_SEMANTIC_REVIEW', 'scenario-verification-review.checks',
+      '独立意味的レビューの必須6項目が揃っていません。');
+  }
+  const allowedRefs = new Set(input.allowedReviewRefs);
+  const hasContent = input.referenceMaterials.some(item => item.availability === 'CONTENT_AVAILABLE');
+  const hasObjectives = input.scenarioPackage.learningObjectives.objectives.length > 0;
+  const hasRequirements = input.scenarioPackage.evidenceRequirements.requirements.length > 0;
+  const referenceRules = buildScenarioReviewReferenceRules(input);
   for (const check of review.checks) {
     ensureUnique(check.subjectRefs, item => item,
       `scenario-verification-review.checks.${check.checkId}.subjectRefs`);
@@ -243,9 +256,9 @@ export function validateScenarioVerificationReview(review, input) {
       fail('UNSUPPORTED_REVIEW_REFERENCE', `scenario-verification-review.checks.${check.checkId}`,
         '独立レビューがVerification Inputに存在しない対象または根拠を参照しています。');
     }
-    const rule = prefixRules[check.category];
-    if (!check.subjectRefs.some(ref => rule.subject.some(prefix => ref.startsWith(prefix)))
-      || !check.sourceRefs.some(ref => rule.source.some(prefix => ref.startsWith(prefix)))) {
+    const rule = referenceRules[check.category];
+    if (!check.subjectRefs.some(ref => rule.subjectRefs.includes(ref))
+      || !check.sourceRefs.some(ref => rule.sourceRefs.includes(ref))) {
       fail('IRRELEVANT_REVIEW_GROUND', `scenario-verification-review.checks.${check.checkId}`,
         'レビュー項目の対象または根拠がcategoryに対応していません。');
     }

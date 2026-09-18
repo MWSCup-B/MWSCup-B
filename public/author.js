@@ -62,6 +62,8 @@ function renderDetails(targetId) {
     const article = document.createElement('article'); article.className = 'card';
     appendText(article, 'strong', `${item.phase} / attempt ${item.attempt ?? '-'}`);
     appendText(article, 'p', `${item.errorCode ?? item.code} — ${item.field}`);
+    if (item.schemaName) appendText(article, 'p', `Schema: ${item.schemaName}`);
+    if (item.cliErrorCode) appendText(article, 'p', `CLI: ${item.cliErrorCode}`);
     appendText(article, 'p', item.reason); appendText(article, 'p', item.correctionHint);
     target.append(article);
   }

@@ -5,10 +5,12 @@ import { phase7Fixture } from './phase7-evidence.js';
 
 export class MockCodexRunner {
   constructor({ unavailable = false, reviewOutcomes = ['VERIFIED'], malformedScenario = false,
-    reviewerSchemaFailure = false, evidenceInvalid = false, waitForCancel = false,
+    reviewerSchemaFailure = false, reviewerGroundFailure = false,
+    evidenceInvalid = false, waitForCancel = false,
     malformedScenarioOutput = 0, malformedEvidenceOutput = 0, timeout = false } = {}) {
     Object.assign(this, { unavailable, reviewOutcomes, malformedScenario,
-      reviewerSchemaFailure, evidenceInvalid, waitForCancel, malformedScenarioOutput,
+      reviewerSchemaFailure, reviewerGroundFailure, evidenceInvalid, waitForCancel,
+      malformedScenarioOutput,
       malformedEvidenceOutput, timeout });
     this.calls = []; this.scenarioCalls = 0; this.reviewCalls = 0; this.evidenceCalls = 0;
   }
@@ -20,9 +22,10 @@ export class MockCodexRunner {
     return { available: true, version: 'codex-cli test' };
   }
 
-  async runJson({ data, feedback, phase, signal }) {
+  async runJson({ data, feedback, phase, signal, outputSchema, outputSchemaName }) {
     this.calls.push({ kind: 'invocation', phase, data: structuredClone(data),
-      feedback: structuredClone(feedback) });
+      feedback: structuredClone(feedback), outputSchemaName,
+      hasOutputSchema: Boolean(outputSchema) });
     if (this.waitForCancel) return await new Promise((resolve, reject) => {
       if (signal.aborted) { reject(new CodexCancelledError(phase)); return; }
       signal.addEventListener('abort', () => reject(new CodexCancelledError(phase)), { once: true });
@@ -39,6 +42,12 @@ export class MockCodexRunner {
       this.reviewCalls += 1;
       if (this.reviewerSchemaFailure && this.reviewCalls === 1) return {};
       const review = semanticReview(data);
+      if (this.reviewerGroundFailure && this.reviewCalls === 1) {
+        const check = review.checks.find(item => item.category === 'IDENTITY_ATTRIBUTION');
+        const wrongRef = data.allowedReviewRefs.find(item => item.startsWith('scenarioDraft:'));
+        check.subjectRefs = [wrongRef]; check.sourceRefs = [wrongRef];
+        return review;
+      }
       const outcome = this.reviewOutcomes[Math.min(this.reviewCalls - 1,
         this.reviewOutcomes.length - 1)];
       if (outcome !== 'VERIFIED') {
