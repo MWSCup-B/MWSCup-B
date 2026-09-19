@@ -27,6 +27,7 @@ export class Element {
     if (key.startsWith('data-')) return this.dataset[dataKey(key)] ?? null;
     return this.attributes.get(key) ?? this[key] ?? null;
   }
+  removeAttribute(key) { this.attributes.delete(key); if (key === 'open') this.open = false; }
   get value() {
     if (this.tagName !== 'SELECT') return this._value;
     return this.selectedOptions[0]?.value ?? '';
@@ -80,6 +81,8 @@ export class Element {
     const handlers = this.listeners.get(type) ?? []; handlers.push(handler); this.listeners.set(type, handlers);
   }
   focus() { this.focused = true; }
+  showModal() { this.open = true; this.attributes.set('open', ''); }
+  close() { this.open = false; this.attributes.delete('open'); }
   remove() {
     if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(node => node !== this);
     this.parentNode = null;
@@ -109,29 +112,48 @@ function documentFromHtml() {
   return document;
 }
 
-export function startAuthorDom(bootstrap, { missingElementId = null, startError = null } = {}) {
+export function startAuthorDom(bootstrap, { missingElementId = null, startError = null,
+  savedGames = [], initialAuthor = null } = {}) {
   const document = documentFromHtml(); const calls = [];
+  let storedGames = structuredClone(savedGames);
   if (missingElementId) {
     const missing = document.getElementById(missingElementId);
     missing.parentNode.children = missing.parentNode.children.filter(node => node !== missing);
   }
   const author = { currentState: 'MODE_SELECTION', canCancel: false,
-    developerDetails: [], progress: [], maxAttempts: 3 };
+    developerDetails: [], progress: [], maxAttempts: 3, ...structuredClone(initialAuthor ?? {}) };
   const fetch = async (path, options) => {
-    calls.push({ path, body: options.body ? JSON.parse(options.body) : null });
+    calls.push({ path, method: options.method, body: options.body ? JSON.parse(options.body) : null });
     if (path === '/api/author/start') {
       if (startError) throw startError;
       const value = await bootstrap;
       return { ok: true, json: async () => ({ token: 'a'.repeat(64),
         bootstrap: structuredClone(value), author: structuredClone(author) }) };
     }
+    if (path === '/api/author/games' && options.method === 'GET') {
+      return { ok: true, json: async () => ({ games: structuredClone(storedGames) }) };
+    }
+    const deleted = /^\/api\/author\/games\/(saved_[a-f0-9]{32})$/.exec(path);
+    if (deleted && options.method === 'DELETE') {
+      storedGames = storedGames.filter(game => game.gameId !== deleted[1]);
+      return { ok: true, json: async () => ({ deleted: true }) };
+    }
+    if (path === '/api/author/menu') author.currentState = 'MODE_SELECTION';
+    if (path === '/api/author/shutdown') {
+      return { ok: true, json: async () => ({ shuttingDown: true,
+        saveData: JSON.parse(options.body).saveData, savedGameCount: storedGames.length }) };
+    }
     if (path === '/api/author/select-mode') author.currentState = JSON.parse(options.body).mode === 'MANUAL'
       ? 'MANUAL_CONFIGURATION' : 'MAKOTOMARU_CONFIGURATION';
     return { ok: true, json: async () => ({ author: structuredClone(author) }) };
   };
+  const storedSettings = new Map();
+  const localStorage = { getItem: key => storedSettings.get(key) ?? null,
+    setItem: (key, value) => storedSettings.set(key, String(value)) };
   const ready = runInNewContext(`(async () => {\n${source}\n})()`, {
     document, fetch, structuredClone, crypto: { randomUUID },
+    confirm: () => true, localStorage,
     setInterval: () => 1, clearInterval: () => {},
   });
-  return { document, calls, ready, byId: id => document.getElementById(id) };
+  return { document, calls, ready, localStorage, byId: id => document.getElementById(id) };
 }

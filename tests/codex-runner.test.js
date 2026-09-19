@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { readFileSync } from 'node:fs';
-import { CodexRunner } from '../server/codex/codex-runner.js';
+import { CodexRunner, resolveCodexInvocation } from '../server/codex/codex-runner.js';
 import { CodexJsonRunner } from '../server/codex/codex-json-runner.js';
 import { parseCodexJson, sanitizeDiagnostic }
   from '../server/codex/codex-output-parser.js';
@@ -19,6 +19,14 @@ function fakeSpawn(handler) {
   };
   return { calls, spawnImpl };
 }
+
+test('WindowsはPowerShell shimを介さずCodexのJS entry pointを起動する', () => {
+  assert.deepEqual(resolveCodexInvocation('linux'),
+    { command: 'codex', prefixArgs: [] });
+  const windows = resolveCodexInvocation('win32');
+  assert.equal(windows.command, process.execPath);
+  assert.match(windows.prefixArgs[0], /[\\/]@openai[\\/]codex[\\/]bin[\\/]codex\.js$/);
+});
 
 test('CodexRunnerはshell:falseでcommand/argsを分離しstdinを渡す', async () => {
   let cliSchema;
@@ -113,7 +121,8 @@ test('Codex availabilityはversion/login statusだけを確認しaccount情報�
     child.stderr.end(args[0] === '--version' ? '' : 'Logged in using ChatGPT');
     child.emit('close', 0, null);
   });
-  const value = await new CodexRunner({ spawnImpl: fake.spawnImpl }).checkAvailability();
+  const value = await new CodexRunner({ command: 'codex-test',
+    spawnImpl: fake.spawnImpl }).checkAvailability();
   assert.deepEqual(value, { available: true, version: 'codex-cli 0.test' });
   assert.deepEqual(fake.calls.map(item => item.args), [['--version'], ['login', 'status']]);
 });

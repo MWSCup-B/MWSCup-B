@@ -71,7 +71,8 @@ export function createAutoAuthorSession() {
     scenarioPackage: null, scenarioImportResult: null, verificationInput: null,
     verificationResult: null, evidenceGenerationInput: null, evidenceImportResult: null,
     progressionPlan: null, gameCaseResult: null, gameMakeResult: null,
-    evaluationResult: null, runtime: null, prototypeEvaluation: null, playId: null };
+    evaluationResult: null, runtime: null, prototypeEvaluation: null, playId: null,
+    savedGameId: null, savedAt: null };
 }
 
 export function autoAuthorBootstrap() {
@@ -131,6 +132,7 @@ function publicFailure(code) {
   if (code === 'GENERATION_CANCELLED') return 'ゲーム生成を中止しました。';
   if (code === 'CODEX_OUTPUT_SCHEMA_INVALID') return '生成用データ形式の内部エラーが発生しました。';
   if (code === 'EVALUATION_REJECTED') return 'ゲームの最終検証で問題が見つかりました。Developer Detailの理由を確認してください。';
+  if (code === 'GAME_SAVE_FAILED') return '完成したゲームをローカルへ保存できませんでした。保存先を確認して、もう一度作成してください。';
   return 'ゲームの自動生成に失敗しました。';
 }
 
@@ -150,7 +152,9 @@ export function autoAuthorView(session) {
     scenarioPreview: session.scenarioPreview ? structuredClone(session.scenarioPreview) : null,
     failure: auto.failure ? structuredClone(auto.failure) : null,
     developerDetails: structuredClone(auto.details),
-    playUrl: auto.state === 'READY' && session.playId ? `/?game=${session.playId}` : null };
+    saved: auto.state === 'READY' && Boolean(session.savedGameId),
+    playUrl: auto.state === 'READY' && session.savedGameId ? `/?saved=${session.savedGameId}`
+      : auto.state === 'READY' && session.playId ? `/?game=${session.playId}` : null };
 }
 
 function logPhase(session, phase, attempt, started, result) {
@@ -416,10 +420,11 @@ async function reviewWithRepair({ jsonRunner, verificationInput, signal, session
 
 export class AutoGenerationManager {
   constructor({ jsonRunner, maxAttempts = DEFAULT_MAX_ATTEMPTS,
-    evaluator = evaluateGame } = {}) {
+    evaluator = evaluateGame, onReady = null } = {}) {
     this.jsonRunner = jsonRunner;
     this.maxAttempts = maxAttempts;
     this.evaluator = evaluator;
+    this.onReady = onReady;
     this.active = null;
   }
 
@@ -443,6 +448,15 @@ export class AutoGenerationManager {
       '現在ゲームを生成中です。', 409);
     session.auto.state = mode === 'MANUAL' ? 'MANUAL_CONFIGURATION' : 'MAKOTOMARU_CONFIGURATION';
     session.auto.selection = { mode };
+    return autoAuthorView(session);
+  }
+
+  returnToMenu(session) {
+    if (this.active || session.auto.state !== 'READY') throw new GameError(
+      'READY_GAME_REQUIRED', 'generation', '完成したゲームの画面から戻ってください。', 409);
+    const fresh = createAutoAuthorSession();
+    for (const key of Object.keys(session)) delete session[key];
+    Object.assign(session, fresh);
     return autoAuthorView(session);
   }
 
@@ -841,6 +855,7 @@ export class AutoGenerationManager {
     if (session.auto.progress.revision.status === 'WAITING') {
       session.auto.progress.revision.status = 'SKIPPED';
     }
+    if (this.onReady) await this.onReady(session);
     session.auto.state = 'READY'; session.auto.completedAt = new Date().toISOString();
   }
 

@@ -4,11 +4,44 @@ let author = null;
 let polling = null;
 let networkModel = null;
 let initializationReady = false;
+let entryView = 'SPLASH';
+let savedGameItems = null;
+let savedGamesError = '';
+let manualStep = 0;
+let lastOverallStep = 0;
+const manualStepNames = ['事件情報', '攻撃手法', '攻撃内容・調査', 'Subnet',
+  'Node', 'Service', 'Connection', '構成図確認'];
+const itemIndexes = { 'attack-details': 0, subnet: 0, node: 0, service: 0, connection: 0 };
 const initializationHelp = 'サーバーを再起動（npm start）して画面を再読み込みしてください。';
 const byId = id => document.getElementById(id);
-const panels = ['mode-panel', 'manual-panel', 'makotomaru-panel', 'preview-panel',
-  'generation-panel', 'ready-panel', 'failure-panel'];
+const panels = ['splash-panel', 'activity-panel', 'court-entry-panel', 'mode-panel',
+  'help-panel', 'settings-panel',
+  'manual-panel', 'makotomaru-panel', 'preview-panel', 'generation-panel',
+  'ready-panel', 'failure-panel', 'shutdown-panel'];
 const svgNs = 'http://www.w3.org/2000/svg';
+const settingsKey = 'incident-craft-settings-v1';
+const defaultSettings = { textSize: 'STANDARD', motion: 'STANDARD' };
+
+function readSettings() {
+  try {
+    const value = JSON.parse(localStorage.getItem(settingsKey) ?? 'null');
+    return { textSize: ['STANDARD', 'LARGE'].includes(value?.textSize)
+      ? value.textSize : defaultSettings.textSize,
+    motion: ['STANDARD', 'REDUCED'].includes(value?.motion)
+      ? value.motion : defaultSettings.motion };
+  } catch { return { ...defaultSettings }; }
+}
+
+function applySettings(settings, save = false) {
+  const body = document.querySelector('body');
+  body.dataset.textSize = settings.textSize;
+  body.dataset.motion = settings.motion;
+  if (save) {
+    try { localStorage.setItem(settingsKey, JSON.stringify(settings)); }
+    catch { byId('settings-status').textContent = 'ブラウザに設定を保存できませんでした。'; return; }
+    byId('settings-status').textContent = '設定をこのブラウザに保存しました。';
+  }
+}
 
 function setInitializationState(ready, message = '') {
   initializationReady = ready;
@@ -84,8 +117,8 @@ function requireRenderedConfiguration() {
   }
 }
 
-async function api(path, body = null) {
-  const response = await fetch(path, { method: body == null ? 'GET' : 'POST',
+async function api(path, body = null, method = null) {
+  const response = await fetch(path, { method: method ?? (body == null ? 'GET' : 'POST'),
     headers: { ...(body == null ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body == null ? {} : { body: JSON.stringify(body) }) });
@@ -108,6 +141,9 @@ function input(parent, label, value, key, type = 'text') {
 function select(parent, label, value, key, options) {
   const wrapper = document.createElement('label'); wrapper.textContent = label;
   const control = document.createElement('select'); control.dataset.key = key;
+  if (value && !options.some(([id]) => id === value)) {
+    options = [[value, `${value}（現在の構成にありません）`], ...options];
+  }
   for (const [id, title] of options) { const option = document.createElement('option');
     option.value = id; option.textContent = title; option.selected = id === value; control.append(option); }
   wrapper.append(control); parent.append(wrapper); return control;
@@ -126,8 +162,51 @@ function multiSelect(parent, label, values, key, options) {
 function removeButton(parent, collection, item) {
   const button = document.createElement('button'); button.type = 'button'; button.className = 'danger-link';
   button.textContent = '削除'; button.addEventListener('click', () => {
+    syncNetworkModel();
     collection.splice(collection.indexOf(item), 1); renderNetworkBuilder(); renderAttackDetails();
   }); parent.append(button);
+}
+
+function updateItemPager(kind) {
+  const target = byId(kind === 'attack-details' ? kind : `${kind}-rows`);
+  const rows = [...target.querySelectorAll('article')];
+  itemIndexes[kind] = Math.min(itemIndexes[kind], Math.max(0, rows.length - 1));
+  rows.forEach((row, index) => { row.hidden = index !== itemIndexes[kind]; });
+  byId(`${kind}-position`).textContent = rows.length
+    ? `${itemIndexes[kind] + 1} / ${rows.length}` : '0 / 0';
+  byId(`${kind}-previous`).disabled = itemIndexes[kind] === 0;
+  byId(`${kind}-next`).disabled = !rows.length || itemIndexes[kind] === rows.length - 1;
+}
+
+function resetManualScroll() { byId('manual-step-content').scrollTop = 0; }
+
+function showManualStep(index) {
+  if (index < 0 || index >= manualStepNames.length) return;
+  if (networkModel && manualStep >= 3 && manualStep <= 6) {
+    syncNetworkModel(); renderNetworkBuilder(); renderAttackDetails();
+  }
+  manualStep = index;
+  for (const step of document.querySelectorAll('[data-manual-step]')) {
+    step.hidden = Number(step.dataset.manualStep) !== index;
+  }
+  for (const label of document.querySelectorAll('[data-manual-step-label]')) {
+    const number = Number(label.dataset.manualStepLabel);
+    label.className = number === index ? 'current' : number < index ? 'complete' : '';
+    label.setAttribute('aria-current', number === index ? 'step' : 'false');
+  }
+  byId('manual-step-count').textContent = `${index + 1} / ${manualStepNames.length}　${manualStepNames[index]}`;
+  byId('manual-previous').disabled = index === 0;
+  byId('manual-next').hidden = index === manualStepNames.length - 1;
+  byId('manual-create').hidden = index !== manualStepNames.length - 1;
+  byId('manual-errors').replaceChildren();
+  resetManualScroll();
+  if (index === 7) {
+    byId('manual-network-summary').textContent =
+      `${networkModel.subnets.length} Subnets / ${networkModel.nodes.length} Nodes / `
+      + `${networkModel.services.length} Services / ${networkModel.connections.length} Connections`;
+    drawNetwork('manual-network-diagram', networkModel);
+  }
+  renderOverallProgress();
 }
 
 function splitList(value) { return value.split(',').map(item => item.trim()).filter(Boolean); }
@@ -138,7 +217,12 @@ function syncNetworkModel() {
     const kind = row.dataset.networkKind; const index = Number(row.dataset.index);
     const item = networkModel[kind][index]; if (!item) continue;
     for (const control of row.querySelectorAll('[data-key]')) {
-      const value = control.multiple ? [...control.selectedOptions].map(option => option.value)
+      const value = control.multiple ? (() => {
+        const selected = [...control.selectedOptions].map(option => option.value);
+        const previous = Array.isArray(item[control.dataset.key]) ? item[control.dataset.key] : [];
+        return [...previous.filter(id => selected.includes(id)),
+          ...selected.filter(id => !previous.includes(id))];
+      })()
         : control.dataset.key === 'roles' ? splitList(control.value) : control.value;
       item[control.dataset.key] = value;
     }
@@ -179,23 +263,25 @@ function renderNetworkBuilder() {
   for (const kind of ['subnets', 'nodes', 'services', 'connections']) {
     const target = byId(`${kind.slice(0, -1)}-rows`); target.replaceChildren();
     networkModel[kind].forEach((item, index) => target.append(networkRow(kind, item, index)));
+    updateItemPager(kind.slice(0, -1));
   }
   drawNetwork('manual-network-diagram', networkModel);
 }
 
 function drawNetwork(id, network) {
-  const svg = byId(id); svg.replaceChildren(); const width = 900; const rowHeight = 165;
+  const svg = byId(id); svg.replaceChildren(); const rowHeight = 165;
   const subnetGroups = network.subnets.map((subnet, index) => ({ subnet, index,
     nodes: network.nodes.filter(node => node.subnetId === subnet.subnetId) }));
+  const width = Math.max(900, 70 + Math.max(1, ...subnetGroups.map(group => group.nodes.length)) * 145);
   svg.setAttribute('viewBox', `0 0 ${width} ${Math.max(180, subnetGroups.length * rowHeight)}`);
   const positions = new Map();
   subnetGroups.forEach(({ subnet, index, nodes }) => {
     const y = index * rowHeight + 10; const rect = document.createElementNS(svgNs, 'rect');
-    rect.setAttribute('x', '10'); rect.setAttribute('y', String(y)); rect.setAttribute('width', '880');
+    rect.setAttribute('x', '10'); rect.setAttribute('y', String(y)); rect.setAttribute('width', String(width - 20));
     rect.setAttribute('height', '145'); rect.setAttribute('rx', '12'); rect.setAttribute('class', 'diagram-subnet'); svg.append(rect);
     const title = document.createElementNS(svgNs, 'text'); title.setAttribute('x', '24'); title.setAttribute('y', String(y + 22));
     title.textContent = `${subnet.label} (${subnet.cidr}) / ${subnet.trustBoundaryId}`; svg.append(title);
-    nodes.forEach((node, nodeIndex) => { const x = 45 + nodeIndex * Math.max(145, 780 / Math.max(nodes.length, 1));
+    nodes.forEach((node, nodeIndex) => { const x = 45 + nodeIndex * Math.max(145, (width - 120) / Math.max(nodes.length, 1));
       positions.set(node.nodeId, { x, y: y + 45 }); const box = document.createElementNS(svgNs, 'rect');
       box.setAttribute('x', String(x)); box.setAttribute('y', String(y + 34)); box.setAttribute('width', '125');
       box.setAttribute('height', '92'); box.setAttribute('rx', '8'); box.setAttribute('class', 'diagram-node'); svg.append(box);
@@ -264,6 +350,7 @@ function renderAttackDetails(initialAttacks = []) {
     select(card, '想定効果', saved.expectedEffect ?? attack.expectedEffects[0].label,
       'expectedEffect', attack.expectedEffects.map(effect => [effect.label, effect.label]));
     input(card, 'Notes', saved.notes ?? '', 'notes'); target.append(card); });
+  updateItemPager('attack-details');
 }
 
 function collectConfiguration() {
@@ -315,6 +402,83 @@ function renderDetails(targetId) {
 
 function showPanel(id) { panels.forEach(panel => { byId(panel).hidden = panel !== id; }); }
 
+function savedDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value ?? '');
+  return match ? `${match[1]}/${match[2]}/${match[3]} ${match[4]}:${match[5]}` : '保存日時不明';
+}
+
+function renderSavedGames() {
+  const list = byId('saved-game-list');
+  const empty = byId('court-empty');
+  const status = byId('saved-games-status');
+  list.replaceChildren();
+  if (savedGameItems === null) {
+    empty.hidden = true; status.textContent = savedGamesError || '保存したゲームを読み込んでいます…';
+    return;
+  }
+  if (!savedGameItems.length) {
+    empty.hidden = false;
+    status.textContent = savedGamesError || '保存したゲームはありません。';
+    return;
+  }
+  empty.hidden = true;
+  status.textContent = `${savedGameItems.length}件のゲームが保存されています。`;
+  for (const game of savedGameItems) {
+    const card = document.createElement('article'); card.className = 'saved-game-card';
+    const heading = document.createElement('div'); heading.className = 'saved-game-card-heading';
+    const headingCopy = document.createElement('div');
+    text(headingCopy, 'p', `SAVED CASE · ${savedDate(game.savedAt)}`, 'mode-label');
+    text(headingCopy, 'h2', game.title);
+    const difficulty = text(heading, 'span', `${'★'.repeat(game.difficulty)}`, 'saved-game-difficulty');
+    difficulty.setAttribute('aria-label', `難易度 ${game.difficulty}`);
+    heading.insertBefore(headingCopy, difficulty);
+    card.append(heading);
+    text(card, 'p', game.summary, 'saved-game-summary');
+    const facts = document.createElement('p'); facts.className = 'saved-game-facts';
+    facts.textContent = `対象：${game.targetSystem}　攻撃：${game.attacks.join('、')}`; card.append(facts);
+    const actions = document.createElement('div'); actions.className = 'saved-game-actions';
+    const play = document.createElement('a'); play.className = 'button-link';
+    play.href = `/?saved=${encodeURIComponent(game.gameId)}`; play.textContent = 'このゲームで遊ぶ';
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger-link';
+    remove.textContent = '削除'; remove.dataset.gameId = game.gameId;
+    remove.addEventListener('click', async () => {
+      if (!confirm(`「${game.title}」を削除しますか？`)) return;
+      remove.disabled = true; status.textContent = 'ゲームを削除しています…';
+      try {
+        await api(`/api/author/games/${encodeURIComponent(game.gameId)}`, null, 'DELETE');
+        savedGameItems = savedGameItems.filter(item => item.gameId !== game.gameId);
+        savedGamesError = ''; renderSavedGames();
+      } catch (error) { remove.disabled = false; status.textContent = error.message; }
+    });
+    actions.append(play, remove); card.append(actions); list.append(card);
+  }
+}
+
+async function loadSavedGames() {
+  savedGameItems = null; savedGamesError = ''; renderSavedGames();
+  try { savedGameItems = (await api('/api/author/games')).games ?? []; }
+  catch (error) { savedGameItems = []; savedGamesError = error.message; }
+  renderSavedGames();
+}
+
+function renderOverallProgress() {
+  const state = author?.currentState;
+  const current = state === 'MODE_SELECTION' ? 0
+    : state === 'MANUAL_CONFIGURATION' ? (manualStep < 3 ? 1 : 2)
+      : state === 'MAKOTOMARU_CONFIGURATION' ? 1
+        : state === 'SCENARIO_PREVIEW' ? 3
+          : ['FAILED', 'CANCELLED'].includes(state) ? lastOverallStep
+            : ['CHECKING_CODEX', 'GENERATING_SCENARIO', 'SCENARIO_VALIDATING',
+              'SCENARIO_REVIEWING', 'SCENARIO_REVISING', 'VERIFIED'].includes(state)
+              ? (author?.configuration?.mode === 'MANUAL' ? 2 : 1) : 4;
+  lastOverallStep = current;
+  for (const item of document.querySelectorAll('[data-flow-step]')) {
+    const number = Number(item.dataset.flowStep);
+    item.className = number === current ? 'current' : number < current ? 'complete' : '';
+    item.setAttribute('aria-current', number === current ? 'step' : 'false');
+  }
+}
+
 function renderPreview() {
   const preview = author.scenarioPreview; if (!preview) return; byId('preview-summary').textContent = preview.incidentSummary;
   byId('preview-target').textContent = preview.targetSystem; byId('preview-difficulty').textContent = preview.difficultyLabel;
@@ -337,12 +501,18 @@ function renderPreview() {
 
 function render() {
   const state = author.currentState;
-  if (state === 'MODE_SELECTION') showPanel('mode-panel');
+  if (state === 'MODE_SELECTION') {
+    const entryPanels = { SPLASH: 'splash-panel', ACTIVITY: 'activity-panel',
+      COURT: 'court-entry-panel', MODE: 'mode-panel', HELP: 'help-panel',
+      SETTINGS: 'settings-panel' };
+    showPanel(entryPanels[entryView] ?? 'splash-panel');
+    if (entryView === 'COURT') renderSavedGames();
+  }
   else if (state === 'MANUAL_CONFIGURATION') {
     if (author.canCancel) {
       showPanel('generation-panel'); renderProgress('generation-progress'); renderDetails('detail-list');
       byId('cancel').disabled = false; byId('generation-message').textContent = 'Scenario条件を確認しています…';
-    } else { showPanel('manual-panel'); renderDetails('manual-detail-list'); }
+    } else { showPanel('manual-panel'); renderDetails('manual-detail-list'); showManualStep(manualStep); }
     byId('manual-create').disabled = !initializationReady || author.canCancel; byId('manual-back').disabled = author.canCancel;
   }
   else if (state === 'MAKOTOMARU_CONFIGURATION') {
@@ -353,29 +523,89 @@ function render() {
     byId('makotomaru-create').disabled = !initializationReady || author.canCancel; byId('makotomaru-back').disabled = author.canCancel;
   }
   else if (state === 'SCENARIO_PREVIEW') { showPanel('preview-panel'); renderPreview(); }
-  else if (state === 'READY') { showPanel('ready-panel'); renderProgress('ready-progress'); byId('play-game').href = author.playUrl; }
+  else if (state === 'READY') {
+    showPanel('ready-panel'); renderProgress('ready-progress'); byId('play-game').href = author.playUrl;
+    byId('ready-save-status').textContent = author.saved
+      ? '✓ このゲームはローカルに保存されました。「裁判」の一覧からいつでも開始できます。'
+      : 'ゲームの保存状態を確認しています…';
+  }
   else if (['FAILED', 'CANCELLED'].includes(state)) { showPanel('failure-panel'); byId('failure-message').textContent = author.failure?.message ?? '生成を中止しました。'; renderDetails('failure-details'); }
   else { showPanel('generation-panel'); renderProgress('generation-progress'); renderDetails('detail-list');
     byId('cancel').disabled = !author.canCancel; byId('generation-message').textContent = state === 'MAKOTOMARU_CONFIGURATION'
       ? '真実丸が事件Scenarioを考えています…' : state.includes('REVIEW') || state.includes('VALIDAT') ? '攻撃経路と調査方法を確認しています…' : 'Contractに沿ってゲームを構築しています…'; }
+  renderOverallProgress();
   if (!author.canCancel && polling) { clearInterval(polling); polling = null; }
 }
 
 async function refresh() { try { author = (await api('/api/author/status')).author; render(); }
-  catch (error) { byId('manual-errors').textContent = error.message; } }
+  catch (error) {
+    byId('manual-errors').textContent = error.message;
+    byId('generation-message').textContent = `状態の更新またはゲームの保存に失敗しました。${error.message}`;
+  } }
 function beginPolling() { polling ??= setInterval(refresh, 400); }
 async function postAuthor(path, body = {}) { requireInitialized(); const value = await api(path, body); author = value.author; render(); if (author.canCancel) beginPolling(); }
 
 async function chooseMode(mode) {
-  try { await postAuthor('/api/author/select-mode', { mode }); }
+  try { if (mode === 'MANUAL') manualStep = 0;
+    await postAuthor('/api/author/select-mode', { mode }); }
   catch (error) { const notice = byId('initialization-status'); notice.hidden = false; notice.textContent = error.message; }
 }
 function bindAuthorControls() {
+byId('game-start').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
+byId('activity-back').addEventListener('click', () => { entryView = 'SPLASH'; render(); });
+byId('choose-creation').addEventListener('click', () => { entryView = 'MODE'; render(); });
+byId('choose-court').addEventListener('click', async () => { entryView = 'COURT'; render(); await loadSavedGames(); });
+byId('court-entry-back').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
+byId('court-create-game').addEventListener('click', () => { entryView = 'MODE'; render(); });
+byId('mode-flow-back').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
+byId('menu-help').addEventListener('click', () => { byId('app-menu').open = false; entryView = 'HELP'; render(); });
+byId('menu-settings').addEventListener('click', () => {
+  byId('app-menu').open = false; const settings = readSettings();
+  byId('setting-text-size').value = settings.textSize; byId('setting-motion').value = settings.motion;
+  byId('settings-status').textContent = ''; entryView = 'SETTINGS'; render();
+});
+byId('menu-title').addEventListener('click', () => { byId('app-menu').open = false; entryView = 'SPLASH'; render(); });
+byId('menu-exit').addEventListener('click', () => {
+  byId('app-menu').open = false; const dialog = byId('exit-dialog');
+  if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+});
+byId('help-back').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
+byId('settings-back').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
+byId('settings-apply').addEventListener('click', () => applySettings({
+  textSize: byId('setting-text-size').value, motion: byId('setting-motion').value,
+}, true));
+byId('exit-cancel').addEventListener('click', () => {
+  const dialog = byId('exit-dialog'); if (typeof dialog.close === 'function') dialog.close();
+  else dialog.removeAttribute('open');
+});
+for (const [id, saveData] of [['exit-save', true], ['exit-without-save', false]]) {
+  byId(id).addEventListener('click', async () => {
+    const buttons = [byId('exit-save'), byId('exit-without-save'), byId('exit-cancel')];
+    buttons.forEach(button => { button.disabled = true; });
+    try {
+      await api('/api/author/shutdown', { saveData });
+      const dialog = byId('exit-dialog'); if (typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+      showPanel('shutdown-panel');
+    } catch (error) {
+      buttons.forEach(button => { button.disabled = false; });
+      byId('exit-dialog-title').textContent = `終了できませんでした：${error.message}`;
+    }
+  });
+}
 byId('choose-manual').addEventListener('click', () => chooseMode('MANUAL'));
 byId('choose-makotomaru').addEventListener('click', () => chooseMode('MAKOTOMARU'));
-byId('manual-back').addEventListener('click', () => { author.currentState = 'MODE_SELECTION'; render(); });
-byId('makotomaru-back').addEventListener('click', () => { author.currentState = 'MODE_SELECTION'; render(); });
+byId('manual-back').addEventListener('click', () => { entryView = 'MODE'; author.currentState = 'MODE_SELECTION'; render(); });
+byId('manual-previous').addEventListener('click', () => showManualStep(manualStep - 1));
+byId('manual-next').addEventListener('click', () => {
+  if (manualStep === 1 && !document.querySelector('input[name="attack"]:checked')) {
+    byId('manual-errors').textContent = '攻撃手法を1つ以上選択してください。'; return;
+  }
+  showManualStep(manualStep + 1);
+});
+byId('makotomaru-back').addEventListener('click', () => { entryView = 'MODE'; author.currentState = 'MODE_SELECTION'; render(); });
 byId('manual-create').addEventListener('click', async () => { byId('manual-errors').replaceChildren(); try {
+  if (manualStep !== 7) return;
   await postAuthor('/api/author/manual', { configuration: collectConfiguration() });
   if (author.configurationValidation?.status === 'INVALID') for (const item of author.configurationValidation.errors) text(byId('manual-errors'), 'p', `${item.code} — ${item.field}: ${item.reason}`);
 } catch (error) { byId('manual-errors').textContent = error.message; } });
@@ -386,15 +616,33 @@ byId('preview-approve').addEventListener('click', () => postAuthor('/api/author/
 byId('preview-reject').addEventListener('click', () => postAuthor('/api/author/reject'));
 byId('preview-regenerate').addEventListener('click', () => postAuthor('/api/author/regenerate'));
 byId('cancel').addEventListener('click', () => postAuthor('/api/author/cancel'));
-byId('retry').addEventListener('click', () => { author.currentState = 'MODE_SELECTION'; render(); });
+byId('ready-back').addEventListener('click', async () => {
+  try { entryView = 'ACTIVITY'; await postAuthor('/api/author/menu'); }
+  catch (error) { byId('ready-save-status').textContent = error.message; }
+});
+byId('retry').addEventListener('click', () => { entryView = 'MODE'; author.currentState = 'MODE_SELECTION'; render(); });
 
+for (const kind of Object.keys(itemIndexes)) {
+  byId(`${kind}-previous`).addEventListener('click', () => {
+    if (kind !== 'attack-details') syncNetworkModel();
+    itemIndexes[kind]--; updateItemPager(kind); resetManualScroll();
+  });
+  byId(`${kind}-next`).addEventListener('click', () => {
+    if (kind !== 'attack-details') syncNetworkModel();
+    itemIndexes[kind]++; updateItemPager(kind); resetManualScroll();
+  });
+}
 byId('add-subnet').addEventListener('click', () => { syncNetworkModel(); const n = networkModel.subnets.length + 1;
-  networkModel.subnets.push({ subnetId: `subnet-${n}`, label: `Subnet ${n}`, cidr: `10.${n}.0.0/24`, trustBoundaryId: `zone-${n}` }); renderNetworkBuilder(); renderAttackDetails(); });
+  networkModel.subnets.push({ subnetId: `subnet-${n}`, label: `Subnet ${n}`, cidr: `10.${n}.0.0/24`, trustBoundaryId: `zone-${n}` }); itemIndexes.subnet = networkModel.subnets.length - 1;
+  renderNetworkBuilder(); renderAttackDetails(); });
 byId('add-node').addEventListener('click', () => { syncNetworkModel(); const n = networkModel.nodes.length + 1;
-  networkModel.nodes.push({ nodeId: `node-${n}`, label: `Node ${n}`, nodeType: 'SERVER', os: 'linux', ip: `10.10.0.${n + 50}`, subnetId: networkModel.subnets[0]?.subnetId ?? 'subnet-1', trustBoundaryId: networkModel.subnets[0]?.trustBoundaryId ?? 'zone-1', roles: ['server'], logSources: ['APPLICATION_LOG'] }); renderNetworkBuilder(); renderAttackDetails(); });
+  networkModel.nodes.push({ nodeId: `node-${n}`, label: `Node ${n}`, nodeType: 'SERVER', os: 'linux', ip: `10.10.0.${n + 50}`, subnetId: networkModel.subnets[0]?.subnetId ?? 'subnet-1', trustBoundaryId: networkModel.subnets[0]?.trustBoundaryId ?? 'zone-1', roles: ['server'], logSources: ['APPLICATION_LOG'] }); itemIndexes.node = networkModel.nodes.length - 1;
+  renderNetworkBuilder(); renderAttackDetails(); });
 byId('add-service').addEventListener('click', () => { syncNetworkModel(); const n = networkModel.services.length + 1;
-  networkModel.services.push({ serviceId: `service-${n}`, nodeId: networkModel.nodes[0]?.nodeId ?? 'node-1', label: `Service ${n}`, serviceType: 'logging', platform: 'logging' }); renderNetworkBuilder(); renderAttackDetails(); });
-byId('add-connection').addEventListener('click', () => { syncNetworkModel(); networkModel.connections.push({ fromNodeId: networkModel.nodes[0]?.nodeId ?? '', toNodeId: networkModel.nodes[1]?.nodeId ?? '' }); renderNetworkBuilder(); renderAttackDetails(); });
+  networkModel.services.push({ serviceId: `service-${n}`, nodeId: networkModel.nodes[0]?.nodeId ?? 'node-1', label: `Service ${n}`, serviceType: 'logging', platform: 'logging' }); itemIndexes.service = networkModel.services.length - 1;
+  renderNetworkBuilder(); renderAttackDetails(); });
+byId('add-connection').addEventListener('click', () => { syncNetworkModel(); networkModel.connections.push({ fromNodeId: networkModel.nodes[0]?.nodeId ?? '', toNodeId: networkModel.nodes[1]?.nodeId ?? '' });
+  itemIndexes.connection = networkModel.connections.length - 1; renderNetworkBuilder(); renderAttackDetails(); });
 byId('incident-date').addEventListener('change', () => renderAttackDetails());
 for (const id of ['subnet-rows', 'node-rows', 'service-rows', 'connection-rows']) {
   byId(id).addEventListener('input', () => { syncNetworkModel(); drawNetwork('manual-network-diagram', networkModel); });
@@ -402,6 +650,7 @@ for (const id of ['subnet-rows', 'node-rows', 'service-rows', 'connection-rows']
 }
 
 try {
+  applySettings(readSettings());
   setInitializationState(false, '初期設定を読み込んでいます…');
   bindAuthorControls();
   const value = await api('/api/author/start', {}); token = value.token; bootstrap = value.bootstrap;
@@ -421,5 +670,5 @@ try {
 } catch (error) {
   const message = error.message.includes(initializationHelp) ? error.message : `${error.message} ${initializationHelp}`;
   setInitializationState(false, `初期設定の読み込みに失敗しました。${message}`);
-  showPanel('mode-panel');
+  showPanel('splash-panel');
 }

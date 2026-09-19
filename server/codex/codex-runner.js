@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CodexCancelledError, CodexError, CodexTimeoutError,
@@ -8,6 +9,20 @@ import { sanitizeDiagnostic } from './codex-output-parser.js';
 import { adaptCodexOutputSchema } from './codex-schema-adapter.js';
 
 const MAX_CAPTURE_BYTES = 10 * 1024 * 1024;
+const require = createRequire(import.meta.url);
+
+export function resolveCodexInvocation(platform = process.platform) {
+  if (platform !== 'win32') return { command: 'codex', prefixArgs: [] };
+  try {
+    // npm's codex command is a .cmd/.ps1 shim on Windows. Run its JS entry point
+    // directly so no shell or PowerShell execution-policy change is needed.
+    return { command: process.execPath,
+      prefixArgs: [require.resolve('@openai/codex/bin/codex.js')] };
+  } catch {
+    // A standalone native Codex installation may still provide codex.exe on PATH.
+    return { command: 'codex.exe', prefixArgs: [] };
+  }
+}
 
 function schemaFailureDetail(stderr) {
   const safe = sanitizeDiagnostic(stderr);
@@ -70,9 +85,12 @@ function collect(stream, onLimit) {
 }
 
 export class CodexRunner {
-  constructor({ command = 'codex', cwd = process.cwd(), timeoutMs = Number(
+  constructor({ command, cwd = process.cwd(), timeoutMs = Number(
     process.env.CODEX_GENERATION_TIMEOUT_MS ?? 180000), spawnImpl = spawn } = {}) {
-    this.command = command;
+    const invocation = command === undefined ? resolveCodexInvocation()
+      : { command, prefixArgs: [] };
+    this.command = invocation.command;
+    this.prefixArgs = invocation.prefixArgs;
     this.cwd = cwd;
     this.timeoutMs = Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : 180000;
     this.spawnImpl = spawnImpl;
@@ -88,7 +106,7 @@ export class CodexRunner {
       let killTimer = null;
       let child;
       try {
-        child = this.spawnImpl(this.command, args, {
+        child = this.spawnImpl(this.command, [...this.prefixArgs, ...args], {
           cwd: this.cwd, shell: false, windowsHide: true,
           stdio: ['pipe', 'pipe', 'pipe'],
         });

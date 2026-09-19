@@ -1,22 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createAppServer } from '../server/server.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { createDefaultConfiguration } from '../server/generation/scenario-configuration.js';
 
 async function setup(t, runner = new MockCodexRunner()) {
-  const server = createAppServer({ mode: 'AUTHOR', codexRunner: runner });
+  const savedGamesDirectory = await mkdtemp(join(tmpdir(), 'incident-craft-games-'));
+  const server = createAppServer({ mode: 'AUTHOR', codexRunner: runner, savedGamesDirectory });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  t.after(async () => {
+    await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
+    await rm(savedGamesDirectory, { recursive: true, force: true });
+  });
   const base = `http://127.0.0.1:${server.address().port}`;
-  return { base, runner, post: async (path, body, token) => {
+  return { base, runner, savedGamesDirectory, post: async (path, body, token) => {
     const response = await fetch(base + path, { method: 'POST', headers: {
       'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body) });
     return { response, data: await response.json() };
   }, status: async token => {
     const response = await fetch(base + '/api/author/status', {
+      headers: { Authorization: `Bearer ${token}` } });
+    return { response, data: await response.json() };
+  }, games: async token => {
+    const response = await fetch(base + '/api/author/games', {
+      headers: { Authorization: `Bearer ${token}` } });
+    return { response, data: await response.json() };
+  }, deleteGame: async (token, gameId) => {
+    const response = await fetch(`${base}/api/author/games/${gameId}`, { method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` } });
     return { response, data: await response.json() };
   } };
@@ -64,11 +79,24 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
   await tools.post('/api/author/approve', {}, token);
   result = await waitFor(tools.status, token, ['SCENARIO_PREVIEW', 'READY', 'FAILED']);
   assert.equal(result.data.author.currentState, 'READY');
-  assert.match(result.data.author.playUrl, /^\/\?game=[a-f0-9]{48}$/);
+  assert.equal(result.data.author.saved, true);
+  assert.match(result.data.author.playUrl, /^\/\?saved=saved_[a-f0-9]{32}$/);
   assert.equal(tools.runner.scenarioCalls, 1); assert.equal(tools.runner.reviewCalls, 2);
 
-  const playId = new URL(`http://localhost${result.data.author.playUrl}`).searchParams.get('game');
-  result = await tools.post('/api/start', { playId }); const playerToken = result.data.token;
+  const saved = await tools.games(token);
+  assert.equal(saved.response.status, 200);
+  assert.equal(saved.data.games.length, 1);
+  assert.match(saved.data.games[0].gameId, /^saved_[a-f0-9]{32}$/);
+  assert.equal(new URL(`http://localhost${result.data.author.playUrl}`).searchParams.get('saved'),
+    saved.data.games[0].gameId);
+  assert.equal(saved.data.games[0].difficulty, 2);
+  assert.deepEqual(saved.data.games[0].attacks, ['フィッシング', '反射型XSS']);
+  assert.equal((await readdir(tools.savedGamesDirectory)).filter(name => name.endsWith('.json')).length, 1);
+  assert.equal((await fetch(`${tools.base}/data/saved-games/${saved.data.games[0].gameId}.json`)).status, 404);
+  assert.equal((await tools.games()).response.status, 401);
+
+  result = await tools.post('/api/start', { gameId: saved.data.games[0].gameId });
+  const playerToken = result.data.token;
   assert.equal(result.data.game.currentState, 'TITLE');
   assert.doesNotMatch(JSON.stringify(result.data.game),
     /groundTruth|verificationResult|correctEvidenceIds|classification|sourceEvidenceSetId|JSON Schema|Prompt/);
@@ -100,6 +128,17 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
       evidenceId: 'evidence_technical_a' });
   }
   assert.equal(game.currentState, 'ACQUITTED');
+
+  const menu = await tools.post('/api/author/menu', {}, token);
+  assert.equal(menu.response.status, 200);
+  assert.equal(menu.data.author.currentState, 'MODE_SELECTION');
+  assert.equal((await tools.games(token)).data.games.length, 1);
+
+  const removed = await tools.deleteGame(token, saved.data.games[0].gameId);
+  assert.equal(removed.response.status, 200);
+  assert.equal((await tools.games(token)).data.games.length, 0);
+  const missing = await tools.post('/api/start', { gameId: saved.data.games[0].gameId });
+  assert.equal(missing.response.status, 404);
 });
 
 test('旧Import APIと承認を迂回するgenerate APIは公開しない', async t => {
@@ -169,4 +208,28 @@ test('Author APIは未知field・過大JSON・prototype pollution keyを拒否�
     headers: { 'Content-Type': 'application/json' },
     body: '{"constructor":{"prototype":{"polluted":true}}}' });
   assert.equal(response.status, 400); assert.equal({}.polluted, undefined);
+});
+
+test('ゲーム終了APIは認証と保存選択を確認して今回のServerを停止する', async () => {
+  const savedGamesDirectory = await mkdtemp(join(tmpdir(), 'incident-craft-shutdown-'));
+  const server = createAppServer({ mode: 'AUTHOR', codexRunner: new MockCodexRunner(),
+    savedGamesDirectory });
+  try {
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const post = async (path, body, token) => fetch(base + path, { method: 'POST', headers: {
+      'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body) });
+    const started = await (await post('/api/author/start', {})).json();
+    assert.equal((await post('/api/author/shutdown', { saveData: true })).status, 401);
+    assert.equal((await post('/api/author/shutdown', { saveData: 'yes' }, started.token)).status, 400);
+    const closed = once(server, 'close');
+    const response = await post('/api/author/shutdown', { saveData: false }, started.token);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { shuttingDown: true, saveData: false, savedGameCount: 0 });
+    await closed;
+  } finally {
+    if (server.listening) await new Promise(resolve => server.close(resolve));
+    await rm(savedGamesDirectory, { recursive: true, force: true });
+  }
 });

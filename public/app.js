@@ -6,7 +6,9 @@ let token = null;
 let game = null;
 let busy = false;
 let generatedRenderer = null;
-const playId = new URLSearchParams(location.search).get('game');
+const parameters = new URLSearchParams(location.search);
+const playId = parameters.get('game');
+const savedGameId = parameters.get('saved');
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -203,10 +205,11 @@ function render() {
   document.body.classList.remove('playing-generated');
   screen.className = ''; screen.style.backgroundImage = '';
   if (!game) {
-    const title = element('h1', 'インシデント調査ゲーム');
+    const title = element('h1', 'インシデントクラフト');
     title.id = 'screen-title'; title.tabIndex = -1;
     screen.append(title, element('p', 'ゲームデータを検証して開始します。'),
-      button('ゲーム開始', () => request('/api/start', playId ? { playId } : {})));
+      button('ゲーム開始', () => request('/api/start', savedGameId
+        ? { gameId: savedGameId } : playId ? { playId } : {})));
     title.focus(); return;
   }
   if (game.mode === 'XSS_PROTOTYPE') renderXssPrototype();

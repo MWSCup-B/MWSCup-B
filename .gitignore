@@ -1,0 +1,5 @@
+node_modules/
+
+data/saved-games/*.json
+data/saved-games/.*.tmp
+!data/saved-games/.gitkeep

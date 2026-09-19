@@ -12,6 +12,7 @@ import { CodexRunner } from './codex/codex-runner.js';
 import { CodexJsonRunner } from './codex/codex-json-runner.js';
 import { actXssPrototype, createXssPrototypeGame, xssPrototypePlayerView }
   from './xss-prototype.js';
+import { SavedGameStore } from './saved-game-store.js';
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -45,7 +46,8 @@ const xssActionFields = new Map([
   ['present-evidence', ['action', 'evidenceId']], ['next-round', ['action']], ['finish', ['action']],
 ]);
 
-export function createAppServer({ mode, gameCaseResult = null, codexRunner = null } = {}) {
+export function createAppServer({ mode, gameCaseResult = null, codexRunner = null,
+  savedGamesDirectory = resolve(process.cwd(), 'data', 'saved-games') } = {}) {
   if (!['FIXTURE', 'GENERATED', 'AUTHOR'].includes(mode)) {
     throw new GameError('GAME_MODE_REQUIRED', 'mode',
       'AUTHOR、FIXTURE、GENERATEDのいずれかを明示してください。', 500);
@@ -55,17 +57,24 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
   const sessions = new Map();
   const authorSessions = new Map();
   const playableGames = new Map();
-  const autoManager = new AutoGenerationManager({ jsonRunner: codexRunner
-    ?? new CodexJsonRunner(new CodexRunner({ cwd: process.cwd() })) });
-  function publishIfReady(record, token) {
-    if (record.session.auto?.state !== 'READY' || !record.session.runtime) return;
-    if (!record.session.playId) {
+  const savedGames = mode === 'AUTHOR' ? new SavedGameStore(savedGamesDirectory) : null;
+  async function saveCompletedGame(session) {
+    try {
+      const game = await savedGames.save(session.gameCaseResult, savedGameMetadata(session));
+      session.savedGameId = game.gameId;
+      session.savedAt = game.savedAt;
       const playId = randomBytes(24).toString('hex');
-      record.session.playId = playId;
-      playableGames.set(playId, { runtime: record.session.runtime, ownerToken: token });
+      session.playId = playId;
+      playableGames.set(playId, { runtime: session.runtime });
+    } catch {
+      throw new GameError('GAME_SAVE_FAILED', 'savedGamesDirectory',
+        '完成したゲームをローカルへ保存できませんでした。', 500);
     }
   }
-  return createServer(async (req, res) => {
+  const autoManager = new AutoGenerationManager({ jsonRunner: codexRunner
+    ?? new CodexJsonRunner(new CodexRunner({ cwd: process.cwd() })),
+  onReady: mode === 'AUTHOR' ? saveCompletedGame : null });
+  const appServer = createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -80,7 +89,7 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
       const requestUrl = new URL(req.url, `http://${req.headers.host}`);
       const pathname = requestUrl.pathname;
       if (req.method === 'GET' && mode === 'AUTHOR' && pathname === '/'
-        && !requestUrl.searchParams.has('game')) {
+        && !requestUrl.searchParams.has('game') && !requestUrl.searchParams.has('saved')) {
         res.writeHead(302, { Location: '/author' }); res.end(); return;
       }
       const asset = assets.get(pathname);
@@ -96,10 +105,22 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
       const now = Date.now();
       cleanupSessions(sessions, now);
       cleanupAuthorSessions(authorSessions, playableGames, now);
+      if (mode === 'AUTHOR' && pathname === '/api/author/games' && req.method === 'GET') {
+        requireAuthorSession(req, authorSessions);
+        sendJson(res, 200, { games: await savedGames.list() });
+        return;
+      }
+      const savedGameRoute = mode === 'AUTHOR'
+        ? /^\/api\/author\/games\/(saved_[a-f0-9]{32})$/.exec(pathname) : null;
+      if (savedGameRoute && req.method === 'DELETE') {
+        requireAuthorSession(req, authorSessions);
+        await savedGames.delete(savedGameRoute[1]);
+        sendJson(res, 200, { deleted: true });
+        return;
+      }
       if (mode === 'AUTHOR' && pathname.startsWith('/api/author/')) {
         if (pathname === '/api/author/status' && req.method === 'GET') {
-          const { session, token, record } = requireAuthorSession(req, authorSessions);
-          publishIfReady(record, token);
+          const { session } = requireAuthorSession(req, authorSessions);
           sendJson(res, 200, { author: autoAuthorView(session) });
           return;
         }
@@ -138,6 +159,21 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
           validateFields(body, []); author = autoManager.regenerate(record.session);
         } else if (pathname === '/api/author/cancel') {
           validateFields(body, []); author = autoManager.cancel(record.session);
+        } else if (pathname === '/api/author/menu') {
+          validateFields(body, []);
+          if (record.session.playId) playableGames.delete(record.session.playId);
+          author = autoManager.returnToMenu(record.session);
+        } else if (pathname === '/api/author/shutdown') {
+          validateFields(body, ['saveData']);
+          if (typeof body.saveData !== 'boolean') throw new GameError(
+            'INVALID_SAVE_CHOICE', 'saveData', '保存するかどうかを指定してください。');
+          const savedGameCount = (await savedGames.list()).length;
+          sendJson(res, 200, { shuttingDown: true, saveData: body.saveData, savedGameCount });
+          setTimeout(() => {
+            appServer.close();
+            appServer.closeAllConnections();
+          }, 100);
+          return;
         } else throw new GameError('NOT_FOUND', 'path', '対象が見つかりません。', 404);
         record.updatedAt = now;
         sendJson(res, 200, { author });
@@ -148,7 +184,7 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
       }
       const body = await readJson(req);
       if (pathname === '/api/start') {
-        validateFields(body, mode === 'AUTHOR' ? ['playId'] : []);
+        validateFields(body, mode === 'AUTHOR' ? ['playId', 'gameId'] : []);
         if (sessions.size >= 1000) {
           throw new GameError('SESSION_LIMIT', 'session', '起動中のゲーム数が上限に達しました。', 503);
         }
@@ -158,11 +194,14 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
         let sessionRuntime = runtime;
         let sessionMode = mode;
         if (mode === 'AUTHOR') {
-          if (typeof body.playId !== 'string' || !playableGames.has(body.playId)) {
+          if (typeof body.gameId === 'string') {
+            sessionRuntime = (await savedGames.load(body.gameId)).runtime;
+          } else if (typeof body.playId === 'string' && playableGames.has(body.playId)) {
+            sessionRuntime = playableGames.get(body.playId).runtime;
+          } else {
             throw new GameError('ACCEPTED_GAME_REQUIRED', 'playId',
-              'ACCEPTEDになった制作セッションのPlay URLを使用してください。', 409);
+              '保存済みゲーム、またはACCEPTEDになった制作セッションを指定してください。', 409);
           }
-          sessionRuntime = playableGames.get(body.playId).runtime;
           sessionMode = sessionRuntime.mode === 'XSS_PROTOTYPE' ? 'XSS_PROTOTYPE' : 'GENERATED';
         }
         const game = sessionMode === 'GENERATED' ? createGeneratedGame(sessionRuntime)
@@ -203,6 +242,21 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
       });
     }
   });
+  return appServer;
+}
+
+function savedGameMetadata(session) {
+  const context = session.configuration?.incidentContext ?? {};
+  const preview = session.scenarioPreview ?? {};
+  const organization = context.organizationName || '作成した事件';
+  const targetSystem = context.victimSystem || preview.targetSystem || '対象システム';
+  return {
+    title: `${organization} — ${targetSystem}`,
+    summary: preview.incidentSummary || `${organization}で発生したセキュリティ事件を調査します。`,
+    targetSystem,
+    difficulty: session.configuration?.difficulty ?? preview.difficulty,
+    attacks: (preview.attacks ?? []).map(attack => attack.label),
+  };
 }
 
 function cleanupSessions(sessions, now) {

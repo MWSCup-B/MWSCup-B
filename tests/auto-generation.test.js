@@ -326,7 +326,8 @@ test('Author UIはJSONを直接編集させずManual・真実丸・Preview承認
     readFile(new URL('../public/author.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/author.js', import.meta.url), 'utf8')]);
   assert.match(html, /詳細設定/); assert.match(html, /真実丸/);
-  assert.match(html, /Network Builder/); assert.match(html, /Scenario Preview/);
+  assert.match(html, /サブネット構成/); assert.match(html, /構成図確認/);
+  assert.match(html, /Scenario Preview/);
   assert.match(html, /このScenarioでゲームを作成/);
   assert.doesNotMatch(html, /textarea|JSON Import|Prompt|Developer Mode/);
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);

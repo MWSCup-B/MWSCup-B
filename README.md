@@ -24,9 +24,13 @@ Ground Truth（非公開）
 
 ## 3. Scenario 作成方式
 
+Author UIの入口は、タイトル画面の「Game Start!」→「ゲーム作成 / 裁判」の用途選択→ゲーム作成を選んだ場合の「詳細設定 / 真実丸」の作成方法選択、の順に進みます。タイトル画面の操作は「Game Start!」だけです。裁判は作成済みScenarioのゲーム開始URLから開始するため、Author UIの裁判入口ではこの条件を案内します。
+
 ### 詳細設定
 
 内部 ID は `MANUAL`、日本語 UI は「詳細設定」です。JSON を直接編集せず、Wizard の GUI から次を設定します。
+
+詳細設定画面では、事件情報 → 攻撃手法 → 具体的な攻撃内容と調査方法 → Subnet → Node → Service → Connection → Network Diagram確認の順に進みます。複数のAttackやNetwork項目は1件ずつ切り替えます。最後の確認画面から従来どおり「Scenario案を作成」します。画面全体はビューポート内に収め、小さい画面や拡大表示で収まらない入力欄だけを画面内でスクロールします。
 
 - Attack 1～3件、Attack Order、発生日時
 - source node、target node、target service
@@ -330,7 +334,7 @@ Player state は前節の Generated Game runtime state を使用します。Auth
 
 ## 18. Codex CLI
 
-アプリは現在 Codex CLI でログイン済みの ChatGPT account をそのまま使用し、特定 account に固定依存しません。アプリ自身は logout、login、account switching、credential file の読取りや変更を行いません。
+アプリは現在 Codex CLI でログイン済みの ChatGPT account をそのまま使用し、特定 account に固定依存しません。アプリ自身は logout、login、account switching、credential file の読取りや変更を行いません。Windows では npm の `codex.ps1` / `codex.cmd` を子プロセスとして直接起動せず、インストール済み `@openai/codex` の JS entry point を Node.js から実行します。
 
 主な実行境界は次のとおりです。
 
@@ -348,14 +352,35 @@ Codex CLIの非0終了は、usage/rate limit、HTTP、model、input size、outpu
 
 ## 19. 起動方法
 
-必要環境は Node.js 22 以上と、ログイン済み Codex CLI です。
+必要環境は Node.js 22 以上と、ログイン済み Codex CLI です。初回はリポジトリのディレクトリで `npm install` を実行してください。
+
+Linux / macOS:
 
 ```sh
-cd /home/shu/MWSCup
+cd /path/to/MWSCup-B
+npm install
+npx codex login
+npx codex login status
 npm start
 ```
 
+Windows PowerShell:
+
+```powershell
+cd C:\path\to\MWSCup-B
+npm.cmd install
+npx.cmd codex login
+npx.cmd codex login status
+npm.cmd start
+```
+
+PowerShell で `codex` が `codex.ps1` として解決され、実行ポリシーで拒否される場合も、上記の `npx.cmd codex ...` を使用できます。PowerShell の実行ポリシーを変更する必要はありません。Node.js のバージョンは `node --version` で確認してください。
+
 `http://localhost:3000` を開くと Author UI へ移動します。既定は `AUTHOR` mode、listen address は `127.0.0.1:3000` です。
+
+最終評価を通過したゲームは、生成処理の最後に `data/saved-games/` へJSONとして自動保存されます。ファイル保存に成功した後で画面が `READY`（「ゲームが完成しました」）へ進みます。完了画面では保存完了を表示し、「ゲームをプレイする」と「モード選択へ戻る」を選択できます。タイトル画面で「Game Start!」→「裁判」と進むと保存済みゲームの一覧が表示され、ゲームの開始と削除ができます。保存ファイルは静的配信の対象外であり、サーバーを再起動しても一覧に残ります。プレイ中の進行状況はゲームごとのメモリ内セッションで、再読み込み時は最初から開始します。
+
+「ゲーム作成 / 裁判」のモード選択画面右上にはシステムメニューがあります。「遊び方」「設定」「タイトルへ戻る」「ゲーム終了」を選択できます。設定は文字サイズと画面演出をブラウザごとに保存します。「ゲーム終了」は確認後に現在のローカルサーバーを停止します。「保存せず終了」を選んでも、すでに自動保存された完成ゲームは削除せず、現在の未完了な制作状態だけを破棄します。
 
 ポート3000が既存プロセスで使用中の場合は新しいサーバーを起動できません。既存の開発サーバーを利用するか、不要なプロセスを停止してから再実行してください。
 
@@ -363,6 +388,8 @@ npm start
 
 - `GAME_MODE=GENERATED GAME_CASE_PATH=private/game-case-result.json npm start`
 - `GAME_MODE=FIXTURE npm start`
+
+PowerShell では環境変数を先に設定します。例: `$env:GAME_MODE='FIXTURE'; npm.cmd start`。
 
 ## 20. Test
 
@@ -384,7 +411,7 @@ npm run smoke:codex
 - Attack catalog は現在 `phishing`、`reflected_xss`、`sql_injection` の3定義です。
 - Contract は Attack 1～3件を受け付けますが、現カタログで成立確認済みの複合 chain は `phishing → reflected_xss` です。3定義の単純並置は連結 Attack Graph にならないため拒否します。
 - 真実丸の Authentication category に直接対応する Attack Definition はまだありません。該当定義がない category は、登録済み定義からの安全な提案に限定されます。
-- Evidence と session はメモリ上だけに保持され、server 再起動で失われます。
+- プレイ中の進行状況と制作途中のsessionはメモリ上だけに保持され、server再起動で失われます。完成したゲームは`data/saved-games/`に保持されます。
 - 同一 server で同時に実行できる Codex generation は1件です。
 - localhost 向け単一 process 構成です。
 - 自動 Evaluation は構造、技術参照、操作経路、漏えいを検査しますが、人間による教材品質レビューを代替しません。

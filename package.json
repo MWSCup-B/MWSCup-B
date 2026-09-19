@@ -8,5 +8,10 @@
     "test": "node --test",
     "smoke:codex": "node scripts/real-codex-smoke.js"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@openai/codex": "^0.155.0"
+  }
 }
