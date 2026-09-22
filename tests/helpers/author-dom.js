@@ -109,14 +109,17 @@ function documentFromHtml() {
   return document;
 }
 
-export function startAuthorDom(bootstrap, { missingElementId = null, startError = null } = {}) {
+export function startAuthorDom(bootstrap, { missingElementId = null, startError = null,
+  initialAuthor = {}, responses = {}, storage = new Map() } = {}) {
   const document = documentFromHtml(); const calls = [];
+  let now = 0; let timerId = 0; const timers = new Map(); const percentHistory = [0];
+  class TestDate extends Date { static now() { return now; } }
   if (missingElementId) {
     const missing = document.getElementById(missingElementId);
     missing.parentNode.children = missing.parentNode.children.filter(node => node !== missing);
   }
   const author = { currentState: 'MODE_SELECTION', canCancel: false,
-    developerDetails: [], progress: [], maxAttempts: 3 };
+    developerDetails: [], progress: [], maxAttempts: 3, ...structuredClone(initialAuthor) };
   const fetch = async (path, options) => {
     calls.push({ path, body: options.body ? JSON.parse(options.body) : null });
     if (path === '/api/author/start') {
@@ -127,11 +130,30 @@ export function startAuthorDom(bootstrap, { missingElementId = null, startError 
     }
     if (path === '/api/author/select-mode') author.currentState = JSON.parse(options.body).mode === 'MANUAL'
       ? 'MANUAL_CONFIGURATION' : 'MAKOTOMARU_CONFIGURATION';
+    if (responses[path]) {
+      const result = await responses[path](JSON.parse(options.body ?? '{}'), author);
+      if (result) Object.assign(author, result);
+    }
     return { ok: true, json: async () => ({ author: structuredClone(author) }) };
   };
   const ready = runInNewContext(`(async () => {\n${source}\n})()`, {
     document, fetch, structuredClone, crypto: { randomUUID },
-    setInterval: () => 1, clearInterval: () => {},
+    Date: TestDate,
+    localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    setInterval: (callback, interval) => { const id = ++timerId; timers.set(id, { callback, interval, next: now + interval }); return id; },
+    clearInterval: id => timers.delete(id),
   });
-  return { document, calls, ready, byId: id => document.getElementById(id) };
+  return { document, calls, ready, percentHistory, byId: id => document.getElementById(id),
+    setAuthor(value) { Object.assign(author, structuredClone(value)); },
+    async advance(ms) {
+      const until = now + ms;
+      while (true) {
+        const timer = [...timers.values()].filter(item => item.next <= until).sort((a, b) => a.next - b.next)[0];
+        if (!timer) break;
+        now = timer.next; timer.next += timer.interval; await timer.callback();
+        const percent = Number.parseInt(document.getElementById('generation-percent-label').textContent, 10);
+        if (percentHistory.at(-1) !== percent) percentHistory.push(percent);
+      }
+      now = until;
+    } };
 }

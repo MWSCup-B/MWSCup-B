@@ -166,7 +166,7 @@ function add(issues, condition, ...details) {
   if (condition) issues.push(issue(...details));
 }
 
-function leakedInternalValue(content, input) {
+export function leakedInternalValue(content, input) {
   if (/ground[\s_-]*truth|正解|事件の真相/iu.test(content)) return true;
   const internalIds = [input.groundTruth.groundTruthId, input.verificationResult.verificationId,
     input.evidenceAgentHandoff.handoffId, input.attackGraph.graphId,
@@ -217,8 +217,8 @@ export function validateEvidenceConsistency(evidencePackage, input) {
         [`evidence:${artifact.evidenceId}`], artifact.evidenceId, requirementId);
       if (requirement) add(issues, !artifact.sourceRefs.some(ref => requirement.grounds.some(ground => sameValues(ref, ground))),
         'EVIDENCE_GROUND_MISMATCH', `evidenceArtifacts.${artifact.evidenceId}.sourceRefs`,
-        'ArtifactをRequirementのgroundへ追跡できません。',
-        '該当Requirementに登録済みのgroundをsourceRefsへ含めてください。',
+        `ArtifactをRequirement「${requirementId}」のgroundへ追跡できません。`,
+        `sourceRefsには当該Requirementに登録された根拠が必要です。許可されたgrounds: ${JSON.stringify(requirement.grounds)}。TESTIMONYでも人物参照だけでは技術資料のRequirementを満たしません。本文に対応する既存根拠だけを指定してください。`,
         [`evidenceRequirement:${requirementId}`], artifact.evidenceId, requirementId);
     }
     const expectedPurposes = [...new Set(artifact.requirementIds.map(id => requirements.get(id)?.purpose)

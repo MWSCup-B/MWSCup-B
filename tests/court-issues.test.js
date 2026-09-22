@@ -6,12 +6,13 @@ import { AutoGenerationManager, autoAuthorBootstrap, createAutoAuthorSession }
 import { actGenerated, createGeneratedGame, generatedPlayerView } from '../server/generated-game.js';
 import { courtIssueGenerationProblems } from '../server/generation/court-issues.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
-import { currentCorrectPair } from './helpers/court-issues.js';
+import { observationAnchors } from '../server/generation/court-questions.js';
+import { currentCorrectPair, syncQuestionQuotes, collectCurrentTarget, enterCurrentCourt } from './helpers/court-issues.js';
 
 test('Scenario revision and independent review prompts preserve the new distinct-issue count', async () => {
   for (const name of ['scenario-generation-v1', 'scenario-verification-v1']) {
     const prompt = await readFile(new URL(`../prompts/${name}.md`, import.meta.url), 'utf8');
-    assert.match(prompt, /difficulty \+ 1/);
+    assert.match(prompt, /調査対象ごとに1回/);
     assert.match(prompt, /異なる争点/);
     assert.doesNotMatch(prompt, /は法廷ラウンド数に対応し/);
   }
@@ -42,19 +43,31 @@ function begin(runtime) {
 }
 function acquire(session, runtime, ids = runtime.gameCase.detective.evidence.map(item => item.evidenceId)) {
   for (const rule of runtime.gameCase.detective.evidenceDiscoveryRules) {
+    if (!session.availableInvestigationTargets.includes(rule.targetId)) continue;
     actGenerated(session, runtime, { action: 'investigate', targetId: rule.targetId, investigationActionId: rule.actionId });
     if (ids.includes(rule.evidenceId)) actGenerated(session, runtime, { action: 'collect', evidenceId: rule.evidenceId });
   }
 }
 
-for (const difficulty of [1, 2, 3]) test(`★${difficulty} resolves ${difficulty + 1} distinct claims and cannot replay a solved answer`, async () => {
+for (const difficulty of [1, 2, 3]) test(`★${difficulty}: one target per round, no premature access or replay of solved answers`, async () => {
   const { author } = await generate({ difficulty });
   assert.equal(author.auto.state, 'READY', JSON.stringify(author.auto.details));
-  const { runtime } = author; const session = begin(runtime); acquire(session, runtime);
-  assert.equal(runtime.gameCase.progression.courtIssues.length, difficulty + 1);
+  const { runtime } = author; const session = begin(runtime);
+  const count = runtime.gameCase.detective.investigationTargets.length;
+  assert.equal(runtime.gameCase.progression.courtIssues.length, count);
   const solved = new Set();
-  for (let round = 1; round <= difficulty + 1; round += 1) {
-    const view = actGenerated(session, runtime, { action: 'retrial' });
+  for (let round = 1; round <= count; round += 1) {
+    const initial = generatedPlayerView(session, runtime);
+    assert.equal(initial.investigationTargets.length, 1);
+    assert.equal(initial.courtQuestion.choices.length, 4);
+    assert.ok(initial.currentEvidenceIds.length > 0);
+    assert.ok(initial.currentEvidenceIds.every(id => session.collectedEvidenceIds.includes(id)));
+    const future = runtime.gameCase.detective.investigationTargets[round];
+    if (future) assert.throws(() => actGenerated(session, runtime, { action: 'investigate',
+      targetId: future.targetId, investigationActionId: future.availableActionIds[0] }), { code: 'UNKNOWN_INVESTIGATION_TARGET' });
+    assert.throws(() => actGenerated(session, runtime, { action: 'retrial' }), { code: 'INTERPRETATION_CHOICE_REQUIRED' });
+    assert.equal(generatedPlayerView(session, runtime).courtQuestion.choices.length, 4);
+    const view = enterCurrentCourt(session, runtime);
     const pair = currentCorrectPair(runtime, round);
     assert.equal(solved.has(pair.statementId), false);
     for (const id of solved) {
@@ -65,59 +78,62 @@ for (const difficulty of [1, 2, 3]) test(`★${difficulty} resolves ${difficulty
     }
     const result = actGenerated(session, runtime, { action: 'objection', ...pair });
     solved.add(pair.statementId);
-    assert.equal(result.currentState, round === difficulty + 1 ? 'ACQUITTED' : 'INVESTIGATION');
+    assert.equal(result.currentState, round === count ? 'ACQUITTED' : 'INVESTIGATION');
     assert.doesNotMatch(JSON.stringify(result), /courtIssues|judgmentRuleIds|requiredEvidenceIds|groundTruth/);
   }
 });
 
-test('incomplete corroboration returns to investigation without losing evidence; wrong and insufficient attempts share finite budget', async () => {
-  const { author } = await generate({ changeDraft: draft => {
+test('questions needing a future investigation are rejected within the bounded revision loop', async () => {
+  const { author, runner } = await generate({ changeDraft: draft => {
     for (const item of draft.contradictions) item.conflictingEvidenceIds = ['evidence_technical_a', 'evidence_technical_b'];
+    syncQuestionQuotes(draft);
+    for (const question of draft.courtQuestions) question.explanation += question.supportingQuotes
+      .map(item => observationAnchors(item.quote)[0]).join('、');
   } });
-  assert.equal(author.auto.state, 'READY', JSON.stringify(author.auto.details));
-  const { runtime } = author; const session = begin(runtime);
-  acquire(session, runtime, ['evidence_technical_a']);
-  const pair = currentCorrectPair(runtime);
-  const view = actGenerated(session, runtime, { action: 'retrial' });
-  assert.equal(view.currentState, 'RETRIAL_COURT'); // A return to court is not a solvability oracle.
-  actGenerated(session, runtime, { action: 'investigation' });
-  assert.equal(session.attemptCount, 0);
-  actGenerated(session, runtime, { action: 'retrial' });
-  const failure = actGenerated(session, runtime, { action: 'objection', ...pair });
-  assert.equal(failure.currentState, 'GUILTY_RETRY'); assert.equal(failure.remainingAttempts, 2);
-  assert.doesNotMatch(JSON.stringify(failure), /evidence_technical_b|requiredEvidenceIds|acceptedEvidenceIds/);
-  actGenerated(session, runtime, { action: 'retry' });
-  assert.deepEqual(session.collectedEvidenceIds, ['evidence_technical_a']);
-  actGenerated(session, runtime, { action: 'collect', evidenceId: 'evidence_technical_b' });
-  actGenerated(session, runtime, { action: 'retrial' });
-  actGenerated(session, runtime, { action: 'objection', ...pair });
-  assert.equal(session.currentRound, 2); assert.equal(session.attemptCount, 0);
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    actGenerated(session, runtime, { action: 'retrial' });
-    const failed = actGenerated(session, runtime, { action: 'objection',
-      statementId: 'statement_record_exists', evidenceId: 'evidence_technical_a' });
-    assert.equal(failed.remainingAttempts, 3 - attempt);
-    assert.equal(failed.currentState, attempt === 3 ? 'BLOCKED' : 'GUILTY_RETRY');
-    if (attempt < 3) actGenerated(session, runtime, { action: 'retry' });
-  }
-  assert.throws(() => actGenerated(session, runtime, { action: 'retry' }), /現在の状態/);
+  assert.equal(author.auto.state, 'FAILED'); assert.equal(author.runtime, null);
+  assert.equal(runner.evidenceCalls, 2);
+  assert.ok(author.auto.details.some(item => item.code === 'SEQUENTIAL_INVESTIGATION_UNSOLVABLE'));
+});
+
+test('a stage cannot reuse an earlier source as its only support', async () => {
+  const { author } = await generate({ changeDraft: draft => {
+    draft.contradictions.find(item => item.statementRef === 'statement_seen_operation')
+      .conflictingEvidenceIds = ['evidence_technical_a'];
+    syncQuestionQuotes(draft);
+  } });
+  assert.equal(author.auto.state, 'FAILED');
+  assert.ok(author.auto.details.some(item => item.code === 'INVESTIGATION_STAGE_EVIDENCE_MISSING'));
 });
 
 test('final acquittal requires multiple verified support records, not just the selected correct evidence', async () => {
   const { author } = await generate(); const { runtime } = author;
   assert.equal(author.auto.state, 'READY', JSON.stringify(author.auto.details));
   const session = begin(runtime); acquire(session, runtime, ['evidence_technical_a']);
-  actGenerated(session, runtime, { action: 'retrial' });
+  enterCurrentCourt(session, runtime);
   actGenerated(session, runtime, { action: 'objection', ...currentCorrectPair(runtime, 1) });
   assert.equal(session.currentRound, 2);
-  actGenerated(session, runtime, { action: 'retrial' });
-  const failed = actGenerated(session, runtime, { action: 'objection', ...currentCorrectPair(runtime, 2) });
-  assert.equal(failed.currentState, 'GUILTY_RETRY');
-  actGenerated(session, runtime, { action: 'retry' });
-  actGenerated(session, runtime, { action: 'collect', evidenceId: 'evidence_technical_b' });
-  actGenerated(session, runtime, { action: 'retrial' });
+  const owned = [...session.collectedEvidenceIds];
+  // Even with automatic collection, a corrupted/incomplete session cannot skip the gate.
+  session.collectedEvidenceIds = ['evidence_technical_a'];
+  assert.throws(() => enterCurrentCourt(session, runtime), { code: 'COURT_RETURN_CONDITION_NOT_MET' });
+  session.collectedEvidenceIds = owned;
+  enterCurrentCourt(session, runtime);
   actGenerated(session, runtime, { action: 'objection', ...currentCorrectPair(runtime, 2) });
   assert.equal(generatedPlayerView(session, runtime).currentState, 'ACQUITTED');
+});
+
+test('automatic stage discovery refuses unmet dependencies without partially advancing the session', async () => {
+  const { author } = await generate();
+  const runtime = author.runtime;
+  const session = createGeneratedGame(runtime);
+  actGenerated(session, runtime, { action: 'begin' });
+  const firstTarget = runtime.gameCase.progression.courtIssues[0].investigationTargetId;
+  const rules = runtime.gameCase.detective.evidenceDiscoveryRules;
+  const future = rules.find(rule => rule.targetId !== firstTarget).evidenceId;
+  rules.find(rule => rule.targetId === firstTarget).prerequisites.requiredEvidenceIds = [future];
+  const before = structuredClone(session);
+  assert.throws(() => actGenerated(session, runtime, { action: 'continue' }), { code: 'STAGE_EVIDENCE_UNAVAILABLE' });
+  assert.deepEqual(session, before);
 });
 
 test('missing or duplicated claims stop after bounded revisions instead of repeating one claim', async () => {

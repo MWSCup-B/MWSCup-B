@@ -1,0 +1,93 @@
+.author-app { --gold: #c79928; --ink: #202f44; background: #faf7ed; color: var(--ink); }
+.author-app [hidden] { display: none !important; }
+.author-header { background: #fffdf7; color: #80601b; border-bottom: 1px solid #dece9f; padding: .6rem 3vw; }
+.author-header p { margin: 0; font-weight: 750; letter-spacing: .1em; }
+.author-header span { font-size: .75rem; font-weight: 400; margin-left: 1.5rem; }
+.author-main { max-width: 1240px; margin: 0 auto; padding: 1.3rem 2rem; }
+.author-main > section { padding: clamp(1.2rem, 3vw, 2.5rem); border: 1px solid #d9c797; border-radius: 0; box-shadow: 0 8px 35px #6746110a; }
+.author-app .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.author-app:has(#start-panel:not([hidden])) .author-header { display: none; }
+.author-main:has(#start-panel:not([hidden])) { max-width: none; margin: 0; padding: 0; }
+.author-main .start-panel { position: relative; isolation: isolate; height: 100dvh; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; text-align: center; background: #fffdf4; overflow: hidden; }
+.title-art { position: absolute; inset: 0; z-index: -1; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.author-main:has(#start-panel:not([hidden])) > #initialization-status,
+.author-main:has(#start-panel:not([hidden])) > #operation-error { position: fixed; bottom: 0; inset-inline: 0; z-index: 2; text-align: center; background: #fff9e9; margin: 0; }
+.selection-note { color: #637079; font-size: .85rem; }
+.author-app button, .author-app .button-link { border-radius: 3px; }
+.author-app .author-primary, #preview-approve { background: linear-gradient(#e5c776, #c79928); color: #30260b; border: 1px solid #a98025; font-weight: 750; }
+.author-app .author-primary:hover:not(:disabled), #preview-approve:hover:not(:disabled) { background: #f3d688; }
+.author-app button:disabled { opacity: .5; cursor: not-allowed; }
+/* The artwork's subtitle ends near 49% and the penguin starts near 61%.
+   Anchor the control in that empty band, including full-screen and split views. */
+.author-app #start-generation { position: absolute; top: 54.5%; left: 50%; transform: translate(-50%, -50%); width: min(440px, 84%); padding: clamp(.3rem, .8dvh, .7rem) 1rem; font: 800 clamp(1rem, min(2.3vw, 3dvh), 2rem) / 1.65 "Yu Mincho", "Hiragino Mincho ProN", serif; letter-spacing: .2em; color: #fff1bb; border: 4px double #f1d18b; border-radius: 0; background: linear-gradient(110deg, #09172d, #214460 50%, #09172d); box-shadow: 0 0 0 2px #8e692c, 0 6px 0 #4d3819, 0 12px 28px #30220850, inset 0 0 18px #ecca7840; text-shadow: 0 2px #000; }
+.author-app #start-generation:hover:not(:disabled) { background: linear-gradient(110deg, #17304b, #326488 50%, #17304b); color: #fff8dc; }
+#start-generation span { display: inline-block; margin: 0 .6em; font-size: .55em; vertical-align: middle; color: #eac47a; }
+#start-generation:focus-visible { outline: 3px solid #095789; outline-offset: 8px; }
+.author-app .secondary { background: transparent; color: #405366; border: 1px solid #b2bec5; }
+.author-app .secondary:hover:not(:disabled) { background: #edf1f2; }
+.author-eyebrow { color: #8b651b; font-size: .75rem; font-weight: 750; letter-spacing: .15em; margin: 0 0 .6rem; }
+.author-app h1 { font-family: "Yu Mincho", serif; letter-spacing: .07em; margin-bottom: .7rem; }
+.author-app .wizard-progress { display: grid; grid-template-columns: repeat(3, 1fr); padding: 0; margin: 0 0 1.2rem; list-style: none; overflow: visible; }
+.wizard-progress li { font-size: .85rem; padding: .65rem .8rem; color: #75818b; border-bottom: 2px solid #dedbd1; }
+.wizard-progress li[aria-current="step"] { color: #80601b; border-color: var(--gold); font-weight: 700; }
+.selection-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(230px, 1fr); gap: 2rem; margin: 1.6rem 0; }
+.selection-layout fieldset { margin: 0; }
+#attack-selection-help { font-size: .85rem; color: #61707d; }
+.author-app select { font-family: inherit; background: #fff; color: var(--ink); border: 1px solid #b5bec3; border-radius: 3px; }
+.attack-chain-options > div { border-left: 3px solid var(--gold); background: #f8f5ec; }
+.attack-chain-options label { font-size: .88rem; font-weight: 650; }
+.setting-card { border: 1px solid #d8ceb2; background: #faf8f1; padding: 1.3rem; align-self: start; }
+.setting-card > label { font-weight: 750; }
+.setting-card p { font-size: .9rem; line-height: 1.9; }
+.selection-footer { border-top: 1px solid #ded8c8; padding-top: 1.2rem; display: flex; justify-content: space-between; gap: 1rem; }
+#selection-count { font-size: .8rem; color: #836524; }
+#attack-chain-status { font-size: .85rem; }
+.author-main #generation-panel { min-height: calc(100svh - 160px); display: flex; flex-direction: column; gap: .65rem; padding: 1.25rem 2rem; }
+.loading-heading .author-eyebrow { margin-bottom: .2rem; }
+.loading-heading h1 { margin-bottom: .3rem; }
+.loading-heading h1 { font-size: 1.3rem; }
+.incident-reading { background: #f8f6ef; border: 1px solid #ddd4b9; border-top: 3px solid var(--gold); padding: clamp(1rem, 2vw, 1.8rem); border-radius: 0; }
+.incident-reading h2 { margin: .3rem 0; font-family: "Yu Mincho", serif; font-size: 1.4rem; }
+.incident-edition, .incident-date { color: #62717c; font-size: .75rem; margin: .5rem 0; }
+.incident-card h3 { font-size: 1.2rem; line-height: 1.7; margin: .8rem 0; }
+.incident-card dl { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: .7rem 1rem; font-size: .9rem; line-height: 1.85; }
+.incident-card dt { font-weight: 750; color: #80601b; }
+.incident-card dd { margin: 0; }
+.incident-sources { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .75rem; }
+.incident-sources a { color: #275875; text-underline-offset: .2em; }
+.incident-navigation { display: flex; align-items: center; justify-content: space-between; margin-top: 1rem; gap: .6rem; }
+.incident-navigation button { font-size: .8rem; padding: .35rem .8rem; }
+.incident-navigation span { font-size: .8rem; color: #687680; }
+.generation-meter { margin-top: auto; padding-top: .5rem; }
+.generation-meter-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.generation-meter-heading strong { font: 750 2rem / 1.3 system-ui; color: #99701f; }
+.generation-meter progress { display: block; width: 100%; height: 13px; margin: .6rem 0; appearance: none; border: 0; border-radius: 10px; overflow: hidden; background: #eae5d7; }
+.generation-meter progress::-webkit-progress-bar { background: #eae5d7; }
+.generation-meter progress::-webkit-progress-value { background: linear-gradient(90deg, #bf9029, #e3c376); }
+.generation-meter progress::-moz-progress-bar { background: #c79928; }
+#generation-message { font-size: .88rem; margin-bottom: .3rem; }
+.progress-note { font-size: .72rem; color: #6b747a; margin: .3rem 0; }
+.loading-footer { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.loading-footer details { margin: 0; max-width: 75%; font-size: .8rem; }
+.loading-footer summary { background: transparent; color: #6b747a; }
+.ready-percent { color: #36734d; font-weight: 700; }
+.author-app .error-list:empty { display: none; }
+.author-app .error-list { white-space: pre-wrap; }
+@media (max-aspect-ratio: 4/3) {
+  .title-art { object-fit: cover; object-position: center; }
+  .start-panel::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(#fff 0 56%, #ffffff00 56%); border: 7px solid #c79928; }
+  .author-app .start-panel > h1 { position: absolute; top: 13%; left: 6%; width: 88%; height: auto; margin: 0; padding: 0; clip-path: none; overflow: visible; white-space: normal; font: 850 clamp(1.5rem, 6.5vw, 2.8rem) / 1.8 system-ui, sans-serif; letter-spacing: -.04em; color: #c79928; text-shadow: 0 4px 5px #3333; }
+  .start-panel > h1 small { display: block; margin-top: .9rem; font-size: .52em; letter-spacing: .05em; color: #ac8424; }
+}
+@media (max-width: 700px) {
+  .author-header span { display: none; }
+  .author-main { padding: .8rem; }
+  .selection-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .wizard-progress li { font-size: .72rem; padding: .6rem .3rem; }
+  .selection-footer { flex-wrap: wrap; }
+  .selection-footer button { flex: 1; }
+  .incident-card dl { grid-template-columns: 1fr; gap: .15rem; }
+  .incident-card dd { margin-bottom: .6rem; }
+  .incident-reading h2 { font-size: 1.12rem; }
+  .incident-card h3 { font-size: 1rem; }
+}

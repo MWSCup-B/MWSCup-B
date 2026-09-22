@@ -1,6 +1,7 @@
 // Scenarioの参照構造はAIに自由生成させず、検証済みConfigurationからBackendで組み立てる。
 // AIは独立レビューと、指摘された記述・既存artifactへの不足参照の修正を担当する。
 import { buildEvidenceInvestigationPlan } from './investigation-registry.js';
+import { buildStageRequirements, validateStageRequirements } from './scenario-stage-plan.js';
 import { fail } from './schema.js';
 import { requestedCourtIssueCount } from './court-issues.js';
 
@@ -52,18 +53,14 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
       return attack ? [{ eventId: `event_${node.nodeId}`, displayTimestamp: attack.occurrenceTime }] : [];
     }) };
 
-  const firstNode = graph.nodes[0];
-  const firstDefinition = generationInput.technicalInput.attackDefinitions
-    .find(item => item.id === firstNode.attackDefinitionId);
   const learningObjectives = {
     schemaVersion: '1.0', learningObjectiveSetId: `objectives_${suffix}`, scenarioId,
     attackGraphRef, objectives: [{ objectiveId: 'objective_trace',
-      description: '選択した調査資料を攻撃経路と時系列へ結び付け、記録だけで人物を断定できないことを説明する。',
+      description: '選択された攻撃ごとに複数の観測資料を照合し、攻撃の仕組み、記録に現れる固有の特徴、各資料で確認できる範囲と未確認の点を説明する。処理の成立と人物への帰属を区別する。',
       origin: 'DERIVED_FROM_TECHNICAL_INPUT',
       selectedAttackIds: [...graph.selectedAttackIds], attackNodeIds: graph.nodes.map(node => node.nodeId),
-      definitionReferenceRefs: firstNode.referenceIds.slice(0, 1).map(referenceId => ({
-        attackDefinitionId: firstDefinition.id, referenceId,
-      })) }],
+      definitionReferenceRefs: graph.nodes.flatMap(node => node.referenceIds.slice(0, 1)
+        .map(referenceId => ({ attackDefinitionId: node.attackDefinitionId, referenceId }))) }],
   };
   const investigationPlan = buildEvidenceInvestigationPlan(configuration, generationInput);
   if (investigationPlan.length < 2) fail('INSUFFICIENT_OBSERVABLE_EVIDENCE',
@@ -76,24 +73,27 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
   const firstAttack = [...configuration.attacks].sort((a, b) => a.order - b.order)[0];
   const hasEmailAndWeb = investigationPlan.some(item => item.ground.sourceId === 'email_record')
     && investigationPlan.some(item => item.ground.sourceId === 'web_access_record');
-  const comparison = hasEmailAndWeb
+  const selectedIds = new Set(configuration.attacks.map(attack => attack.attackId));
+  const hasLogin = selectedIds.has('unauthorized_login');
+  const hasStored = selectedIds.has('stored_xss');
+  const comparison = (hasEmailAndWeb
     ? '保存メールの表示URLとHTMLソースのhrefを区別して提示し、hrefとWebアクセス記録の対象リクエストを照合する。各資料に記録された時刻・対象・その記録範囲を比較する。表示URLとhrefの相違を扱う場合は、既存の欺瞞的メールの合成本文として比較可能にし、新しい接続先やHTTPリダイレクトを技術事実として追加しない。メール保存はクリックの証明ではなく、アクセス記録もクリック原因・操作人物・意図を示さない。'
-    : '各資料の対象リクエストと記録時刻・記録範囲を照合する。アクセス記録だけでスクリプト実行やSQL実行を証明せず、それぞれ確認済みの実行計測・DB記録と区別する。';
+    : '各資料の対象と記録時刻・記録範囲を照合する。')
+    + (hasLogin ? ' 認証サービスの認証記録とWeb側のセッション監査をアカウントの合成識別子・時刻・記録範囲で照合する。認証成功、投稿権限、実際の投稿は別の事実で、認証記録は人物同定ではない。' : '')
+    + (hasStored ? ' 保存投稿の識別子と非実行ソース抜粋、後の閲覧要求、ブラウザ実行計測を照合する。保存が閲覧に先行する関係を維持し、反射型XSSとは区別する。アクセス成功だけでスクリプト実行を証明しない。' : '')
+    + (selectedIds.has('credential_phishing') ? ' 偽フォームと正規ポータルは別サービスである。偽フォームへの送信・受信は取得可能な専用計測資料で照合する。秘密値を記録せず、リンク誘導だけから資格情報取得を推定しない。' : '')
+    + (selectedIds.has('reflected_xss') || selectedIds.has('sql_injection')
+      ? ' アクセス記録だけでスクリプト実行やSQL実行を証明せず、確認済みの実行計測・DB記録と区別する。' : '');
   const allegation = hasEmailAndWeb
     ? 'メールの誘導先とWebアクセスの対象が一致するので、この二つの記録だけで被告人が自分の意思でリクエストを送ったと特定できる。'
     : 'これらの技術記録だけで被告人が自分の意思で対象の操作を行ったと特定できる。';
-  const issueDesign = ` ${requestedCourtIssueCount(configuration)}件の異なる争点を設計する。`
-    + '上記主張の前提となる記録の解釈と、人物・意図への推論を分離し、各争点を独立した架空の証言statementとして明示する。'
-    + (hasEmailAndWeb ? '先に表示URLとリンク要素hrefの同一視を記録の原文で検討し、最後に人物を特定できるという主張を複数資料で検討する。'
-      : '先にリクエストの記録を処理結果の記録と同一視する主張を資料の記録範囲から検討し、最後に人物を特定できるという主張を複数資料で検討する。')
-    + '追加の争点が必要な場合は時系列から因果を断定する主張、記録から意図を断定する主張を、それぞれ取得資料の証明限界と対応付ける。同じ文の言い換えで水増ししない。'
-    + 'これらは証言者の架空の主張であり、技術的事実の追加ではない。既存資料から反駁できない論点は生成せず、独立レビューへ不足を報告する。';
+  const issueDesign = ' 段階ごとの具体的な主張・対象人物・4択の論点・使用資料・反駁範囲はrequirement_stage_*のinvestigationStageとgroundsで定義する。そのorder順に各調査先一争点とし、これ以外の法廷を追加しない。各段階のgroundsはその段階の必要資料であり、全体要件の全資料を最初から要求するものではない。最後だけ取得済み全資料を統合する。';
   const evidenceRequirements = {
     schemaVersion: '1.0', evidenceRequirementSetId: `requirements_${suffix}`, scenarioId,
     attackGraphRef, requirements: [
       { requirementId: 'requirement_attack', purpose: 'ATTACK_TRACE',
-        description: `制作者の主調査 ${firstAttack.investigationTypes.join('・')}: ${firstAttack.evidenceAnswer} `
-          + comparison + ` 難易度${configuration.difficulty}・evidenceCount=${configuration.evidenceCount}は調査チェーンの基準で、法廷は${requestedCourtIssueCount(configuration)}争点。取得資料総数の上限ではない。補助資料も個別の取得要件に従い通常プレイで取得する。`,
+        description: `制作者の主調査 ${firstAttack.investigationTypes.join('・')}: ${firstAttack.evidenceAnswer}。これは全調査後の到達目標であり、各段階の正解ではない。 `
+          + comparison + ` 難易度${configuration.difficulty}・evidenceCount=${configuration.evidenceCount}は調査チェーンの基準で、法廷は調査対象に対応する${requestedCourtIssueCount(configuration, generationInput)}争点。取得資料総数の上限ではない。補助資料も個別の取得要件に従い通常プレイで取得する。`,
         grounds: structuredClone(artifactGrounds), learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_timeline', purpose: 'TIMELINE_PROOF',
         description: comparison + ' Timeline eventは照合対象の文脈である。narrativeTimestampsは架空の表示時刻で、観測記録による裏付けではない。教材の合成時刻は合成値と明記し、実測値・時計同期・因果関係を捏造しない。時刻・識別情報が不足する比較は未確認とする。',
@@ -101,22 +101,28 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
           sourceType: 'TIMELINE_EVENT', sourceId: event.eventId, attackNodeId: null }))],
         learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_contradiction', purpose: 'CONTRADICTION_PROOF',
-        description: `架空の証言者character_witnessがcharacter_defendantを対象に「${allegation}」と主張する。発言はTESTIMONYとして技術的事実から分離する。資料に裏付けられる観測内容の発言と、人物・意図を断定する主張は別statementとし、反駁が成立する部分と成立しない部分を資料から区別できるようにする。被告人の端末・アカウントとの対応は主張から事実化しない。資料が記録する内容と人物・意図を特定できるという推論の飛躍を反駁し、被告人が操作しなかったという事実には置き換えない。` + issueDesign,
+        description: `事件全体では、架空の証言者character_witnessによる資料の解釈を基に、character_defendantを対象に「${allegation}」とする検察側の立場を検討する。各法廷の反駁対象はinvestigationStageの攻撃固有の記録解釈とし、全体の主張を追加の争点として水増ししない。発言はTESTIMONYとして技術的事実から分離する。資料に裏付けられる観測内容の発言と、人物・意図を断定する主張は別statementとし、反駁が成立する部分と成立しない部分を資料から区別できるようにする。被告人の端末・アカウントとの対応は主張から事実化しない。資料が記録する内容と人物・意図を特定できるという推論の飛躍を反駁し、被告人が操作しなかったという事実には置き換えない。` + issueDesign,
         grounds: [...factGrounds, ...structuredClone(artifactGrounds), ...characterGrounds],
         learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_exoneration', purpose: 'EXONERATION_PROOF',
         description: comparison + ' 別々に取得した2件以上の技術資料を比較し、character_witnessによるcharacter_defendantの人物・意図の特定は提示資料だけでは支えられない、という限定的な結論を示す。人物・Ground Truth参照は論証の対象と技術的文脈であり観測資料の代用ではない。人物対応、アリバイ、真犯人、積極的な非関与を補完しない。必要な補助資料を内部専用にせず、通常プレイですべて取得・閲覧可能にする。',
         grounds: [...characterGrounds, ...structuredClone(artifactGrounds), ...factGrounds],
         learningObjectiveIds: ['objective_trace'] },
+      ...configuration.attacks.filter(attack => attack !== firstAttack).map((attack, index) => ({
+        requirementId: `requirement_goal_${index + 1}`, purpose: 'ATTACK_TRACE',
+        description: `制作者の主調査 ${attack.investigationTypes.join('・')}: ${attack.evidenceAnswer}。全調査後の到達目標として保持し、段階ごとの回答はinvestigationStageで分割する。未取得資料を早い段階の回答に含めない。`,
+        grounds: investigationPlan.filter(item => graph.nodes.some(node => node.nodeId === item.ground.attackNodeId
+          && node.attackDefinitionId === attack.attackId)).map(item => structuredClone(item.ground)),
+        learningObjectiveIds: ['objective_trace'],
+      })),
       ...investigationPlan.map((item, index) => {
-        const node = graph.nodes.find(node => node.nodeId === item.ground.attackNodeId);
-        const attack = attacksById.get(node.attackDefinitionId);
         return { requirementId: `requirement_observation_${index + 1}`, purpose: 'ATTACK_TRACE',
           description: `${item.ground.sourceId}: ${item.description} `
             + `取得経路: ${item.sourceLabel} (${item.sourceNodeId}) / ${item.logSource} / ${item.actionId}。`
-            + `種類${item.evidenceType}の別個の合成資料として取得する。主調査${attack.investigationTypes.join('・')}の答え「${attack.evidenceAnswer}」は観測事実と照合する対象であり、裏付けなしに資料本文へ事実として転記しない。`,
+            + `種類${item.evidenceType}の別個の合成資料として取得する。この資料で観測できる範囲だけを記載し、全調査後の到達目標や他の取得元の記録を本文へ転記しない。`,
           grounds: [structuredClone(item.ground)], learningObjectiveIds: ['objective_trace'] };
       }),
+      ...buildStageRequirements(configuration, generationInput),
     ],
   };
   const scenarioDraft = { schemaVersion: '1.0', scenarioId, state: 'DRAFT', attackGraphRef,
@@ -145,5 +151,5 @@ export function validateScenarioEvidenceCoverage({ generationInput, configuratio
         correctionHint: '説明文だけでなくgroundsへ既存artifact参照を追加し、取得経路と照合範囲を維持してください。' });
     }
   }
-  return errors;
+  return [...errors, ...validateStageRequirements(configuration, generationInput, scenarioPackage)];
 }

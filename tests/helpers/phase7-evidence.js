@@ -56,14 +56,37 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
   const observations = agent.evidenceRequirements.requirements
     .filter(item => item.requirementId.startsWith('requirement_observation_'));
   if (observations.length) {
-    const kinds = { email_record: ['EMAIL', '保存メール',
-      '教材用合成メール\nFrom: notice@example.invalid\nContent-Type: text/html; charset=UTF-8\n本文: 次の案内を確認してください。\n表示文字列: https://portal.example.invalid/help\nHTMLソース抜粋（非実行）:\n<a href="https://portal.example.invalid/notice?ref=training-01">https://portal.example.invalid/help</a>\n保存メールであり、リンク操作を記録した資料ではありません。'],
+    const kinds = {
+    clickfix_page_record: ['DOCUMENT', '修復を装う案内の保存資料',
+      'request_id: training-page-01\nresponse_time: 2026-09-18T09:10:00+09:00\n案内本文: 本人確認を完了するため、端末の実行画面で確認操作を行ってください。操作識別子: training-operation-01'],
+    process_execution_record: ['DEVICE_INFORMATION', 'プロセスの起動観測',
+      '{"timestamp":"2026-09-18T09:10:00+09:00","device_id":"training-device-01","process_ref":"training-process-01","parent_ref":"training-parent-01","user_ref":"training-user","start_result":"started"}'],
+    spray_authentication_record: ['AUTHENTICATION_LOG', '複数アカウントの試行履歴',
+      '{"timestamp":"2026-09-18T09:10:00+09:00","account":"training-a","source_ip":"203.0.113.10","attempt_id":"training-attempt-01","result":"failure"}\n{"timestamp":"2026-09-18T09:10:00+09:00","account":"training-b","source_ip":"203.0.113.10","attempt_id":"training-attempt-02","result":"failure"}\n{"timestamp":"2026-09-18T09:10:00+09:00","account":"training-c","source_ip":"203.0.113.10","attempt_id":"training-attempt-03","result":"success"}'],
+    authentication_policy_record: ['DOCUMENT', '事件時に保存された認証方針',
+      'authentication: password_only\nscope: training-accounts\nlockout_condition: 対象試行を遮断しない条件。具体的なしきい値は未入力。\nrate_limit_condition: 対象試行を遮断しない条件。具体的なしきい値は未入力。\napplied_at: 事件時の適用設定。正確な設定変更時刻は未入力。'],
+    file_encryption_record: ['FILE_METADATA', '対象ファイルの変更前後検査',
+      'timestamp: 2026-09-18T09:10:00+09:00\npath: training-files/report.txt\nprocess_ref: training-process-01\nhash_before: synthetic-hash-before\nhash_after: synthetic-hash-after\nencryption_check: confirmed\nransom_note: このファイルの復元と引換えに金銭を要求する。'],
+    upload_receipt_record: ['APPLICATION_LOG', '添付受入れの監査資料',
+      '{"timestamp":"2026-09-18T09:10:00+09:00","request_ref":"training-upload-01","filename":"training-image.png","declared_type":"image/png","storage_ref":"training-file-02","result":"stored"}'],
+    uploaded_file_record: ['FILE_METADATA', '保存済み添付の内容検査',
+      'storage_ref: training-file-02\nstored_at: 2026-09-18T09:10:00+09:00\nhash: synthetic-file-hash\ndetected_type: text/plain\ncontent_check: disallowed\nexecutable_storage: false'],
+    email_record: ['EMAIL', '保存メール',
+      'From: notice@example.invalid\nSubject: ポータルからのお知らせ\nContent-Type: text/html; charset=UTF-8\n\n次の案内を確認してください。\n<a href="https://portal.example.invalid/notice?ref=training-01">https://portal.example.invalid/help</a>'],
     web_access_record: ['WEB_ACCESS_LOG', 'Webアクセス記録',
-      '教材用合成アクセス記録\n対象: https://portal.example.invalid/notice?ref=training-01\nRequest target: /notice?ref=training-01\n利用者の氏名・操作意図・メールを開いた操作を記録する欄はありません。'],
+      '{"request_target":"/notice?ref=training-01"}'],
     browser_execution_record: ['DEVICE_INFORMATION', 'ブラウザ実行計測',
-      '教材用合成計測資料\n対象応答に対応する実行計測記録。通常の閲覧履歴とは区別します。'],
+      '{"request_target":"/notice?ref=training-01","execution_id":"training-script-01","execution_result":"observed"}'],
     database_statement_record: ['DATABASE_LOG', 'DB実行記録',
-      '教材用合成DB監査記録\n対象要求に対応するSQL処理の記録。実際の操作者を記録した資料ではありません。'] };
+      '{"query_id":"training-query-01","statement":"SELECT title FROM training_records WHERE category = \'public\'"}'],
+    stored_content_record: ['APPLICATION_LOG', '保存投稿の監査資料',
+      '{"post_id":"training-post-01","stored_content":"<script>/* synthetic inert sample */</script>"}'],
+    credential_submission_record: ['APPLICATION_LOG', '偽フォームの送信受信計測',
+      '{"timestamp":"2026-09-18T09:10:00+09:00","destination":"https://lure.example.invalid/form","correlation_id":"training-form-01"}'],
+    authentication_record: ['AUTHENTICATION_LOG', '認証監査記録',
+      '{"timestamp":"2026-09-18T09:10:00+09:00","account":"training-editor","result":"success","source_ip":"203.0.113.10"}'],
+    application_session_record: ['APPLICATION_LOG', 'セッション監査記録',
+      '{"account":"training-editor","session_accepted":true,"permission":"post"}'] };
     const technical = observations.map((requirement, index) => {
       const ground = requirement.grounds[0];
       const matching = agent.evidenceRequirements.requirements.filter(item => item.grounds
@@ -72,8 +95,8 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
       const [type, title, body] = kinds[ground.sourceId];
       const event = agent.timeline.events.find(item => item.attackNodeId === ground.attackNodeId);
       const timestamp = agent.timeline.narrativeTimestamps.find(item => item.eventId === event?.eventId);
-      const publicContent = body + (type === 'WEB_ACCESS_LOG' && timestamp
-        ? `\n時刻（教材用合成値）: ${timestamp.displayTimestamp}` : '');
+      const publicContent = type === 'WEB_ACCESS_LOG' && timestamp
+        ? JSON.stringify({ timestamp: timestamp.displayTimestamp, ...JSON.parse(body) }) : body;
       return artifact(evidenceGenerationInput, { evidenceId: index === 0 ? 'evidence_technical_a'
         : index === 1 ? 'evidence_technical_b' : `evidence_technical_${index + 1}`,
       type, title, publicContent, sourceRefs: [ground],

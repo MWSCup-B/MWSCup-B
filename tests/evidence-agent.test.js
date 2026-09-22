@@ -105,6 +105,12 @@ test('CLI draft契約だけintegrityを除外し、外部Import契約と検証�
   assert.deepEqual(draftInput.generationInputRef, evidencePackage(input).generationInputRef);
   const draftSchema = draftInput.outputContract.jsonSchema.properties.evidenceArtifacts.items;
   assert.equal(draftInput.outputContract.name, 'evidence-generation-draft');
+  const draftContract = draftInput.outputContract.jsonSchema;
+  assert.ok(draftContract.required.includes('courtQuestions'));
+  assert.equal(draftContract.properties.courtQuestions.items.properties.choices.minItems, 4);
+  assert.equal(draftContract.properties.courtQuestions.items.properties.choices.maxItems, 4);
+  assert.equal(Object.hasOwn(input.outputContract.schemas.find(item => item.name === 'evidence-import-package')
+    .jsonSchema.properties, 'courtQuestions'), false);
   assert.equal(draftSchema.additionalProperties, false);
   assert.ok(!Object.hasOwn(draftSchema.properties, 'integrity'));
   assert.ok(!draftSchema.required.includes('integrity'));
@@ -113,6 +119,38 @@ test('CLI draft契約だけintegrityを除外し、外部Import契約と検証�
   assert.deepEqual(draftSchema.properties.publicContent, canonicalSchema.properties.publicContent);
   draftInput.evidenceAgentInput.inputFingerprint = '0'.repeat(64);
   assert.deepEqual(input, before);
+});
+
+test('CLI Evidence投影は重複コピーだけを除去し、全技術情報と正本fingerprintを保持する', () => {
+  const input = generationInput(); const before = structuredClone(input);
+  const draft = buildEvidenceGenerationDraftInput(input);
+  assert.equal(draft.contextFormat, 'DEDUPLICATED_VERIFIED_INPUT_V1');
+  const agent = draft.evidenceAgentInput;
+  const verificationInput = agent.scenarioVerificationInput;
+  const scenarioPackage = verificationInput.scenarioPackage;
+  const technical = verificationInput.generationInput.technicalInput;
+  const restored = { ...agent, evidenceAgentHandoff: agent.verificationResult.evidenceAgentHandoff,
+    scenarioImportPackage: scenarioPackage,
+    groundTruth: scenarioPackage.groundTruth, timeline: scenarioPackage.timeline,
+    characters: scenarioPackage.characters, learningObjectives: scenarioPackage.learningObjectives,
+    evidenceRequirements: scenarioPackage.evidenceRequirements,
+    attackGraph: technical.attackGraph, network: technical.network,
+    scenarioContext: technical.scenarioContext, attackDefinitions: technical.attackDefinitions };
+  assert.deepEqual(restored, input.evidenceAgentInput);
+  assert.equal(validateEvidenceAgentInput(restored), restored);
+  const previous = { ...draft, evidenceAgentInput: input.evidenceAgentInput };
+  assert.ok(Buffer.byteLength(JSON.stringify(draft)) < Buffer.byteLength(JSON.stringify(previous)) * 0.7);
+  assert.deepEqual(draft.generationInputRef, evidencePackage(input).generationInputRef);
+  agent.scenarioVerificationInput.scenarioPackage.characters.characters[0].displayName = '投影だけの変更';
+  assert.deepEqual(input, before, '正本は投影の参照を共有しない');
+});
+
+test('正本の重複コピーが改変されていれば投影によって隠さず拒否する', () => {
+  const input = generationInput();
+  input.evidenceAgentInput.network.nodes[0].label = '改変したラベル';
+  assert.throws(() => buildEvidenceGenerationDraftInput(input), {
+    code: 'EVIDENCE_INPUT_SOURCE_MISMATCH', field: 'evidence-agent-input.network',
+  });
 });
 
 test('自動Evidence本文のUTF-8を改行・日本語・HTMLを変更せずBackendでSHA-256化する', () => {

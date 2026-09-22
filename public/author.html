@@ -2,49 +2,92 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Scenario Builder — インシデント調査ゲーム</title>
-  <link rel="stylesheet" href="/style.css"><script type="module" src="/author.js"></script>
+  <title>インシデントクラフト</title>
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/author.css"><script type="module" src="/author.js"></script>
 </head>
-<body>
-  <header><p>インシデント調査ゲーム — Scenario Builder</p></header>
+<body class="author-app">
+  <header class="author-header"><p>インシデントクラフト <span>作って！ 解いて！ 攻撃を学ぶ！</span></p></header>
   <main class="author-main">
-    <nav aria-label="作成手順"><ol class="wizard-progress"><li>1 作成方法</li><li>2 Attack / 真実丸</li><li>3 Network</li><li>4 Scenario Preview</li><li>5 Game Generation</li></ol></nav>
+    <section id="start-panel" class="start-panel" aria-label="インシデントクラフト スタート画面">
+      <h1 class="visually-hidden">インシデントクラフト<small>作って！ 解いて！ 攻撃を学ぶ！</small></h1>
+      <img class="title-art" src="/assets/title/title.png" alt="インシデントクラフト。盾を持った鳥、歯車、法廷の木槌" width="2048" height="1160">
+      <button id="start-generation" class="author-primary" type="button" disabled><span aria-hidden="true">◆</span> ゲーム生成 <span aria-hidden="true">◆</span></button>
+    </section>
+    <nav id="author-steps" aria-label="作成手順" hidden><ol class="wizard-progress"><li id="wizard-selection">01 攻撃と舞台</li><li id="wizard-preview">02 事件案を確認</li><li id="wizard-generation">03 ゲームを生成</li></ol></nav>
     <p id="initialization-status" role="status" aria-live="polite">初期設定を読み込んでいます…</p>
-    <section id="mode-panel" aria-labelledby="mode-title"><h1 id="mode-title">Scenario作成方法</h1><div class="mode-card-grid">
-      <article class="mode-card"><h2>詳細設定</h2><p>攻撃手法、Network、発生時間、調査方法などを自分で設定します。</p><p>セキュリティ知識のあるユーザ向け。</p><button id="choose-manual" type="button" disabled>詳細設定で作成</button></article>
-      <article class="mode-card makotomaru-card"><h2>真実丸（まことまる）</h2><p>AIがScenario条件を自動的に選びます。</p><p>セキュリティ初学者向け。</p><button id="choose-makotomaru" type="button" disabled>真実丸に任せる</button></article>
-    </div></section>
-    <section id="manual-panel" hidden aria-labelledby="manual-title"><h1 id="manual-title">詳細設定</h1>
-      <fieldset><legend>事件情報</legend><div class="form-grid">
-        <label>事件日<input id="incident-date" type="date" required></label><label>組織名<input id="organization-name" maxlength="120" required></label>
-        <label>被害System<input id="victim-system" maxlength="120" required></label><label>被告人の役割<input id="accused-role" maxlength="120" required></label>
-        <label class="wide">最初に疑われた理由<input id="suspicion-reason" maxlength="500" required></label><label>Difficulty<select id="manual-difficulty"><option value="1">★1</option><option value="2">★★</option><option value="3">★★★</option></select></label>
-      </div></fieldset>
-      <fieldset><legend>攻撃手法（1～3個）</legend><div id="attack-options" class="choice-grid"></div><p>複数選択はAttack Graphで因果関係を構築できる場合だけ利用できます。</p><div id="attack-details"></div></fieldset>
-      <fieldset><legend>Network Builder</legend><p>Subnet、Node、Service、ConnectionをGUIで設定します。</p>
-        <h2>Subnets</h2><div id="subnet-rows" class="builder-list"></div><button id="add-subnet" class="secondary" type="button">Subnet追加</button>
-        <h2>Nodes</h2><div id="node-rows" class="builder-list"></div><button id="add-node" class="secondary" type="button">Node追加</button>
-        <h2>Services</h2><div id="service-rows" class="builder-list"></div><button id="add-service" class="secondary" type="button">Service追加</button>
-        <h2>Connections</h2><div id="connection-rows" class="builder-list"></div><button id="add-connection" class="secondary" type="button">Connection追加</button>
-        <h2>Network Diagram</h2><svg id="manual-network-diagram" class="network-diagram" role="img" aria-label="設定中のNetwork Diagram"></svg>
+    <p id="operation-error" class="error-list" role="alert"></p>
+    <section id="selection-panel" aria-labelledby="selection-title" hidden>
+      <p class="author-eyebrow">CREATE YOUR CASE · 事件の設定</p>
+      <h1 id="selection-title">攻撃と舞台を選ぼう</h1>
+      <p>どんな事件を、どこで解く？ 2つの項目から、調査と法廷の物語を作ります。</p>
+      <div class="selection-layout">
+      <fieldset><legend>攻撃（インシデント）の種類：発生する順に1～3件</legend>
+        <p id="attack-selection-help">1件目を選ぶと、その結果から発生し得る2件目だけを選べます。3件目も、2件目からつながる候補だけを表示します。1件・2件で作成しても構いません。</p>
+        <div id="attack-options" class="attack-chain-options">
+          <div id="attack-step-1"><label for="attack-1">1件目のインシデント</label><select id="attack-1" aria-describedby="attack-selection-help" disabled></select></div>
+          <div id="attack-step-2" hidden><label for="attack-2">2件目：1件目に続いて発生するもの（任意）</label><select id="attack-2" aria-describedby="attack-selection-help" disabled></select></div>
+          <div id="attack-step-3" hidden><label for="attack-3">3件目：2件目に続いて発生するもの（任意）</label><select id="attack-3" aria-describedby="attack-selection-help" disabled></select></div>
+        </div>
+        <p id="attack-chain-status" role="status" aria-live="polite"></p>
+        <p id="selection-count" role="status" aria-live="polite"></p>
       </fieldset>
-      <div class="button-row"><button id="manual-back" class="secondary" type="button">作成方法へ戻る</button><button id="manual-create" type="button" disabled>Scenario案を作成</button></div><div id="manual-errors" class="error-list" role="alert"></div>
-      <details><summary>Developer Detail</summary><div id="manual-detail-list" class="detail-list"></div></details>
+      <div class="setting-card"><label for="setting">事件の舞台</label><select id="setting" disabled></select>
+        <p>証拠を集める「調査パート」と、主張の矛盾を指摘する「法廷パート」をプレイできます。</p>
+        <p class="selection-note">組織・人物・資料は架空の教材です。事件案を確認してからゲームを生成します。</p>
+      </div></div>
+      <div class="selection-footer"><button id="back-to-title" class="secondary" type="button">タイトルへ</button>
+        <button id="create-scenario" class="author-primary" type="button" disabled>この条件で事件案を作る</button></div>
     </section>
-    <section id="makotomaru-panel" hidden aria-labelledby="makotomaru-title"><h1 id="makotomaru-title">真実丸</h1><p class="assistant-message">難易度と好みを選ぶと、登録済みの技術条件から成立するScenario Configurationを提案します。</p>
-      <div class="form-grid"><label>Difficulty<select id="makotomaru-difficulty"><option value="1">★1</option><option value="2">★★</option><option value="3">★★★</option></select></label>
-        <label>Attack Category<select id="attack-category"><option value="ANY">おまかせ</option><option value="WEB">Web攻撃</option><option value="AUTHENTICATION">認証攻撃</option><option value="SOCIAL_ENGINEERING">Social Engineering</option></select></label>
-        <label>Scenario Complexity<select id="complexity"><option value="SIMPLE">シンプル</option><option value="STANDARD" selected>標準</option><option value="COMPLEX">複雑</option></select></label></div>
-      <div class="button-row"><button id="makotomaru-back" class="secondary" type="button">作成方法へ戻る</button><button id="makotomaru-create" type="button" disabled>真実丸に考えてもらう</button></div><p id="makotomaru-error" role="alert"></p>
+    <section id="preview-panel" hidden aria-labelledby="preview-title">
+      <h1 id="preview-title">事件案を確認</h1><p class="gate-notice">自動設定した内容を確認してください。承認するまでゲーム生成は始まりません。</p>
+      <article class="preview-summary"><h2>事件概要</h2><p id="preview-summary"></p><dl><dt>舞台のシステム</dt><dd id="preview-target"></dd><dt>難易度・調査数（自動設定）</dt><dd id="preview-difficulty"></dd><dt>事前検証</dt><dd id="preview-verification"></dd></dl></article>
+      <h2>攻撃・発生時刻・調査方法</h2><div id="preview-attacks" class="builder-list"></div>
+      <h2>自動設定したネットワーク</h2><svg id="preview-network-diagram" class="network-diagram" role="img" aria-label="自動設定したネットワーク構成図"></svg>
+      <details><summary>教材の前提条件を確認</summary><div id="preview-author-details"></div></details>
+      <div class="button-row"><button id="preview-reject" class="secondary" type="button">攻撃・舞台を選び直す</button><button id="preview-approve" type="button">この事件でゲームを作成</button></div>
     </section>
-    <section id="preview-panel" hidden aria-labelledby="preview-title"><h1 id="preview-title">Scenario Preview</h1><p class="gate-notice">この時点ではゲーム生成へ進みません。内容を確認して承認してください。</p>
-      <article class="preview-summary"><h2>事件概要</h2><p id="preview-summary"></p><dl><dt>対象System</dt><dd id="preview-target"></dd><dt>Difficulty</dt><dd id="preview-difficulty"></dd><dt>事前検証</dt><dd id="preview-verification"></dd></dl></article>
-      <h2>攻撃手法・発生時刻・調査方法</h2><div id="preview-attacks" class="builder-list"></div><h2>Network Diagram</h2><svg id="preview-network-diagram" class="network-diagram" role="img" aria-label="Scenario Network Diagram"></svg>
-      <details><summary>制作者向け詳細</summary><div id="preview-author-details"></div></details><div class="button-row"><button id="preview-reject" class="secondary" type="button">条件を修正</button><button id="preview-regenerate" class="secondary" type="button" hidden>真実丸に作り直してもらう</button><button id="preview-approve" type="button">このScenarioでゲームを作成</button></div>
+    <section id="generation-panel" aria-labelledby="generation-title" hidden>
+      <div class="loading-heading"><p class="author-eyebrow">事件の準備中</p><h1 id="generation-title">作成しています</h1></div>
+      <section class="incident-reading" aria-labelledby="incident-reading-title">
+        <p class="author-eyebrow">実際のインシデントから学ぶ</p><h2 id="incident-reading-title">待ち時間に、最近の事例をひとつ。</h2>
+        <p class="incident-edition">2026年9月21日確認の掲載事例 · 発生・公表時点の情報</p>
+        <div id="incident-cards">
+          <article class="incident-card" id="incident-1">
+            <p class="incident-date">発生：2026年9月11日 ／ 公表：9月16日</p><h3>Gyazo：画像共有サービスから情報が流出</h3>
+            <dl><dt>何が起きた？</dt><dd>画像アップロード用サーバーの弱点を悪用され、利用者情報と、画像のURLなどを含む付随情報が外部へ流出しました。</dd>
+              <dt>どんな影響？</dt><dd>流出した情報を使って画像を閲覧されるおそれがあり、二次被害を防ぐため、一部の画像の配信が停止されました。</dd>
+              <dt>調査で注目する点</dt><dd>「画像に付随する情報の流出」と「画像そのものの閲覧」を分け、確認されたことと可能性を区別します。</dd></dl>
+            <p class="incident-sources"><a href="https://piyolog.hatenadiary.jp/entry/2026/09/17/032044" target="_blank" rel="noopener noreferrer">出典：piyolog（9月17日） ↗</a><a href="https://corp.helpfeel.com/news/news-20260916-1" target="_blank" rel="noopener noreferrer">Helpfeelの公表 ↗</a></p>
+          </article>
+          <article class="incident-card" id="incident-2" hidden>
+            <p class="incident-date">検知：2026年6月25日 ／ 公表：9月11日</p><h3>政府共通の業務環境GSS：アカウントの悪用</h3>
+            <dl><dt>何が起きた？</dt><dd>保守用のVPN機器の弱点を悪用した侵入が判明。保守担当者のアカウントを使った、大量のファイルへのアクセスが検知されました。</dd>
+              <dt>どんな影響？</dt><dd>職員や関係事業者などの個人情報を含むファイルが、外部へ漏えいした可能性が公表されました。</dd>
+              <dt>調査で注目する点</dt><dd>ログに担当者のアカウントが記録されても、担当者本人が操作したとは限りません。侵入経路と利用状況を照合します。</dd></dl>
+            <p class="incident-sources"><a href="https://piyolog.hatenadiary.jp/entry/2026/09/11/220855" target="_blank" rel="noopener noreferrer">出典：piyolog（9月11日） ↗</a><a href="https://www.digital.go.jp/news/2026-0911-01" target="_blank" rel="noopener noreferrer">デジタル庁の公表 ↗</a></p>
+          </article>
+          <article class="incident-card" id="incident-3" hidden>
+            <p class="incident-date">検知：2026年9月2日 ／ 公表：9月3日</p><h3>鳥取県：放射線監視システムのファイルが暗号化</h3>
+            <dl><dt>何が起きた？</dt><dd>環境放射線を監視するシステムの主サーバーがランサムウェア攻撃を受け、電子ファイルが暗号化されました。</dd>
+              <dt>どんな影響？</dt><dd>主サーバーは停止しましたが、被害を免れた遠隔地の副サーバーで監視を継続。ほかの県庁システムへの影響はないと県が説明しました。</dd>
+              <dt>調査で注目する点</dt><dd>一部のサーバーの停止と、監視業務全体の停止を区別します。どのシステムまで影響したかを確認します。</dd></dl>
+            <p class="incident-sources"><a href="https://piyolog.hatenadiary.jp/entry/2026/09/07/090941" target="_blank" rel="noopener noreferrer">出典：piyolog（9月7日） ↗</a></p>
+          </article>
+        </div>
+        <div class="incident-navigation"><button id="incident-prev" class="secondary" type="button">前の事例</button><span id="incident-page" aria-live="polite">1 / 3</span><button id="incident-next" class="secondary" type="button">次の事例</button></div>
+      </section>
+      <div class="generation-meter"><div class="generation-meter-heading"><label for="generation-percent">現在の進捗</label><strong id="generation-percent-label" aria-live="polite">0%</strong></div>
+        <progress id="generation-percent" max="100" value="0">0%</progress><p id="generation-message" role="status"></p><p class="progress-note">処理中の工程に基づく目安です。工程内は推定値で、残り時間の割合ではありません。100%はすべての検証が完了した時に表示します。</p></div>
+      <div class="loading-footer"><button id="cancel" class="secondary" type="button">生成を中止</button><details><summary>工程と詳細</summary><ol id="generation-progress" class="generation-progress"></ol><div id="detail-list" class="detail-list"></div></details></div>
     </section>
-    <section id="generation-panel" aria-labelledby="generation-title" hidden><h1 id="generation-title">処理しています</h1><p id="generation-message" class="assistant-message"></p><ol id="generation-progress" class="generation-progress"></ol><div class="button-row"><button id="cancel" class="secondary" type="button">生成を中止</button></div><details><summary>詳細</summary><div id="detail-list" class="detail-list"></div></details></section>
-    <section id="ready-panel" aria-labelledby="ready-title" hidden><h1 id="ready-title">ゲームが完成しました</h1><ol id="ready-progress" class="generation-progress"></ol><a id="play-game" class="button-link" href="/">ゲーム開始</a></section>
-    <section id="failure-panel" aria-labelledby="failure-title" hidden><h1 id="failure-title">ゲーム生成に失敗しました</h1><p id="failure-message"></p><button id="retry" type="button">作成方法へ戻る</button><details><summary>詳細</summary><div id="failure-details" class="detail-list"></div></details></section>
+    <section id="ready-panel" aria-labelledby="ready-title" hidden>
+      <h1 id="ready-title">ゲームが完成しました</h1><p class="ready-percent">100% · すべての工程が完了しました</p><details><summary>完了した工程</summary><ol id="ready-progress" class="generation-progress"></ol></details>
+      <div class="button-row"><a id="play-game" class="button-link" href="/author">ゲーム開始</a><a class="button-link" href="/author">ゲーム作成方法に戻る</a></div>
+    </section>
+    <section id="failure-panel" aria-labelledby="failure-title" hidden>
+      <h1 id="failure-title">ゲームを生成できませんでした</h1><p id="failure-message"></p><button id="retry" type="button">攻撃・舞台の選択に戻る</button>
+      <details><summary>Developer Detail</summary><div id="failure-details" class="detail-list"></div></details>
+    </section>
   </main>
 </body>
 </html>

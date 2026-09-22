@@ -49,6 +49,7 @@ async function request(path, body) {
   } catch (error) {
     errorBox.textContent = error instanceof TypeError
       ? '通信できません。サーバーの起動を確認してください。' : error.message;
+    if (!game && playId) renderEntry(true);
   } finally {
     busy = false;
     screen.setAttribute('aria-busy', 'false');
@@ -58,6 +59,16 @@ async function request(path, body) {
 
 function action(actionName, fields = {}) {
   return request('/api/action', { action: actionName, ...fields });
+}
+
+function renderEntry(failed = false) {
+  document.body.classList.add('playing-generated');
+  screen.className = 'case-entry';
+  screen.replaceChildren();
+  const title = element('h1', failed ? '事件ファイルを開けませんでした' : '事件ファイルを開いています…');
+  title.id = 'screen-title'; title.tabIndex = -1;
+  screen.append(title);
+  if (failed) screen.append(button('もう一度開く', () => request('/api/start', { playId })));
 }
 
 function evidenceCard(item) {
@@ -203,6 +214,7 @@ function render() {
   document.body.classList.remove('playing-generated');
   screen.className = ''; screen.style.backgroundImage = '';
   if (!game) {
+    if (playId) { renderEntry(); return; }
     const title = element('h1', 'インシデント調査ゲーム');
     title.id = 'screen-title'; title.tabIndex = -1;
     screen.append(title, element('p', 'ゲームデータを検証して開始します。'),
@@ -215,3 +227,4 @@ function render() {
 }
 
 render();
+if (playId) request('/api/start', { playId });

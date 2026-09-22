@@ -72,8 +72,8 @@ test('Network SVG 4種類とoriginal visual assetが存在しscriptを含まな�
 test('Author通常画面は実装済みAttackを動的表示するWizard入口を持つ', async () => {
   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
   const script = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
-  assert.match(html, /Scenario作成方法/); assert.match(html, /attack-options/);
-  assert.match(html, /manual-difficulty/); assert.match(html, /Scenario案を作成/);
+  assert.match(html, /攻撃と舞台/); assert.match(html, /attack-options/);
+  assert.match(html, /id="setting"/); assert.match(html, /この条件で事件案を作る/);
   assert.doesNotMatch(html, /textarea|Developer Mode|JSON Import/);
   assert.match(script, /attackId/); assert.match(script, /difficulty/);
 });

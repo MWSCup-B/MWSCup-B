@@ -1,0 +1,258 @@
+{
+  "schemaVersion": "1.0",
+  "id": "unauthorized_login",
+  "label": "不正ログイン",
+  "category": "authentication",
+  "description": "有効な資格情報を悪用し、投稿権限を持つ既存アカウントとして認証される教材モデル。資格情報の入手、パスワードのみの認証、投稿権限を個別に明示する。認証ログだけで実在人物や不正性を断定しない。",
+  "supportedInvestigationTypes": [
+    "AUTH_LOG",
+    "APPLICATION_LOG",
+    "WEB_LOG",
+    "CONFIGURATION"
+  ],
+  "bindings": [
+    {
+      "id": "source",
+      "kind": "node"
+    },
+    {
+      "id": "auth_host",
+      "kind": "node"
+    },
+    {
+      "id": "web_host",
+      "kind": "node"
+    },
+    {
+      "id": "auth",
+      "kind": "service"
+    },
+    {
+      "id": "web",
+      "kind": "service"
+    },
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "account",
+      "kind": "entity"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    },
+    {
+      "binding": "account",
+      "values": [
+        "account"
+      ]
+    }
+  ],
+  "requiredRoles": [
+    {
+      "binding": "auth_host",
+      "values": [
+        "authentication_server"
+      ]
+    },
+    {
+      "binding": "web_host",
+      "values": [
+        "web_server"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "auth",
+      "values": [
+        "auth"
+      ]
+    },
+    {
+      "binding": "web",
+      "values": [
+        "web"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "auth",
+      "values": [
+        "authentication"
+      ],
+      "node": "auth_host"
+    },
+    {
+      "binding": "web",
+      "values": [
+        "web_application"
+      ],
+      "node": "web_host"
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "otherConditions",
+      "predicate": "credential_available",
+      "args": [
+        "$attacker",
+        "$account",
+        "$auth"
+      ],
+      "value": true,
+      "description": "攻撃者が対象認証サービスの当該アカウントの資格情報を取得済み。前段の明示された取得効果、または教材の初期条件が必要。秘密値をデータへ入れない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "credential_valid",
+      "args": [
+        "$account",
+        "$auth"
+      ],
+      "value": true,
+      "description": "当該アカウントは有効で、資格情報が失効・変更されていない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "password_only_authentication",
+      "args": [
+        "$account",
+        "$auth"
+      ],
+      "value": true,
+      "description": "この教材環境では対象アカウントの認証はパスワードのみ。MFAや端末制約を突破したとは扱わない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "account_can_publish",
+      "args": [
+        "$account",
+        "$auth",
+        "$web"
+      ],
+      "value": true,
+      "description": "Webサービスが当該認証サービスを信頼し、このアカウントに投稿権限を付与している。管理者・OS権限は含まない。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "unauthorized_account_use",
+      "args": [
+        "$attacker",
+        "$account"
+      ],
+      "value": true,
+      "description": "この攻撃主体はアカウント利用の許可を得ていないという非公開の教材条件。ログから操作者を特定したものではない。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_node",
+      "args": [
+        "$attacker",
+        "$source"
+      ],
+      "value": true,
+      "description": "攻撃主体が接続元ノードを操作できる。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "source",
+      "toService": "auth",
+      "description": "接続元から認証サービスへの到達性。"
+    },
+    {
+      "from": "source",
+      "toService": "web",
+      "description": "接続元から投稿先Webサービスへの到達性。"
+    },
+    {
+      "from": "web_host",
+      "toService": "auth",
+      "description": "Webから認証サービスへの到達性。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "account_session_established",
+      "args": [
+        "$attacker",
+        "$account",
+        "$auth"
+      ],
+      "value": true,
+      "description": "当該アカウントで認証されたセッションが成立する。記録上のアカウントと実際の操作者は別である。"
+    },
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "can_store_content",
+      "args": [
+        "$attacker",
+        "$web"
+      ],
+      "value": true,
+      "description": "取得した当該アカウントの投稿権限に限り、対象Webサービスへ内容を保存できる。XSS成立や管理者権限は意味しない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "authentication_record",
+      "description": "認証サービスの成否・対象アカウント識別子・送信元・時刻の合成記録。秘密値は含めず、成功だけで操作者を特定しない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "authentication_record_available",
+          "args": [
+            "$auth",
+            "$account"
+          ],
+          "value": true,
+          "description": "対象記録の計測・保持・調査での取得が明示的に有効。秘密値は保持しない。"
+        }
+      ]
+    },
+    {
+      "id": "application_session_record",
+      "description": "Web側の認証連携・セッション受入れ・投稿権限の監査記録。認証側と別の取得元で照合し、ログインだけで投稿完了とは扱わない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "application_session_record_available",
+          "args": [
+            "$web",
+            "$account"
+          ],
+          "value": true,
+          "description": "対象記録の計測・保持・調査での取得が明示的に有効。秘密値は保持しない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "MITRE ATT&CK T1078"
+  ],
+  "references": [
+    {
+      "id": "mitre_valid_accounts",
+      "title": "MITRE ATT&CK: Valid Accounts",
+      "url": "https://attack.mitre.org/techniques/T1078/",
+      "supports": "既存アカウントの資格情報の悪用とその権限範囲。パスワードのみの認証・投稿権限は本教材の限定条件であり、一般的な認証突破の保証ではない。"
+    },
+    {
+      "id": "owasp_logging",
+      "title": "OWASP Logging Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "supports": "observableArtifacts: ログの取得内容・取得設定・保持を個別に確認する原則。製品固有のイベントIDや既定記録は保証しない。"
+    }
+  ]
+}

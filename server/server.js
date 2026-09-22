@@ -21,6 +21,7 @@ const assets = new Map([
   ['/generated-game.css', ['generated-game.css', 'text/css; charset=utf-8']],
   ['/author', ['author.html', 'text/html; charset=utf-8']],
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
+  ['/author.css', ['author.css', 'text/css; charset=utf-8']],
   ['/visual-assets.js', ['visual-assets.js', 'text/javascript; charset=utf-8']],
 ]);
 for (const path of [
@@ -33,11 +34,16 @@ for (const path of [
   'networks/network-d.svg',
   'characters/witness-neutral.svg', 'characters/defendant-neutral.svg',
 ]) assets.set(`/assets/${path}`, [`assets/${path}`, 'image/svg+xml; charset=utf-8']);
+for (const path of ['backgrounds/courtroom-v2.png', 'backgrounds/investigation-v2.png',
+  'characters/defense-portrait-v2.png', 'characters/prosecutor-portrait-v2.png',
+  'characters/assistant-portrait-v1.png', 'title/title.png']) {
+  assets.set(`/assets/${path}`, [`assets/${path}`, 'image/png']);
+}
 const generatedActionFields = new Map([
   ['begin', ['action']], ['continue', ['action']],
   ['investigate', ['action', 'targetId', 'investigationActionId']],
-  ['collect', ['action', 'evidenceId']], ['retrial', ['action']], ['investigation', ['action']],
-  ['objection', ['action', 'statementId', 'evidenceId']], ['retry', ['action']],
+  ['collect', ['action', 'evidenceId']], ['retrial', ['action', 'interpretationChoiceId']], ['investigation', ['action']],
+  ['objection', ['action', 'statementId', 'evidenceId', 'interpretationChoiceId']], ['retry', ['action']],
 ]);
 const xssActionFields = new Map([
   ['begin', ['action']], ['next-dialogue', ['action']],
@@ -122,6 +128,11 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
         if (pathname === '/api/author/select-mode') {
           validateFields(body, ['mode']);
           author = autoManager.selectMode(record.session, body.mode);
+        } else if (pathname === '/api/author/selection') {
+          validateFields(body, ['request']);
+          const previousPlayId = record.session.playId;
+          author = autoManager.submitSelection(record.session, body.request);
+          if (previousPlayId) playableGames.delete(previousPlayId);
         } else if (pathname === '/api/author/manual') {
           validateFields(body, ['configuration']);
           if (record.session.playId) playableGames.delete(record.session.playId);

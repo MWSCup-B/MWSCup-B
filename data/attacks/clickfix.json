@@ -1,0 +1,255 @@
+{
+  "schemaVersion": "1.0",
+  "id": "clickfix",
+  "label": "ClickFix",
+  "category": "social_engineering",
+  "description": "偽の修復・本人確認画面に従い利用者が端末側で操作を実行してしまう教材。ページ閲覧だけでは実行されない。効果は当該端末の一般利用者権限での実行に限定し、情報窃取・権限昇格は含めない。",
+  "supportedInvestigationTypes": [
+    "WEB_LOG",
+    "DEVICE",
+    "CONFIGURATION"
+  ],
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "victim",
+      "kind": "entity"
+    },
+    {
+      "id": "request",
+      "kind": "entity"
+    },
+    {
+      "id": "client",
+      "kind": "node"
+    },
+    {
+      "id": "browser",
+      "kind": "service"
+    },
+    {
+      "id": "web_host",
+      "kind": "node"
+    },
+    {
+      "id": "web",
+      "kind": "service"
+    },
+    {
+      "id": "endpoint",
+      "kind": "service"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    },
+    {
+      "binding": "victim",
+      "values": [
+        "user"
+      ]
+    },
+    {
+      "binding": "request",
+      "values": [
+        "web_request"
+      ]
+    }
+  ],
+  "requiredRoles": [
+    {
+      "binding": "client",
+      "values": [
+        "workstation"
+      ]
+    },
+    {
+      "binding": "web_host",
+      "values": [
+        "web_server"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "browser",
+      "values": [
+        "browser"
+      ]
+    },
+    {
+      "binding": "web",
+      "values": [
+        "web"
+      ]
+    },
+    {
+      "binding": "endpoint",
+      "values": [
+        "logging"
+      ]
+    },
+    {
+      "binding": "client",
+      "values": [
+        "windows"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "browser",
+      "node": "client",
+      "values": [
+        "web_browser"
+      ]
+    },
+    {
+      "binding": "web",
+      "node": "web_host",
+      "values": [
+        "web_application"
+      ]
+    },
+    {
+      "binding": "endpoint",
+      "node": "client",
+      "values": [
+        "logging"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "otherConditions",
+      "predicate": "browser_request_issued",
+      "args": [
+        "$victim",
+        "$browser",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "対象の偽案内を開くWeb要求が発行される。前段のメール誘導、または明示した初期条件による。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "deceptive_repair_content_served",
+      "args": [
+        "$attacker",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "攻撃主体の制御する修復・本人確認を装う案内が対象要求へ返される。正規Web全体の侵害は仮定しない。"
+    },
+    {
+      "source": "requiredUserActions",
+      "predicate": "user_runs_deceptive_instruction",
+      "args": [
+        "$victim",
+        "$client",
+        "$request"
+      ],
+      "value": true,
+      "description": "利用者が案内を信用して端末上で操作を実行する。閲覧・クリック・コピーだけでは足りない。実行文字列は教材に収録しない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "user_level_execution_permitted",
+      "args": [
+        "$victim",
+        "$client"
+      ],
+      "value": true,
+      "description": "利用者権限での当該実行が許可され、防御機能によって阻止されない。管理者権限はない。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_lure_content",
+      "args": [
+        "$attacker",
+        "$web"
+      ],
+      "value": true,
+      "description": "攻撃主体が当該偽案内の内容を制御できるという初期条件。侵害経路を追加したものではない。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "client",
+      "toService": "web",
+      "description": "利用者端末から偽案内のWebサービスへ到達できる。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "endpoint_execution_available",
+      "args": [
+        "$attacker",
+        "$client"
+      ],
+      "value": true,
+      "description": "当該端末で攻撃主体の意図した処理が一般利用者権限で実行される。暗号化・窃取・権限昇格は別条件。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "clickfix_page_record",
+      "description": "保存した偽案内の本文、要求ID、応答時刻。実行を促す旨は示すが、実行可能なコマンドは収録せず非実行の識別子で表す。応答は端末での実行成功を示さない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "clickfix_page_record_available",
+          "args": [
+            "$web"
+          ],
+          "value": true,
+          "description": "この教材では対象の計測・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+        }
+      ]
+    },
+    {
+      "id": "process_execution_record",
+      "description": "専用の端末計測。時刻、端末ID、非秘密のプロセス相関ID、親子関係、実行ユーザー識別子、起動結果。実行内容は非実行の教材識別子のみ。記録から実際の人物や悪意は断定できない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "process_execution_record_available",
+          "args": [
+            "$endpoint"
+          ],
+          "value": true,
+          "description": "この教材では対象の計測・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "ClickFix social engineering"
+  ],
+  "references": [
+    {
+      "id": "microsoft_clickfix",
+      "title": "Microsoft: Think before you Click(Fix)",
+      "url": "https://www.microsoft.com/en-us/security/blog/2025/08/21/think-before-you-clickfix-analyzing-the-clickfix-social-engineering-technique/",
+      "supports": "偽の修復・確認を通した利用者による端末操作が実行の条件となる。ブラウザ閲覧のみの自動実行ではない。"
+    },
+    {
+      "id": "owasp_logging",
+      "title": "OWASP Logging Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "supports": "取得・保持・記録範囲の明示と秘密値の除外。製品の既定記録は保証しない。"
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "schemaVersion": "1.0",
+  "id": "ransomware",
+  "label": "ランサムウェア",
+  "category": "impact",
+  "description": "一般利用者が書込み可能な端末内の教材ファイルを暗号化し身代金を要求する事案。侵入経路は初期条件または選択された前段で明示し、横展開・情報窃取・バックアップ破壊を効果に含めない。",
+  "supportedInvestigationTypes": [
+    "DEVICE",
+    "FILE",
+    "CONFIGURATION"
+  ],
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "victim",
+      "kind": "entity"
+    },
+    {
+      "id": "client",
+      "kind": "node"
+    },
+    {
+      "id": "endpoint",
+      "kind": "service"
+    },
+    {
+      "id": "files",
+      "kind": "service"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    },
+    {
+      "binding": "victim",
+      "values": [
+        "user"
+      ]
+    }
+  ],
+  "requiredRoles": [
+    {
+      "binding": "client",
+      "values": [
+        "workstation"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "endpoint",
+      "values": [
+        "logging"
+      ]
+    },
+    {
+      "binding": "files",
+      "values": [
+        "file"
+      ]
+    },
+    {
+      "binding": "client",
+      "values": [
+        "windows"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "endpoint",
+      "node": "client",
+      "values": [
+        "logging"
+      ]
+    },
+    {
+      "binding": "files",
+      "node": "client",
+      "values": [
+        "file"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "otherConditions",
+      "predicate": "endpoint_execution_available",
+      "args": [
+        "$attacker",
+        "$client"
+      ],
+      "value": true,
+      "description": "当該端末の一般利用者権限で処理を実行できる。選択されたClickFixの効果、または明示した取得済みの初期権限。未選択の侵入攻撃を生成しない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "user_can_modify_target_files",
+      "args": [
+        "$victim",
+        "$files"
+      ],
+      "value": true,
+      "description": "当該利用者が対象教材ファイルを読み書きできる。全サーバーや他利用者のファイル権限は含めない。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "encryption_process_not_blocked",
+      "args": [
+        "$client",
+        "$files"
+      ],
+      "value": true,
+      "description": "当該暗号化処理が防御機能で阻止されず、対象ファイルへの処理が完了する限定条件。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "ransom_demand_displayed",
+      "args": [
+        "$attacker",
+        "$files"
+      ],
+      "value": true,
+      "description": "復元と引換えに金銭を求める合成文面を残す。実在の送金先・連絡先は使用しない。"
+    }
+  ],
+  "requiredPrivileges": [],
+  "requiredReachability": [],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "target_files_encrypted",
+      "args": [
+        "$attacker",
+        "$client",
+        "$files"
+      ],
+      "value": true,
+      "description": "書込み権限のある対象ファイルが暗号化され、通常の利用ができなくなる。拡張子変更だけで暗号化と判断しない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "process_execution_record",
+      "description": "専用の端末計測。時刻、端末ID、非秘密のプロセス相関ID、親子関係、実行ユーザー識別子、起動結果。実行内容は非実行の教材識別子のみ。起動だけで暗号化完了を断定しない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "process_execution_record_available",
+          "args": [
+            "$endpoint"
+          ],
+          "value": true,
+          "description": "この教材では対象の計測・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+        }
+      ]
+    },
+    {
+      "id": "file_encryption_record",
+      "description": "調査用に保存された対象ファイルの変更前後の検査結果。時刻、対象パス、変更前後のハッシュ、暗号化確認結果、書込み処理との相関ID、身代金要求文（合成）。単なる改名や高エントロピーだけを暗号化の証明にしない。対象外ファイルや外部流出は示さない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "file_encryption_record_available",
+          "args": [
+            "$files"
+          ],
+          "value": true,
+          "description": "この教材では対象の計測・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "MITRE ATT&CK T1486"
+  ],
+  "references": [
+    {
+      "id": "mitre_encryption",
+      "title": "MITRE ATT&CK: Data Encrypted for Impact",
+      "url": "https://attack.mitre.org/techniques/T1486/",
+      "supports": "ファイル暗号化による可用性への影響。対象ファイルのアクセス権限が必要で、横展開等は別の条件・攻撃である。"
+    },
+    {
+      "id": "owasp_logging",
+      "title": "OWASP Logging Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "supports": "取得・保持・記録範囲の明示と秘密値の除外。製品の既定記録は保証しない。"
+    }
+  ]
+}

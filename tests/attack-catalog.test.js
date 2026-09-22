@@ -24,18 +24,27 @@ function standalone(id) {
   return value;
 }
 
-test('承認された3種類を外部JSONから読込み、指定の効果だけを持つ', () => {
-  assert.deepEqual(definitions.map(x => x.id).sort(), ['phishing', 'reflected_xss', 'sql_injection']);
+test('旧定義を維持し、追加した攻撃・限定型も外部JSONから読込む', () => {
+  assert.deepEqual(definitions.map(x => x.id).sort(),
+    ['clickfix', 'credential_phishing', 'password_spray', 'phishing', 'ransomware',
+      'reflected_xss', 'sql_injection', 'stored_xss', 'unauthorized_login', 'unrestricted_file_upload']);
   const expected = new Map([
     ['phishing', 'browser_request_issued'],
     ['reflected_xss', 'script_executed_in_origin'],
     ['sql_injection', 'sql_query_structure_modified'],
+    ['stored_xss', 'script_executed_in_origin'],
+    ['clickfix', 'endpoint_execution_available'], ['password_spray', 'credential_available'],
+    ['ransomware', 'target_files_encrypted'], ['unrestricted_file_upload', 'disallowed_file_stored'],
   ]);
   for (const definition of definitions) {
     assert.equal(definition.schemaVersion, '1.0');
-    assert.equal(definition.effects.length, 1);
-    assert.equal(definition.effects[0].predicate, expected.get(definition.id));
-    assert.equal(definition.effects[0].source, 'otherConditions');
+    if (expected.has(definition.id)) {
+      assert.equal(definition.effects.length, 1);
+      assert.equal(definition.effects[0].predicate, expected.get(definition.id));
+      assert.equal(definition.effects[0].source, 'otherConditions');
+    } else assert.deepEqual(definition.effects.map(effect => effect.predicate),
+      definition.id === 'credential_phishing' ? ['browser_request_issued', 'credential_available']
+        : ['account_session_established', 'can_store_content']);
     assert.ok(definition.references.every(x => x.supports && x.url.startsWith('https://')));
     assert.ok(definition.observableArtifacts.every(x => x.conditions.length > 0));
   }
@@ -129,7 +138,7 @@ test('未選択の攻撃を補ってSQLの不足条件を成立させない', ()
   assert.equal(result.blocked, true);
   assert.equal(result.state, 'UNKNOWN');
   assert.ok(result.issues.some(x => x.attackId === 'sql_injection' && x.field === 'otherConditions.attacker_request_submitted'));
-  assert.equal(value.definitions.length, 3);
+  assert.equal(value.definitions.length, 10);
 });
 
 test('ログが未設定・無効でも攻撃成立と痕跡取得可能性を混同しない', () => {
@@ -150,7 +159,7 @@ test('ログが未設定・無効でも攻撃成立と痕跡取得可能性を�
 test('アプリコードを変えず定義IDを変更しても同じ成立性を評価する', () => {
   const value = input();
   const ids = new Map([['phishing', 'catalog_entry_a'], ['reflected_xss', 'catalog_entry_b'], ['sql_injection', 'catalog_entry_c']]);
-  value.definitions.forEach(x => { x.id = ids.get(x.id); });
+  value.definitions.forEach(x => { x.id = ids.get(x.id) ?? x.id; });
   value.candidate.selectedAttackIds = value.candidate.selectedAttackIds.map(id => ids.get(id));
   value.candidate.assignments.forEach(x => { x.attackId = ids.get(x.attackId); });
   const result = evaluateCandidate(value);

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { ValidationError, validateDocument } from './schema.js';
+import { COURT_QUESTION_SCHEMA, validateCourtQuestion } from './court-questions.js';
 import {
   canonical,
   contentDigest,
@@ -34,6 +35,12 @@ delete draftArtifactSchema.properties.integrity;
 Object.assign(EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.evidenceArtifacts, { items: draftArtifactSchema });
 EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.contradictions.items = structuredClone(OUTPUT_SCHEMAS.get('contradiction'));
 EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.exonerations.items = structuredClone(OUTPUT_SCHEMAS.get('exoneration'));
+// Automatic games also need grounded interpretation questions. They are a separate
+// progression artifact; the external Evidence Import v1 contract is not changed.
+EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.courtQuestions = {
+  type: 'array', minItems: 1, maxItems: 128, items: structuredClone(COURT_QUESTION_SCHEMA),
+};
+EVIDENCE_GENERATION_DRAFT_SCHEMA.required.push('courtQuestions');
 
 function generationRef(input) {
   return input.evidenceAgentInput ? {
@@ -146,10 +153,18 @@ export function buildEvidenceGenerationDraftInput(input) {
   validateEvidenceGenerationInput(input);
   if (input.status !== 'READY') throw new ValidationError('EVIDENCE_GENERATION_BLOCKED',
     'evidence-generation-input.status', '検証済みのEvidence入力が必要です。');
+  const agent = input.evidenceAgentInput;
   return {
+    contextFormat: 'DEDUPLICATED_VERIFIED_INPUT_V1',
     evidenceGenerationInputId: input.evidenceGenerationInputId,
     generationInputRef: generationRef(input),
-    evidenceAgentInput: structuredClone(input.evidenceAgentInput),
+    // Validation above has already checked every duplicate against these originals.
+    // Keep each source in full once; only the internal CLI projection is compacted.
+    // Fingerprints still identify the canonical input, not this projection.
+    evidenceAgentInput: structuredClone({ schemaVersion: agent.schemaVersion,
+      evidenceAgentInputId: agent.evidenceAgentInputId, inputFingerprint: agent.inputFingerprint,
+      scenarioVerificationInput: agent.scenarioVerificationInput,
+      verificationResult: agent.verificationResult }),
     outputContract: { name: 'evidence-generation-draft', schemaVersion: '1.0',
       jsonSchema: structuredClone(EVIDENCE_GENERATION_DRAFT_SCHEMA) },
   };
@@ -157,8 +172,18 @@ export function buildEvidenceGenerationDraftInput(input) {
 
 // 初回生成境界でのみ本文のUTF-8 bytesを封印する。外部Packageの不正ハッシュを修復しない。
 export function materializeEvidenceGenerationDraft(draft) {
-  validateDocument('evidence-import-package', draft);
-  const evidencePackage = structuredClone(draft);
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) {
+    throw new ValidationError('INVALID_TYPE', 'evidence-generation-draft', '証拠draftはJSONオブジェクトで指定してください。');
+  }
+  const { courtQuestions, ...packageDraft } = draft;
+  if (courtQuestions !== undefined) {
+    if (!Array.isArray(courtQuestions) || courtQuestions.length < 1 || courtQuestions.length > 128) {
+      throw new ValidationError('EVIDENCE_COURT_QUESTIONS_REQUIRED', 'courtQuestions', '各調査対象に対応する4択問題を用意してください（1～128件）。');
+    }
+    courtQuestions.forEach(validateCourtQuestion);
+  }
+  validateDocument('evidence-import-package', packageDraft);
+  const evidencePackage = structuredClone(packageDraft);
   for (const [index, artifact] of evidencePackage.evidenceArtifacts.entries()) {
     const field = `evidence-generation-draft.evidenceArtifacts[${index}]`;
     if (Object.hasOwn(artifact, 'integrity')) throw new ValidationError('UNKNOWN_FIELD',

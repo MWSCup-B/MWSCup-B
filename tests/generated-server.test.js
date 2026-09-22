@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createAppServer } from '../server/server.js';
 import { readyGameCaseFixture } from './helpers/ready-game-case.js';
+import { AutoGenerationManager, autoAuthorBootstrap, createAutoAuthorSession } from '../server/auto-generation-service.js';
+import { currentCorrectPair } from './helpers/court-issues.js';
+import { MockCodexRunner } from './helpers/mock-codex.js';
 
 async function setup(t, result = readyGameCaseFixture().gameCaseResult) {
   const server = createAppServer({ mode: 'GENERATED', gameCaseResult: result });
@@ -16,8 +19,28 @@ async function setup(t, result = readyGameCaseFixture().gameCaseResult) {
 
 function assertPublic(value) {
   assert.doesNotMatch(JSON.stringify(value),
-    /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|sourceNodeRef|contradictionRef|exonerationRef|sourceRefs|requirementIds|attackGraphRef|provenance|fingerprint/);
+    /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|sourceNodeRef|contradictionRef|exonerationRef|sourceRefs|requirementIds|attackGraphRef|provenance|fingerprint|correctOptionIndex|correctChoiceId|supportingQuotes/);
 }
+
+test('reference-based artwork is served only from explicitly allowed PNG asset paths', async t => {
+  const server = createAppServer({ mode: 'GENERATED', gameCaseResult: readyGameCaseFixture().gameCaseResult });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  for (const path of ['backgrounds/courtroom-v2.png', 'backgrounds/investigation-v2.png',
+    'characters/defense-portrait-v2.png', 'characters/prosecutor-portrait-v2.png',
+    'characters/assistant-portrait-v1.png', 'title/title.png']) {
+    const response = await fetch(`${origin}/assets/${path}`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    const data = Buffer.from(await response.arrayBuffer());
+    assert.equal(data.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  }
+  for (const path of ['/image/anything.png', '/assets/characters/unregistered.png',
+    '/assets/characters/defense-portrait-v2.png:Zone.Identifier']) {
+    assert.equal((await fetch(origin + path)).status, 404);
+  }
+});
 
 const discoverA = [
   { action: 'investigate', targetId: 'target_web_server',
@@ -77,4 +100,39 @@ test('BLOCKED buildでは開始を拒否しFixtureへフォールバックしな
 
 test('Server modeは必須でGeneratedとFixtureを暗黙混在させない', () => {
   assert.throws(() => createAppServer(), { code: 'GAME_MODE_REQUIRED' });
+});
+
+test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解釈と証拠で解決できる', async t => {
+  const manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
+  const author = createAutoAuthorSession();
+  manager.submitManual(author, autoAuthorBootstrap().defaultManualConfiguration);
+  await manager.waitForIdle(); manager.approve(author); await manager.waitForIdle();
+  assert.equal(author.auto.state, 'READY', JSON.stringify(author.auto.details));
+  const post = await setup(t, author.gameCaseResult);
+  const started = await (await post('/api/start', {})).json(); const { token } = started;
+  assert.equal(started.game.answerMode, 'INTERPRETATION_AND_EVIDENCE'); assertPublic(started);
+  async function action(body) {
+    const response = await post('/api/action', body, token);
+    assert.equal(response.status, 200); const value = await response.json(); assertPublic(value); return value.game;
+  }
+  await action({ action: 'begin' }); await action({ action: 'continue' });
+  let game;
+  for (let round = 1; round <= author.runtime.gameCase.progression.courtRoundCount; round += 1) {
+    const issue = author.runtime.gameCase.progression.courtIssues[round - 1];
+    for (const rule of author.runtime.gameCase.detective.evidenceDiscoveryRules.filter(item => item.targetId === issue.investigationTargetId)) {
+      await action({ action: 'investigate', targetId: rule.targetId, investigationActionId: rule.actionId });
+      game = await action({ action: 'collect', evidenceId: rule.evidenceId });
+    }
+    assert.equal(game.courtQuestion.choices.length, 4);
+    const rejected = await post('/api/action', { action: 'retrial' }, token);
+    assert.equal(rejected.status, 400);
+    assert.equal((await rejected.json()).error.code, 'INTERPRETATION_CHOICE_REQUIRED');
+    game = await action({ action: 'retrial', interpretationChoiceId: currentCorrectPair(author.runtime, round).interpretationChoiceId });
+    const injected = await post('/api/action', { action: 'objection', ...currentCorrectPair(author.runtime, round),
+      correctOptionIndex: 0 }, token);
+    assert.equal(injected.status, 400);
+    game = await action({ action: 'objection', ...currentCorrectPair(author.runtime, round) });
+    assert.equal(typeof game.result.publicExplanation, 'string');
+  }
+  assert.equal(game.currentState, 'ACQUITTED');
 });

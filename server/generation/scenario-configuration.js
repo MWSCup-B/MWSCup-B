@@ -4,6 +4,8 @@ import { validateDocument, ValidationError } from './schema.js';
 import { buildAttackGraphs } from './attack-graph.js';
 import { buildScenarioGenerationInputs } from './scenario-interface.js';
 import { requestedCourtIssueCount } from './court-issues.js';
+import { AUTHOR_ATTACK_CHOICES, SCENARIO_SETTINGS } from './author-options.js';
+import { buildIncidentOverview } from './incident-report.js';
 
 export const INVESTIGATION_TYPES = Object.freeze({
   WEB_LOG: { label: 'Webアクセスログ', actionId: 'action_audit_log' },
@@ -11,7 +13,7 @@ export const INVESTIGATION_TYPES = Object.freeze({
   AUTH_LOG: { label: '認証ログ', actionId: 'action_review_auth_log' },
   APPLICATION_LOG: { label: 'Applicationログ', actionId: 'action_audit_log' },
   NETWORK_LOG: { label: 'Networkログ', actionId: 'action_analyze_network_log' },
-  EMAIL: { label: 'メール', actionId: 'action_inspect_file' },
+  EMAIL: { label: 'メール', actionId: 'action_check_email' },
   BROWSER_HISTORY: { label: 'ブラウザ履歴', actionId: 'action_inspect_device' },
   DEVICE: { label: '端末', actionId: 'action_inspect_device' },
   FILE: { label: 'ファイル', actionId: 'action_inspect_file' },
@@ -47,7 +49,83 @@ export const DEFAULT_DESIGN_NETWORK = Object.freeze({
 
 const labels = Object.freeze({
   phishing: 'フィッシング', reflected_xss: '反射型XSS', sql_injection: 'SQLインジェクション',
+  credential_phishing: 'フィッシング（資格情報入力）', stored_xss: 'Stored XSS',
+  unauthorized_login: '不正ログイン',
+  ...Object.fromEntries(AUTHOR_ATTACK_CHOICES.map(item => [item.id, item.label])),
 });
+
+export const MANUAL_ATTACK_CHOICES = Object.freeze([
+  { id: 'phishing', label: 'フィッシング' },
+  { id: 'stored_xss', label: 'Stored XSS' },
+  { id: 'unauthorized_login', label: '不正ログイン' },
+]);
+
+// 受信Configurationの補完ではなく、攻撃確定時に利用者が確認する初期値だけを作る。
+// 入力後の変更・検証・真実丸には適用しない。旧リンク誘導モデルも維持する。
+export function createManualAttackPreset(attackIds, catalog) {
+  if (!Array.isArray(attackIds) || !attackIds.length || attackIds.length > 3
+    || new Set(attackIds).size !== attackIds.length
+    || attackIds.some(id => !MANUAL_ATTACK_CHOICES.some(choice => choice.id === id))) {
+    throw new ValidationError('INVALID_ATTACK_SELECTION', 'attackIds', '登録済みの攻撃を重複なく1～3種類選択してください。');
+  }
+  const has = id => attackIds.includes(id);
+  const capture = has('phishing') && has('unauthorized_login');
+  const ids = [has('phishing') && (capture ? 'credential_phishing' : 'phishing'),
+    has('unauthorized_login') && 'unauthorized_login', has('stored_xss') && 'stored_xss'].filter(Boolean);
+  const configuration = createDefaultConfiguration({ attackIds: [], difficulty: attackIds.length,
+    incidentDate: '2026-09-18' });
+  if (has('unauthorized_login')) {
+    configuration.incidentContext.victimSystem = '社内ポータル（認証連携・投稿機能）';
+    configuration.incidentContext.initialSuspicionReason =
+      '調査担当者が認証成功のアカウントを被告人の利用と結び付けたため。アカウントと人物の対応は疑う側の主張であり、技術記録からは未確認。';
+  } else if (has('stored_xss')) {
+    configuration.incidentContext.initialSuspicionReason =
+      '調査担当者が投稿の閲覧記録を被告人による投稿と結び付けたため。閲覧者と投稿者の同一性や、被告人との対応は未確認。';
+  }
+  const { network } = configuration;
+  if (has('unauthorized_login')) {
+    network.nodes.push({ nodeId: 'auth-host', label: '認証サーバー', nodeType: 'SERVER', os: 'linux',
+      ip: '10.10.0.60', subnetId: 'internal-net', trustBoundaryId: 'internal',
+      roles: ['authentication_server'], logSources: ['AUTH_LOG', 'APPLICATION_LOG', 'CONFIGURATION'] });
+    network.services.push({ serviceId: 'auth-service', nodeId: 'auth-host', label: 'Portal Authentication',
+      serviceType: 'authentication', platform: 'auth' });
+    network.connections.push({ fromNodeId: 'sender-host', toNodeId: 'auth-host' },
+      { fromNodeId: 'web-host', toNodeId: 'auth-host' });
+  }
+  if (capture) {
+    network.nodes.push({ nodeId: 'lure-host', label: '偽フォームサーバー（教材）', nodeType: 'WEB_SERVER', os: 'linux',
+      ip: '203.0.113.20', subnetId: 'external-net', trustBoundaryId: 'external',
+      roles: ['web_server'], logSources: ['WEB_LOG', 'APPLICATION_LOG', 'CONFIGURATION'] });
+    network.services.push({ serviceId: 'lure-service', nodeId: 'lure-host', label: 'Synthetic Lure Web',
+      serviceType: 'web_application', platform: 'web' });
+    network.connections.push({ fromNodeId: 'client-host', toNodeId: 'lure-host' },
+      { fromNodeId: 'sender-host', toNodeId: 'lure-host' });
+  }
+  const specs = {
+    phishing: { investigationTypes: ['EMAIL'], investigationSourceNodeId: 'mail-host',
+      evidenceAnswer: 'メール文のリンク先と実際に遷移するリンク先が異なること',
+      notes: 'リンク誘導のみ。メール保存とクリックは区別する。資格情報窃取は含まない。' },
+    credential_phishing: { targetNodeId: 'lure-host', targetServiceId: 'lure-service',
+      investigationTypes: ['EMAIL'], investigationSourceNodeId: 'mail-host',
+      evidenceAnswer: 'メールの表示URLと実際のhrefが異なり、偽フォームへの送信記録は正規サービスでの認証成功とは別であること。',
+      notes: 'リンク誘導に加え、偽フォームへの資格情報入力・送信・受信を明示した教材。送信記録は調査可能な合成資料で秘密値を含めない。認証先はauth-service。クリックだけで窃取とはしない。' },
+    unauthorized_login: { investigationTypes: ['AUTH_LOG'], investigationSourceNodeId: 'auth-host',
+      evidenceAnswer: '認証ログとWeb側のセッション監査は同じアカウントの認証・投稿権限を示すが、それだけで実際の操作者を被告人と特定できないこと。',
+      notes: `${capture ? '前段の偽フォームで取得した' : '初期条件として取得済みの'}有効な資格情報を悪用する。認証先auth-service、投稿先web-service。教材はパスワードのみの認証・投稿権限に限定し、MFA突破や管理者権限は仮定しない。` },
+    stored_xss: { investigationTypes: ['APPLICATION_LOG', 'WEB_LOG'], investigationSourceNodeId: 'web-host',
+      evidenceAnswer: '保存投稿と後の閲覧記録・ブラウザ計測を照合するとStored XSSの実行を確認できるが、閲覧端末の利用記録は投稿者の特定にはならないこと。',
+      notes: `${has('unauthorized_login') ? '前段の不正ログインによる投稿権限' : '初期条件として明示した投稿権限'}を使用。投稿の保存は閲覧前に完了している条件。発生日時は閲覧時の実行時点で、投稿時刻とは別。出力エンコード・サニタイズが不足し、実効CSPは実行を阻止しない。ブラウザ計測を取得可能とする。資格情報窃取は効果に含めない。` },
+  };
+  configuration.attacks = ids.map((attackId, index) => {
+    const definition = catalog.find(item => item.id === attackId);
+    if (!definition) throw new ValidationError('UNREGISTERED_ATTACK', 'attackIds', `攻撃定義${attackId}がありません。`);
+    return { attackId, order: index + 1,
+      occurrenceTime: `2026-09-18T09:${10 + index * 8}:00+09:00`,
+      sourceNodeId: 'sender-host', targetNodeId: 'web-host', targetServiceId: 'web-service',
+      expectedEffect: definition.effects.at(-1).description, ...specs[attackId] };
+  });
+  return configuration;
+}
 
 export function scenarioCreationBootstrap(catalog) {
   // Authorの初期入力だけに適用する。真実丸や受信済みConfigurationを上書きしない。
@@ -57,6 +135,10 @@ export function scenarioCreationBootstrap(catalog) {
   defaultManualConfiguration.attacks[0].evidenceAnswer =
     'メール文のリンク先と実際に遷移するリンク先が異なること';
   return {
+    attackChoices: structuredClone(AUTHOR_ATTACK_CHOICES),
+    settings: SCENARIO_SETTINGS.map(({ id, label }) => ({ id, label })),
+    selectionDefaults: { schemaVersion: '1.0', attackIds: ['phishing'], settingId: 'company' },
+    maxSelectedAttacks: 3,
     modes: [
       { id: 'MANUAL', label: '詳細設定', description: '攻撃手法、Network、発生時間、調査方法などを自分で設定します。' },
       { id: 'MAKOTOMARU', label: '真実丸', description: 'AIがScenario条件を自動的に選びます。' },
@@ -70,6 +152,11 @@ export function scenarioCreationBootstrap(catalog) {
     nodeTypes: ['CLIENT', 'SERVER', 'PROXY', 'WEB_SERVER', 'DATABASE', 'AD', 'FILE_SERVER', 'LOG_SERVER', 'MAIL_SERVER', 'EXTERNAL'],
     defaultNetwork: structuredClone(DEFAULT_DESIGN_NETWORK),
     defaultManualConfiguration,
+    manualAttackChoices: structuredClone(MANUAL_ATTACK_CHOICES),
+    manualAttackPresets: Array.from({ length: 7 }, (_, index) => {
+      const attackIds = MANUAL_ATTACK_CHOICES.filter((_, bit) => (index + 1) & (1 << bit)).map(item => item.id);
+      return { attackIds, configuration: createManualAttackPreset(attackIds, catalog) };
+    }),
   };
 }
 
@@ -213,12 +300,32 @@ function findService(network, type) { return network.services.find(item => item.
 
 function resolvedBindings(configuration, attack, chainRequestId) {
   const network = configuration.network;
-  const entities = { attacker: 'actor-a', victim: 'user-a', db_principal: 'db-account', request: chainRequestId };
-  if (attack.attackId === 'phishing') {
+  const auth = findService(network, 'authentication');
+  const entities = { attacker: 'actor-a', victim: 'user-a', db_principal: 'db-account', request: chainRequestId,
+    account: 'account-a', auth: auth?.serviceId, auth_host: auth?.nodeId };
+  if (attack.attackId === 'password_spray') return { ...entities, source: attack.sourceNodeId };
+  if (['clickfix', 'ransomware'].includes(attack.attackId)) {
+    const browser = findService(network, 'web_browser');
+    return { ...entities, client: browser?.nodeId, browser: browser?.serviceId,
+      web_host: attack.targetNodeId, web: attack.targetServiceId,
+      endpoint: network.services.find(item => item.nodeId === browser?.nodeId && item.serviceType === 'logging')?.serviceId,
+      files: network.services.find(item => item.nodeId === browser?.nodeId && item.serviceType === 'file')?.serviceId };
+  }
+  if (attack.attackId === 'unrestricted_file_upload') return { ...entities,
+    source: attack.sourceNodeId, web_host: attack.targetNodeId, web: attack.targetServiceId,
+    files: network.services.find(item => item.nodeId === attack.targetNodeId && item.serviceType === 'file')?.serviceId };
+  if (['phishing', 'credential_phishing'].includes(attack.attackId)) {
     const browser = findService(network, 'web_browser'); const mail = findService(network, 'email');
     return { ...entities, sender: attack.sourceNodeId, client: browser?.nodeId,
       browser: browser?.serviceId, mail_host: mail?.nodeId, mail: mail?.serviceId,
       web_host: attack.targetNodeId, web: attack.targetServiceId };
+  }
+  if (attack.attackId === 'unauthorized_login') return { ...entities,
+    source: attack.sourceNodeId, web_host: attack.targetNodeId, web: attack.targetServiceId };
+  if (attack.attackId === 'stored_xss') {
+    const browser = findService(network, 'web_browser');
+    return { ...entities, source: attack.sourceNodeId, client: browser?.nodeId,
+      browser: browser?.serviceId, web_host: attack.targetNodeId, web: attack.targetServiceId };
   }
   if (attack.attackId === 'reflected_xss') {
     const browser = network.services.find(item => item.nodeId === attack.sourceNodeId
@@ -234,10 +341,12 @@ function resolvedBindings(configuration, attack, chainRequestId) {
 function buildTechnicalContracts(configuration, catalog) {
   const definitions = new Map(catalog.map(item => [item.id, item]));
   const sorted = [...configuration.attacks].sort((a, b) => a.order - b.order);
-  const chained = sorted.some((attack, index) => attack.attackId === 'reflected_xss'
-    && sorted[index - 1]?.attackId === 'phishing');
+  const phishing = sorted.find(attack => attack.attackId === 'phishing');
+  const chained = sorted.filter(attack => ['reflected_xss', 'stored_xss', 'clickfix'].includes(attack.attackId)
+    && phishing && attack.targetServiceId === phishing.targetServiceId);
+  const chainIds = new Set(chained.length ? ['phishing', ...chained.map(attack => attack.attackId)] : []);
   const bindings = new Map(sorted.map((attack, index) => [attack.attackId,
-    resolvedBindings(configuration, attack, chained && ['phishing', 'reflected_xss'].includes(attack.attackId)
+    resolvedBindings(configuration, attack, chainIds.has(attack.attackId)
       ? 'chain-request' : `request-${index + 1}`)]));
   const candidate = { schemaVersion: '1.0', selectedAttackIds: sorted.map(item => item.attackId),
     assignments: sorted.map(attack => ({ attackId: attack.attackId,
@@ -246,6 +355,8 @@ function buildTechnicalContracts(configuration, catalog) {
   const scenarioContext = { schemaVersion: '1.0', entities: [
     { id: 'actor-a', type: 'actor' }, { id: 'user-a', type: 'user' },
     { id: 'db-account', type: 'database_principal' },
+    ...(sorted.some(attack => ['credential_phishing', 'unauthorized_login', 'password_spray'].includes(attack.attackId))
+      ? [{ id: 'account-a', type: 'account' }] : []),
     ...[...new Set([...bindings.values()].map(item => item.request))].map(id => ({ id, type: 'web_request' })),
   ], vulnerabilities: [], attackerInitialPrivileges: [], requiredUserActions: [],
   loggingConfiguration: [], authenticationConditions: [], otherConditions: [] };
@@ -273,6 +384,14 @@ function buildTechnicalContracts(configuration, catalog) {
   if (!connected) return { errors: [issue('INVALID_ATTACK_COMBINATION', 'attacks',
     'この攻撃手法の組合せでは有効な攻撃経路を作成できません。',
     'Attack Graph上で前段の効果が後段の前提条件を満たす組合せを選択してください。')] };
+  const orderByNode = new Map(connected.nodes.map(node => [node.nodeId,
+    sorted.find(attack => attack.attackId === node.attackDefinitionId).order]));
+  if ([...connected.edges.map(edge => ({ before: edge.from, after: edge.to })),
+    ...connected.executionConstraints].some(edge => orderByNode.get(edge.before) >= orderByNode.get(edge.after))) {
+    return { errors: [issue('ATTACK_DEPENDENCY_ORDER_MISMATCH', 'attacks.order',
+      'Attack Orderが前段の効果を必要とする攻撃経路と一致しません。',
+      '資格情報取得→不正ログイン→保存投稿のように、前提条件を作る攻撃を先にしてください。')] };
+  }
   const selected = { ...graphResult, graphs: [connected] };
   const inputs = buildScenarioGenerationInputs({ attackGraphResult: selected,
     definitions: catalog, network, context: scenarioContext, candidate });
@@ -391,12 +510,12 @@ export function validateScenarioConfiguration(configuration, catalog) {
     technical: errors.length ? null : technical };
 }
 
-export function buildScenarioPreview(configuration, scenarioPackage = null) {
+export function buildScenarioPreview(configuration, scenarioPackage = null, generationInput = null) {
   const nodes = new Map(configuration.network.nodes.map(item => [item.nodeId, item]));
   const services = new Map(configuration.network.services.map(item => [item.serviceId, item]));
   return { configurationId: configuration.configurationId, mode: configuration.mode,
     incidentSummary: scenarioPackage?.scenarioDraft?.summary
-      ?? `${configuration.incidentContext.organizationName}で発生したセキュリティ事件を調査します。`,
+      ?? buildIncidentOverview(configuration, generationInput),
     attacks: [...configuration.attacks].sort((a, b) => a.order - b.order).map(item => ({
       order: item.order, attackId: item.attackId, label: labels[item.attackId] ?? item.attackId,
       occurrenceTime: item.occurrenceTime, source: nodes.get(item.sourceNodeId)?.label,
@@ -405,7 +524,8 @@ export function buildScenarioPreview(configuration, scenarioPackage = null) {
     })),
     targetSystem: configuration.incidentContext.victimSystem,
     difficulty: configuration.difficulty,
-    difficultyLabel: `${'★'.repeat(configuration.difficulty)} / ${requestedCourtIssueCount(configuration)}争点`,
+    difficultyLabel: `${'★'.repeat(configuration.difficulty)} / ${generationInput
+      ? `${requestedCourtIssueCount(configuration, generationInput)}件の調査` : '調査対象ごとに審理'}`,
     network: structuredClone(configuration.network),
   };
 }

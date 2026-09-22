@@ -8,6 +8,16 @@ import { sanitizeDiagnostic } from './codex-output-parser.js';
 import { adaptCodexOutputSchema } from './codex-schema-adapter.js';
 
 const MAX_CAPTURE_BYTES = 10 * 1024 * 1024;
+const DEFAULT_TIMEOUT_MS = 180000;
+const DEFAULT_EVIDENCE_TIMEOUT_MS = 600000;
+const DEFAULT_SCENARIO_REVISION_TIMEOUT_MS = 600000;
+const MAX_TIMER_MS = 2147483647;
+
+function configuredTimeout(value) {
+  const milliseconds = Number(value);
+  return Number.isSafeInteger(milliseconds) && milliseconds >= 1000
+    && milliseconds <= MAX_TIMER_MS ? milliseconds : null;
+}
 
 function schemaFailureDetail(stderr) {
   const safe = sanitizeDiagnostic(stderr);
@@ -66,21 +76,30 @@ function collect(stream, onLimit) {
     if (bytes <= MAX_CAPTURE_BYTES) value += chunk;
     else if (!limited) { limited = true; onLimit(); }
   });
-  return () => value;
+  return { text: () => value, bytes: () => bytes };
 }
 
 export class CodexRunner {
-  constructor({ command = 'codex', cwd = process.cwd(), timeoutMs = Number(
-    process.env.CODEX_GENERATION_TIMEOUT_MS ?? 180000), spawnImpl = spawn } = {}) {
+  constructor({ command = 'codex', cwd = process.cwd(),
+    timeoutMs = process.env.CODEX_GENERATION_TIMEOUT_MS,
+    evidenceTimeoutMs = process.env.CODEX_EVIDENCE_TIMEOUT_MS,
+    scenarioRevisionTimeoutMs = process.env.CODEX_SCENARIO_REVISION_TIMEOUT_MS, spawnImpl = spawn } = {}) {
     this.command = command;
     this.cwd = cwd;
-    this.timeoutMs = Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : 180000;
+    const explicitTimeout = configuredTimeout(timeoutMs);
+    this.timeoutMs = explicitTimeout ?? DEFAULT_TIMEOUT_MS;
+    // Explicit global limits retain their previous meaning unless Evidence is overridden.
+    this.evidenceTimeoutMs = configuredTimeout(evidenceTimeoutMs)
+      ?? explicitTimeout ?? DEFAULT_EVIDENCE_TIMEOUT_MS;
+    this.scenarioRevisionTimeoutMs = configuredTimeout(scenarioRevisionTimeoutMs)
+      ?? explicitTimeout ?? DEFAULT_SCENARIO_REVISION_TIMEOUT_MS;
     this.spawnImpl = spawnImpl;
   }
 
   async #spawn(args, { input = null, signal = null, timeoutMs = this.timeoutMs,
     phase = 'CHECKING_CODEX' } = {}) {
     return await new Promise((resolve, reject) => {
+      const startedAt = performance.now();
       let settled = false;
       let timedOut = false;
       let cancelled = false;
@@ -132,11 +151,16 @@ export class CodexRunner {
         settled = true; clearTimeout(timer); clearTimeout(killTimer);
         signal?.removeEventListener('abort', onAbort);
         if (cancelled || signal?.aborted) return reject(new CodexCancelledError(phase));
-        if (timedOut) return reject(new CodexTimeoutError(phase));
+        if (timedOut) return reject(new CodexTimeoutError(phase, {
+          timeoutMs, elapsedMs: Math.ceil(performance.now() - startedAt),
+          promptBytes: input == null ? 0 : Buffer.byteLength(input, 'utf8'),
+          stdoutBytes: output.bytes(), stderrBytes: errors.bytes(),
+          exitCode: code, terminationSignal: closeSignal,
+        }));
         if (outputLimit) return reject(new CodexOutputError(
           `Codexの${outputLimit}が上限を超えました。`, {
             phase, code: 'CODEX_OUTPUT_TOO_LARGE' }));
-        resolve({ stdout: output(), stderr: errors(), exitCode: code, signal: closeSignal });
+        resolve({ stdout: output.text(), stderr: errors.text(), exitCode: code, signal: closeSignal });
       });
       if (signal?.aborted) onAbort();
       if (input == null) child.stdin.end();
@@ -187,7 +211,11 @@ export class CodexRunner {
   }
 
   async run({ prompt, outputSchemaPath, outputSchema, outputSchemaName, phase, signal,
-    timeoutMs = this.timeoutMs }) {
+    timeoutMs = phase === 'GENERATING_EVIDENCE' ? this.evidenceTimeoutMs
+      : phase === 'REVISING_SCENARIO' ? this.scenarioRevisionTimeoutMs : this.timeoutMs }) {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMER_MS) {
+      throw new RangeError('timeoutMs must be a positive integer within the Node.js timer range.');
+    }
     // --ask-for-approval is a root option in current Codex CLI releases and must precede `exec`.
     // Ignoring user config/rules keeps the invocation contract stable while preserving CODEX_HOME
     // authentication, as documented by the CLI itself.

@@ -26,6 +26,10 @@ legend { font-weight: bold; }
 .makotomaru-card { background: linear-gradient(145deg, #fff, #eef8ff); border-color: #2778a5; }
 .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .7rem; }
 .choice-card { display: flex; gap: .6rem; align-items: center; padding: .8rem; border: 1px solid #9caaba; border-radius: 8px; }
+.attack-chain-options { display: grid; gap: .6rem; }
+.attack-chain-options > div { padding: .8rem; border-left: 3px solid #2778a5; background: #f1f6fa; }
+.attack-chain-options select { font: inherit; margin-bottom: 0; }
+#attack-chain-status { overflow-wrap: anywhere; color: #315267; }
 .builder-list { display: grid; gap: .8rem; margin: .8rem 0; }
 .builder-card { padding: 1rem; border: 1px solid #aab6c3; border-radius: 10px; background: #fff; color: #172431; }
 .compact-builder { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; align-items: end; }

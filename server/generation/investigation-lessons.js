@@ -1,0 +1,51 @@
+import { investigationSourceLabel } from './attack-learning.js';
+
+// General terminology for composing questions, separate from case observations and answer keys.
+// Never fill in event values, people, execution results or future evidence here.
+const BASICS = Object.freeze({
+  phishing: 'フィッシングは、信用させる案内で偽のページなどへ誘導する手口です。',
+  credential_phishing: '認証情報フィッシングは、偽の入力画面でアカウントの名前やパスワードを送らせる手口です。',
+  stored_xss: 'Stored XSSは、サイトに保存された内容にスクリプトというブラウザへの命令が紛れ、後の閲覧時に動く手口です。',
+  reflected_xss: 'Reflected XSSは、Webへの入力が返されたページに入り込み、ブラウザへの命令として動く手口です。',
+  sql_injection: 'SQLインジェクションは、入力した文字がデータとして扱われず、データベースへの命令の組み立てに混ざる手口です。',
+  unauthorized_login: '不正ログインは、他者のアカウントを無断で使ってサービスに入ることです。',
+  clickfix: 'ClickFixは、「修復や本人確認に必要」と見せかけ、利用者自身に端末で操作させる手口です。',
+  password_spray: 'パスワードスプレーは、少数のパスワード候補を多くのアカウントへ試す手口です。',
+  ransomware: 'ランサムウェアは、ファイルを暗号化して使えなくし、復元と引換えに金銭などを求める不正プログラムです。',
+  unrestricted_file_upload: 'アップロードは、手元のファイルをサービスへ送って保存する操作です。',
+});
+
+const READINGS = Object.freeze({
+  email_record: '表示URLは本文に見える住所、hrefはリンクが指定する行き先です。',
+  web_access_record: '要求は、ブラウザなどがページを取り寄せるために送る連絡です。',
+  stored_content_record: '投稿IDは保存された投稿を見分ける番号、保存内容は投稿の元の文字列です。',
+  browser_execution_record: 'ブラウザ計測は、ページ表示に伴う処理を別途観測した資料です。',
+  database_statement_record: 'SQLのSELECTは読み出す項目、WHEREは選ぶ条件を表します。',
+  credential_submission_record: '送信先は情報を送った相手、相関IDは対応する処理を探す目印です。',
+  authentication_record: 'accountはアカウント名、source_ipは接続元の住所、resultは成否です。',
+  application_session_record: 'セッションの受入れはログイン状態が使えたかを、権限はできる操作の範囲を示します。',
+  clickfix_page_record: '保存された案内は、画面で何をするよう求めたかを読む資料です。',
+  process_execution_record: 'プロセスは動いているプログラムの単位です。process_refはその識別子、parent_refは起動元、user_refは実行アカウント、start_resultは起動結果です。',
+  spray_authentication_record: 'accountは試されたアカウント、source_ipは接続元、resultは成否です。',
+  authentication_policy_record: '認証設定は、確認方法や試行制限の条件を記した資料です。',
+  file_encryption_record: 'ハッシュはファイルの内容から計算する検査値です。',
+  upload_receipt_record: 'Content-Typeは送り手が申告した種類で、内容検査の結果ではありません。',
+  uploaded_file_record: '保存IDは受付資料との照合に使います。',
+});
+
+// Source vocabulary for writing a self-contained question, never a player-facing guide.
+export function buildQuestionBackground(stages, index, generationInput) {
+  const current = stages[index];
+  const introductions = [...new Set(current.routes.map(route => route.ground.attackNodeId))].map(nodeId => {
+    const attackId = generationInput.technicalInput.attackGraph.nodes.find(node => node.nodeId === nodeId)?.attackDefinitionId;
+    if (!BASICS[attackId]) throw new Error(`Missing question background: ${attackId}`);
+    return BASICS[attackId];
+  });
+  const readings = [...new Set(current.routes.map(route => READINGS[route.ground.sourceId])
+    .filter(Boolean))];
+  const nodeIds = new Set(current.routes.map(route => route.ground.attackNodeId));
+  const earlier = stages.slice(0, index).flatMap(stage => stage.routes)
+    .filter(route => nodeIds.has(route.ground.attackNodeId));
+  const sequence = earlier.length ? `これまでに取得した同じ攻撃の資料：${investigationSourceLabel(earlier)}。` : '';
+  return [...introductions, ...readings, sequence].filter(Boolean).join(' ');
+}
