@@ -6,7 +6,7 @@ import { AutoGenerationManager, autoAuthorBootstrap, autoAuthorView,
   from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { CodexOutputSchemaError } from '../server/codex/codex-errors.js';
-import { CodexError } from '../server/codex/codex-errors.js';
+import { CodexError, CodexTimeoutError } from '../server/codex/codex-errors.js';
 
 async function generated(options = {}, selection = { networkId: 'network-c', difficulty: 3 },
   maxAttempts = 3) {
@@ -23,7 +23,7 @@ test('Scenario Builder bootstrapは2 Mode・実装済みAttack・Difficulty 1-3�
 //   assert.deepEqual(value.attacks.map(item => item.id).sort(),
 //     ['phishing', 'reflected_xss', 'sql_injection']);
 // 2026-09-20 修正後: 登録9攻撃と任意選択用メタデータを確認
-  assert.equal(value.attacks.length, 9);
+  assert.equal(value.attacks.length, 16);
   assert.equal(value.attackSelectionLimit, 6);
   assert.ok(value.attacks.every(a => a.stages.length && a.startingConditions.length));
   assert.deepEqual(value.difficulties.map(item => item.difficulty), [1, 2, 3]);
@@ -48,7 +48,10 @@ test('XSS + Network C + ★3をReview修正後にGAME READYまで自動実行す
   assert.equal(session.evidenceImportResult.status, 'VALID');
   assert.deepEqual([...new Set(runner.calls.filter(item => item.kind === 'invocation')
     .map(item => item.outputSchemaName))].sort(),
-  ['evidence-generation-draft', 'scenario-import-package', 'scenario-verification-review']);
+  // 2026-09-24 修正前: 統合前の契約。
+// ['evidence-generation-draft', 'scenario-revision', 'scenario-verification-review']);
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+['evidence-generation-draft', 'scenario-import-package', 'scenario-revision', 'scenario-verification-review']);
   assert.ok(runner.calls.filter(item => item.kind === 'invocation')
     .every(item => item.hasOutputSchema));
   assert.ok(view.progress.every(item => item.status === 'COMPLETE'
@@ -197,14 +200,23 @@ test('真実丸Structured Output Schemaは要求値とcanonical ID/effectへ制�
   assert.deepEqual(configuration.mode, { const: 'MAKOTOMARU' });
   assert.deepEqual(configuration.difficulty, { const: 1 });
   assert.deepEqual(configuration.evidenceCount, { const: 1 });
-  assert.ok(attack.attackId.enum.includes('reflected_xss'));
+// 2026-09-24 修正前: 統合前の契約。
+//   assert.deepEqual([...attack.attackId.enum].sort(), ['phishing', 'reflected_xss', 'sql_injection'],
+//     '詳細設定専用の新しい設備を必要とする攻撃を真実丸の既定Networkへ混入させない');
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+  assert.deepEqual([...attack.attackId.enum].sort(), autoAuthorBootstrap().attacks.map(item => item.id).sort());
+  assert.ok(attack.targetServiceId.enum.includes('auth-service'));
+  assert.ok(attack.sourceNodeId.enum.includes('auth-host'));
   assert.ok(attack.sourceNodeId.enum.includes('client-host'));
   assert.ok(attack.targetServiceId.enum.includes('web-service'));
   assert.ok(attack.expectedEffect.enum.every(value => value.length > 20));
 // 2026-09-20 修正前: 追加攻撃を真実丸の出力制約でも選択可能にする
 //   assert.equal(attack.expectedEffect.enum.length, 3);
 // 2026-09-20 修正後: 追加攻撃を真実丸の出力制約でも選択可能にする
-  assert.equal(attack.expectedEffect.enum.length, 9);
+// 2026-09-24 修正前: 統合前の契約。
+//   assert.equal(attack.expectedEffect.enum.length, 9);
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+  assert.equal(attack.expectedEffect.enum.length, new Set(autoAuthorBootstrap().attacks.flatMap(item => item.expectedEffects.map(effect => effect.label))).size);
   assert.equal(configuration.attacks.maxItems, 6);
 });
 
@@ -309,6 +321,12 @@ test('Evidence draftにAIがintegrityを付けた場合はfield付きで差し�
 test('REPAIRABLE_BLOCKEDとHARD_BLOCKEDを機械可読codeで分類する', () => {
   assert.equal(classifyBlocked([{ code: 'MISSING_FIELD' },
     { code: 'BROKEN_REFERENCE' }]), 'REPAIRABLE_BLOCKED');
+  assert.equal(classifyBlocked([{ code: 'CONTRADICTION_GROUND_MISMATCH' }]), 'REPAIRABLE_BLOCKED');
+  assert.equal(classifyBlocked([{ code: 'CONTRADICTION_GROUND_MISMATCH' },
+    { code: 'EVIDENCE_GROUND_MISMATCH' }]), 'REPAIRABLE_BLOCKED');
+  assert.equal(classifyBlocked([{ code: 'UNRECOGNIZED_GROUND_MISMATCH' }]), 'HARD_BLOCKED');
+  assert.equal(classifyBlocked([{ code: 'CONTRADICTION_GROUND_MISMATCH' },
+    { code: 'INTERNAL_STATE_CORRUPTION' }]), 'HARD_BLOCKED');
   assert.equal(classifyBlocked([{ code: 'INTERNAL_STATE_CORRUPTION' }]), 'HARD_BLOCKED');
 });
 
@@ -339,6 +357,44 @@ test('timeoutは無限retryせずFAILEDにする', async () => {
   assert.equal(runner.calls.filter(item => item.kind === 'invocation').length, 1);
 });
 
+test('承認後のEvidence timeoutは安全な数値診断を表示し、入力を変えず再試行・Buildを停止する', async () => {
+  const runner = new MockCodexRunner();
+  const runJson = runner.runJson.bind(runner);
+  let evidenceCalls = 0;
+  runner.runJson = async args => {
+    if (args.phase !== 'GENERATING_EVIDENCE') return runJson(args);
+    evidenceCalls += 1;
+    const error = new CodexTimeoutError(args.phase, { timeoutMs: 600000, elapsedMs: 600023,
+      promptBytes: 150000, stdoutBytes: 0, stderrBytes: 400, exitCode: null, terminationSignal: 'SIGTERM' });
+    error.stderr = 'private-cli-text'; error.prompt = 'private-input-text';
+    throw error;
+  };
+  const manager = new AutoGenerationManager({ jsonRunner: runner });
+  const session = createAutoAuthorSession();
+  manager.submitManual(session, autoAuthorBootstrap().defaultManualConfiguration);
+  await manager.waitForIdle();
+  assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
+  const configuration = structuredClone(session.configuration);
+  const scenarioPackage = structuredClone(session.scenarioPackage);
+  manager.approve(session); await manager.waitForIdle();
+  const view = autoAuthorView(session);
+  assert.equal(view.currentState, 'FAILED'); assert.equal(view.failure.code, 'CODEX_TIMEOUT');
+  assert.equal(evidenceCalls, 1); assert.equal(view.canCancel, false);
+  assert.equal(session.evidenceImportResult, null); assert.equal(session.runtime, null);
+  assert.equal(session.evaluationResult, null); assert.equal(view.playUrl, null);
+  assert.equal(session.verificationResult.status, 'VERIFIED');
+  assert.deepEqual(session.configuration, configuration); assert.deepEqual(session.scenarioPackage, scenarioPackage);
+  const detail = view.developerDetails.find(item => item.code === 'CODEX_TIMEOUT');
+  assert.equal(detail.phase, 'GENERATING_EVIDENCE'); assert.equal(detail.cliErrorClass, 'execution_timeout');
+  assert.equal(detail.retryable, false); assert.equal(detail.timeoutMs, 600000);
+  assert.equal(detail.elapsedMs, 600023); assert.equal(detail.promptBytes, 150000);
+  assert.equal(detail.stdoutBytes, 0); assert.equal(detail.stderrBytes, 400);
+  assert.equal(detail.terminationSignal, 'SIGTERM'); assert.equal(detail.httpStatus, null);
+  assert.match(detail.correctionHint, /CODEX_EVIDENCE_TIMEOUT_MS/);
+  assert.match(detail.correctionHint, /自動再試行は行いません/);
+  assert.doesNotMatch(JSON.stringify(view), /private-cli-text|private-input-text/);
+});
+
 test('Prompt Injection文字列はJSON data境界に留まり実行対象にならない', async () => {
   const { runner, view } = await generated(); assert.equal(view.currentState, 'READY');
   const calls = JSON.stringify(runner.calls);
@@ -348,21 +404,54 @@ test('Prompt Injection文字列はJSON data境界に留まり実行対象にな�
   assert.doesNotMatch(source, /exec\(|eval\(|new Function/);
 });
 
-test('Author UIはJSONを直接編集させずManual・真実丸・Preview承認を提供する', async () => {
+// 2026-09-24 修正前: 統合前の契約。
+// test('Author UIは攻撃・舞台の2項目とPreview承認を提供し、技術設定を手入力させない', async () => {
+//   const [html, source] = await Promise.all([
+//     readFile(new URL('../public/author.html', import.meta.url), 'utf8'),
+//     readFile(new URL('../public/author.js', import.meta.url), 'utf8')]);
+//   assert.match(html, /詳細設定/); assert.match(html, /真実丸/);
+//   assert.match(html, /サブネット構成/); assert.match(html, /構成図確認/);
+//   assert.match(html, /Scenario Preview/);
+//   assert.match(html, /このScenarioでゲームを作成/);
+//   assert.doesNotMatch(html, /textarea|JSON Import|Prompt|Developer Mode/);
+//   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
+//   assert.match(source, /author\.canCancel/);
+//   assert.match(source, /validateBootstrap\(value\.bootstrap\)/);
+//   assert.match(source, /bootstrap\.attackChoices/);
+//   assert.match(source, /\/api\/author\/selection/);
+//   assert.doesNotMatch(html, /id="(?:manual-difficulty|incident-date|add-node|choose-makotomaru)"/);
+//   assert.doesNotMatch(source, /\[value="reflected_xss"\].*checked = true/);
+// });
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+// 2026-09-24 修正前: 自由入力UI。
+// test('Author UIはJSONを直接編集させずManual・真実丸・Preview承認を提供する', async () => {
+//   const [html, source] = await Promise.all([
+//     readFile(new URL('../public/author.html', import.meta.url), 'utf8'),
+//     readFile(new URL('../public/author.js', import.meta.url), 'utf8')]);
+//   assert.match(html, /詳細設定/); assert.match(html, /真実丸/);
+//   assert.match(html, /サブネット構成/); assert.match(html, /構成図確認/);
+//   assert.match(html, /Scenario Preview/);
+//   assert.match(html, /このScenarioでゲームを作成/);
+//   assert.doesNotMatch(html, /textarea|JSON Import|Prompt|Developer Mode/);
+//   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
+//   assert.match(source, /author\.canCancel/);
+//   assert.match(source, /value\.defaultManualConfiguration/);
+//   assert.match(source, /readInitialConfiguration\(bootstrap\)/);
+//   assert.match(source, /networkModel = structuredClone\(preset\.network\)/);
+//   assert.match(source, /renderAttackDetails\(preset\.attacks\)/);
+//   assert.match(source, /control\.checked = selectedAttacks\.has\(control\.value\)/);
+//   assert.doesNotMatch(source, /\[value="reflected_xss"\].*checked = true/);
+// });
+//
+// 2026-09-24 修正後: 攻撃と舞台のみ入力。
+test('Author UIはmainの外枠で攻撃連鎖・舞台・Preview承認を提供する', async () => {
   const [html, source] = await Promise.all([
     readFile(new URL('../public/author.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/author.js', import.meta.url), 'utf8')]);
-  assert.match(html, /詳細設定/); assert.match(html, /真実丸/);
-  assert.match(html, /サブネット構成/); assert.match(html, /構成図確認/);
-  assert.match(html, /Scenario Preview/);
-  assert.match(html, /このScenarioでゲームを作成/);
-  assert.doesNotMatch(html, /textarea|JSON Import|Prompt|Developer Mode/);
+  assert.match(html, /Game Start!/); assert.match(html, /攻撃と舞台/);
+  assert.match(html, /Scenario Preview/); assert.match(html, /このScenarioでゲームを作成/);
+  assert.doesNotMatch(html, /id="(?:choose-manual|choose-makotomaru|incident-date|add-node)"/);
+  assert.match(source, /validateBootstrap/); assert.match(source, /bootstrap.attackSelectionPaths/);
+  assert.match(source, /api\/author\/selection/);
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
-  assert.match(source, /author\.canCancel/);
-  assert.match(source, /value\.defaultManualConfiguration/);
-  assert.match(source, /readInitialConfiguration\(bootstrap\)/);
-  assert.match(source, /networkModel = structuredClone\(preset\.network\)/);
-  assert.match(source, /renderAttackDetails\(preset\.attacks\)/);
-  assert.match(source, /control\.checked = selectedAttacks\.has\(control\.value\)/);
-  assert.doesNotMatch(source, /\[value="reflected_xss"\].*checked = true/);
 });

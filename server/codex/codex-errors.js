@@ -21,8 +21,23 @@ export class CodexUnavailableError extends CodexError {
 }
 
 export class CodexTimeoutError extends CodexError {
-  constructor(phase) {
-    super('CODEX_TIMEOUT', 'Codex CLIの実行がタイムアウトしました。', { phase, retryable: false });
+  constructor(phase, { timeoutMs = null, elapsedMs = null, promptBytes = null,
+    stdoutBytes = null, stderrBytes = null, exitCode = null, terminationSignal = null } = {}) {
+    super('CODEX_TIMEOUT', 'Codex CLIの実行がアプリ側の制限時間を超えました。', {
+      phase, retryable: false, exitCode, cliErrorClass: 'execution_timeout',
+    });
+    // No prompt, generated evidence, or stderr text is retained in timeout diagnostics.
+    for (const [key, value] of Object.entries({ timeoutMs, elapsedMs, promptBytes,
+      stdoutBytes, stderrBytes })) {
+      this[key] = Number.isSafeInteger(value) && value >= 0 ? value : null;
+    }
+    this.terminationSignal = ['SIGTERM', 'SIGKILL'].includes(terminationSignal) ? terminationSignal : null;
+    const setting = phase === 'GENERATING_EVIDENCE'
+      ? 'CODEX_EVIDENCE_TIMEOUT_MS' : phase === 'REVISING_SCENARIO'
+        ? 'CODEX_SCENARIO_REVISION_TIMEOUT_MS' : 'CODEX_GENERATION_TIMEOUT_MS';
+    this.correctionHint = `Developer Detailの制限時間・経過時間・入出力サイズを確認してください。`
+      + `必要ならサーバ起動時の${setting}（ミリ秒）を調整し、再起動後に同じ入力条件で実行してください。`
+      + 'タイムアウト時の出力は採用せず、自動再試行は行いません。';
   }
 }
 

@@ -1,6 +1,9 @@
-// New automatic games have 2–4 distinct disputes. Legacy contracts keep their recorded count.
-export function requestedCourtIssueCount(configuration) {
-  return configuration.difficulty + 1;
+import { buildInvestigationStages } from './investigation-registry.js';
+
+// Automatic games have one dispute per source; existing saved contracts keep their count.
+export function requestedCourtIssueCount(configuration, generationInput) {
+  return generationInput ? buildInvestigationStages(configuration, generationInput).length
+    : configuration.difficulty + 1;
 }
 
 export function courtIssueGenerationProblems(evidenceSet, count) {

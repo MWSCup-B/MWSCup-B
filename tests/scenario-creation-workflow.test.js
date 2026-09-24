@@ -13,7 +13,7 @@ import { AutoGenerationManager, autoAuthorBootstrap, autoAuthorView, createAutoA
   from '../server/auto-generation-service.js';
 import { createGeneratedGame, actGenerated, generatedPlayerView } from '../server/generated-game.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
-import { currentCorrectPair } from './helpers/court-issues.js';
+import { currentCorrectPair, collectCurrentTarget, enterCurrentCourt } from './helpers/court-issues.js';
 import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
   from '../server/generation/scenario-template.js';
 import { importScenarioPackage } from '../server/generation/scenario-interface.js';
@@ -93,11 +93,11 @@ test('Phishing ★1でもメールとWeb記録を全論証の根拠とし、取�
   assert.match(requirements.find(item => item.requirementId === 'requirement_timeline').description,
     /narrativeTimestampsは架空の表示時刻/);
   assert.match(requirements.find(item => item.requirementId === 'requirement_contradiction').description,
-    /character_witnessがcharacter_defendant/);
+    /character_witnessによる資料の解釈を基に、character_defendantを対象/);
   const observations = requirements.filter(item => item.requirementId.startsWith('requirement_observation_'));
   assert.equal(observations.length, 2);
   assert.match(observations.find(item => item.grounds[0].sourceId === 'email_record').description,
-    /mail-host.*EMAIL.*action_inspect_file/);
+    /mail-host.*EMAIL.*action_check_email/);
   assert.match(observations.find(item => item.grounds[0].sourceId === 'web_access_record').description,
     /web-host.*WEB_LOG.*action_audit_log/);
   assert.ok(scenarioPackage.characters.characters.every(item => item.bindingRefs.length === 0));
@@ -116,8 +116,14 @@ test('RevisionがWeb記録の根拠を削除した場合はReview前に不足と
     requirement.grounds = requirement.grounds.filter(item => item.sourceId !== 'web_access_record');
   }
   const issues = validateScenarioEvidenceCoverage({ configuration, generationInput, scenarioPackage });
-  assert.equal(issues.length, 4);
-  assert.ok(issues.every(item => item.code === 'INVESTIGATION_COVERAGE_INCOMPLETE'));
+  // ATTACK_TRACE remains covered by the untouched observation requirement.
+  assert.deepEqual(issues.filter(item => item.code === 'INVESTIGATION_COVERAGE_INCOMPLETE')
+    .map(item => item.reason.split('に')[0]),
+// 2026-09-24 修正前: 統合前の契約。
+//     ['TIMELINE_PROOF', 'CONTRADICTION_PROOF', 'EXONERATION_PROOF']);
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+    ['ATTACK_TRACE', 'TIMELINE_PROOF', 'CONTRADICTION_PROOF', 'EXONERATION_PROOF']);
+  assert.ok(issues.some(item => item.code === 'INVESTIGATION_STAGE_PLAN_INVALID'));
 });
 
 test('Web記録の取得元Log Sourceがない場合は補完せず停止する', () => {
@@ -245,16 +251,42 @@ test('NetworkのCIDR、IP、Trust Boundary、Connection参照を決定論的に�
     'BROKEN_REFERENCE']) assert.ok(result.errors.some(item => item.code === code), code);
 });
 
-test('Network manual configurationとPreview用SVG UIを提供する', async () => {
+// 2026-09-24 修正前: 統合前の契約。
+// test('互換ConfigurationのNetworkを維持し、新UIはPreviewの構成図だけ表示する', async () => {
+//   const configuration = createDefaultConfiguration();
+//   const preview = buildScenarioPreview(configuration);
+//   assert.equal(preview.network.subnets.length, 2); assert.equal(preview.network.nodes[0].ip, '203.0.113.10');
+//   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
+//   const source = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
+//   assert.doesNotMatch(html, /Subnet追加|Node追加|Service追加/);
+//   assert.match(html, /教材の前提条件を確認/);
+//   assert.match(html, /detail-list/); assert.match(source, /Expected minLength/);
+//   assert.match(html, /preview-network-diagram/); assert.match(source, /createElementNS/);
+//   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
+// });
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+// 2026-09-24 修正前: 自由入力UI。
+// test('Network manual configurationとPreview用SVG UIを提供する', async () => {
+//   const configuration = createDefaultConfiguration();
+//   const preview = buildScenarioPreview(configuration);
+//   assert.equal(preview.network.subnets.length, 2); assert.equal(preview.network.nodes[0].ip, '203.0.113.10');
+//   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
+//   const source = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
+//   assert.match(html, /Subnet追加/); assert.match(html, /Node追加/); assert.match(html, /Service追加/);
+//   assert.match(source, /証拠から導く答え/);
+//   assert.match(html, /manual-detail-list/); assert.match(source, /Expected minLength/);
+//   assert.match(html, /manual-network-diagram/); assert.match(source, /createElementNS/);
+//   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
+// });
+//
+// 2026-09-24 修正後: 攻撃と舞台のみ入力。
+test('Networkは自動構成しPreviewにmainのSVGを表示する', async () => {
   const configuration = createDefaultConfiguration();
-  const preview = buildScenarioPreview(configuration);
-  assert.equal(preview.network.subnets.length, 2); assert.equal(preview.network.nodes[0].ip, '203.0.113.10');
+  assert.deepEqual(buildScenarioPreview(configuration).network, configuration.network);
   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
-  assert.match(html, /Subnet追加/); assert.match(html, /Node追加/); assert.match(html, /Service追加/);
-  assert.match(source, /証拠から導く答え/);
-  assert.match(html, /manual-detail-list/); assert.match(source, /Expected minLength/);
-  assert.match(html, /manual-network-diagram/); assert.match(source, /createElementNS/);
+  assert.doesNotMatch(html, /Subnet追加|Node追加|Service追加/);
+  assert.match(html, /preview-network-diagram/); assert.match(source, /createElementNS/);
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
 });
 
@@ -324,14 +356,9 @@ test('Configurationの証拠種別と証拠の答えをScenario基盤へ保持�
 function playToAcquittal(runtime) {
   const game = createGeneratedGame(runtime); actGenerated(game, runtime, { action: 'begin' });
   actGenerated(game, runtime, { action: 'continue' });
-  for (const rule of runtime.gameCase.detective.evidenceDiscoveryRules) {
-    actGenerated(game, runtime, { action: 'investigate', targetId: rule.targetId,
-      investigationActionId: rule.actionId });
-    if (game.discoveredEvidenceIds.includes(rule.evidenceId)) actGenerated(game, runtime,
-      { action: 'collect', evidenceId: rule.evidenceId });
-  }
   for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round += 1) {
-    actGenerated(game, runtime, { action: 'retrial' });
+    collectCurrentTarget(game, runtime);
+    enterCurrentCourt(game, runtime);
     actGenerated(game, runtime, { action: 'objection', ...currentCorrectPair(runtime, round) });
   }
   return game;
@@ -362,7 +389,8 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
   const web = artifacts.find(item => item.type === 'WEB_ACCESS_LOG');
   const [, href, display] = email.publicContent.match(/<a href="([^"]+)">([^<]+)<\/a>/);
   assert.notEqual(href, display);
-  assert.ok(web.publicContent.includes(href));
+  const request = JSON.parse(web.publicContent);
+  assert.equal(request.request_target, new URL(href).pathname + new URL(href).search);
   assert.ok(!web.publicContent.includes(display));
   assert.doesNotMatch(email.publicContent + web.publicContent, /302|Location:|正解/);
   const evidenceCall = runner.calls.find(item => item.phase === 'GENERATING_EVIDENCE');
@@ -375,7 +403,7 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
   const exoneration = session.evidenceImportResult.evidenceSet.exonerations[0];
   assert.ok(exoneration.supportingEvidenceIds.includes(email.evidenceId));
   assert.ok(exoneration.supportingEvidenceIds.includes(web.evidenceId));
-  for (const [type, sourceId, actionId] of [['EMAIL', 'mail-host', 'action_inspect_file'],
+  for (const [type, sourceId, actionId] of [['EMAIL', 'mail-host', 'action_check_email'],
     ['WEB_ACCESS_LOG', 'web-host', 'action_audit_log']]) {
     const evidence = artifacts.find(item => item.type === type);
     assert.ok(evidence, type);
@@ -389,10 +417,10 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
   const investigation = createGeneratedGame(session.runtime);
   actGenerated(investigation, session.runtime, { action: 'begin' });
   const initial = actGenerated(investigation, session.runtime, { action: 'continue' });
-  assert.deepEqual(initial.discoveredEvidence, []);
-  assert.deepEqual(initial.collectedEvidence, []);
+  assert.deepEqual(initial.discoveredEvidence.map(item => item.evidenceId), [email.evidenceId]);
+  assert.deepEqual(initial.collectedEvidence.map(item => item.evidenceId), [email.evidenceId]);
   const initialText = JSON.stringify(initial);
-  for (const artifact of artifacts) {
+  for (const artifact of artifacts.filter(item => item.evidenceId !== email.evidenceId)) {
     for (const value of [artifact.evidenceId, artifact.title, artifact.publicContent]) {
       assert.ok(!initialText.includes(value), `未発見の${artifact.evidenceId}が公開されています。`);
     }
@@ -400,11 +428,12 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
       { action: 'collect', evidenceId: artifact.evidenceId }), { code: 'EVIDENCE_NOT_DISCOVERED' });
   }
   for (const rule of session.progressionPlan.evidenceDiscoveryRules) {
+    if (!investigation.availableInvestigationTargets.includes(rule.targetId)) continue;
     actGenerated(investigation, session.runtime, { action: 'investigate',
       targetId: rule.targetId, investigationActionId: rule.actionId });
   }
   const discovered = generatedPlayerView(investigation, session.runtime).discoveredEvidence;
-  for (const artifact of artifacts) {
+  for (const artifact of [email]) {
     const visible = discovered.find(item => item.evidenceId === artifact.evidenceId);
     assert.ok(visible);
     assert.equal(visible.title, artifact.title);
@@ -413,7 +442,7 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
   const game = playToAcquittal(session.runtime);
   assert.equal(game.currentState, 'ACQUITTED');
   assert.equal(game.currentRound, 2);
-  assert.ok(artifacts.every(item => game.collectedEvidenceIds.includes(item.evidenceId)));
+  assert.ok(artifacts.filter(item => item.type !== 'TESTIMONY').every(item => game.collectedEvidenceIds.includes(item.evidenceId)));
 });
 
 test('全要件IDを列挙してもWeb観測資料をメールで代用したEvidenceは拒否する', async () => {
@@ -445,16 +474,16 @@ test('E2E A: MANUAL 2 Attack / ★★ は調査チェーン2・異なる3争点�
   assert.equal(game.currentRound, 3);
 });
 
-test('E2E B: MAKOTOMARU ★★★ は自動Configuration・Preview・調査チェーン3・異なる4争点を経てACQUITTEDになる', async () => {
+test('E2E B: MAKOTOMARU ★★★ はPreview・3調査対象ごとの審理を経てACQUITTEDになる', async () => {
   const manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
   const session = createAutoAuthorSession(); manager.startMakotomaru(session, {
     schemaVersion: '1.0', difficulty: 3, attackCategory: 'ANY', complexity: 'COMPLEX' });
   await manager.waitForIdle(); assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
   manager.approve(session); await manager.waitForIdle(); assert.equal(session.auto.state, 'READY');
-  assert.equal(session.evidenceChain.length, 3); assert.equal(session.dialoguePlan.rounds.length, 4);
-  assert.equal(session.runtime.gameCase.progression.courtRoundCount, 4);
+  assert.equal(session.evidenceChain.length, 3); assert.equal(session.dialoguePlan.rounds.length, 3);
+  assert.equal(session.runtime.gameCase.progression.courtRoundCount, 3);
   const game = playToAcquittal(session.runtime); assert.equal(game.currentState, 'ACQUITTED');
-  assert.equal(game.currentRound, 4);
+  assert.equal(game.currentRound, 3);
 });
 
 test('Dialogue Assignmentは固定Templateへslotを割り当てる', () => {
@@ -462,7 +491,7 @@ test('Dialogue Assignmentは固定Templateへslotを割り当てる', () => {
   const plan = assignDialogueTemplate({ configuration: createDefaultConfiguration(),
     scenarioPackage: { scenarioDraft: { title: '合成事件' } },
     evidenceSet: { evidenceArtifacts: [{ type: 'LOG', title: 'Web記録' }], exonerations: [] } });
-  assert.equal(plan.slots.charge, '合成事件'); assert.equal(plan.fixedLines.objection, '異議あり！！');
+  assert.equal(plan.slots.charge, '合成事件'); assert.equal(plan.fixedLines.objection, 'この記録から、確かめていただきたい点があります。');
   assert.deepEqual(plan.speakers, ['JUDGE', 'PROSECUTOR', 'DEFENSE']);
   assert.ok(plan.fixedDialogue.some(item => item.scene === 'COURT_EVIDENCE_ROUND'
     && item.speaker === 'DEFENSE'));

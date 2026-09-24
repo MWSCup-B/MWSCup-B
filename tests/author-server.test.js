@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { createAppServer } from '../server/server.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { createDefaultConfiguration } from '../server/generation/scenario-configuration.js';
+import { correctCourtChoiceId } from '../server/generation/court-questions.js';
 
 async function setup(t, runner = new MockCodexRunner()) {
   const savedGamesDirectory = await mkdtemp(join(tmpdir(), 'incident-craft-games-'));
@@ -46,6 +47,75 @@ async function waitFor(status, token, states) {
   throw new Error('generation did not finish');
 }
 
+test('攻撃・舞台の新APIは追加攻撃を自動設定し、承認後にゲームを生成する', async t => {
+  const tools = await setup(t); const started = await tools.post('/api/author/start', {});
+  assert.equal(started.data.bootstrap.attackChoices.length, 8);
+  assert.equal(started.data.bootstrap.settings.length, 5);
+  assert.ok(started.data.bootstrap.attackSelectionPaths.some(path => path.join('>') === 'clickfix>ransomware'));
+  const request = { schemaVersion: '1.0', attackIds: ['clickfix', 'ransomware'], settingId: 'school' };
+  let result = await tools.post('/api/author/selection', { request }, started.data.token);
+  assert.equal(result.response.status, 200);
+  result = await waitFor(tools.status, started.data.token, ['SCENARIO_PREVIEW', 'FAILED']);
+  assert.equal(result.data.author.currentState, 'SCENARIO_PREVIEW', JSON.stringify(result.data));
+  assert.deepEqual(result.data.author.selection.request, request);
+  assert.deepEqual(result.data.author.scenarioPreview.attacks.map(item => item.attackId), request.attackIds);
+  assert.match(result.data.author.scenarioPreview.incidentSummary, /青葉学園/);
+  // 2026-09-24: 攻撃・舞台の経路はkawata-work同様、基盤を直接独立Reviewへ渡す。
+  assert.equal(tools.runner.scenarioCalls, 0);
+  assert.equal(tools.runner.reviewCalls, 1);
+  assert.equal(tools.runner.evidenceCalls, 0);
+  await tools.post('/api/author/approve', {}, started.data.token);
+  result = await waitFor(tools.status, started.data.token, ['READY', 'FAILED']);
+  assert.equal(result.data.author.currentState, 'READY', JSON.stringify(result.data));
+// 2026-09-24 修正前: 統合前の契約。
+//   assert.match(result.data.author.playUrl, /^\/\?game=[a-f0-9]{48}$/);
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+  assert.match(result.data.author.playUrl, /^\/\?saved=saved_[a-f0-9]{32}$/);
+  assert.equal(result.data.author.saved, true);
+});
+
+test('新APIでもAuthor認証・閉じた入力・最大3種類を強制する', async t => {
+  const tools = await setup(t); const started = await tools.post('/api/author/start', {});
+  const valid = { schemaVersion: '1.0', attackIds: ['ransomware'], settingId: 'company' };
+  const denied = await tools.post('/api/author/selection', { request: valid });
+  assert.equal(denied.response.status, 401);
+  for (const request of [
+    { ...valid, attackIds: ['phishing', 'clickfix', 'ransomware', 'sql_injection'] },
+    { ...valid, attackIds: ['ransomware', 'ransomware'] }, { ...valid, attackIds: [] },
+    { ...valid, attackIds: ['unknown'] }, { ...valid, settingId: 'unknown' }, { ...valid, network: {} },
+  ]) {
+    const response = await tools.post('/api/author/selection', { request }, started.data.token);
+    assert.equal(response.response.status, 400);
+    assert.ok(response.data.error.code);
+  }
+  assert.equal(tools.runner.calls.length, 0);
+});
+
+test('順序を偽造したAPI要求はAI起動前に拒否し、検証済みプレビューを壊さない', async t => {
+  const tools = await setup(t); const started = await tools.post('/api/author/start', {});
+  const token = started.data.token;
+  await tools.post('/api/author/selection', { request: {
+    schemaVersion: '1.0', attackIds: ['phishing', 'clickfix', 'ransomware'], settingId: 'company',
+  } }, token);
+  const before = (await waitFor(tools.status, token, ['SCENARIO_PREVIEW', 'FAILED'])).data.author;
+  assert.equal(before.currentState, 'SCENARIO_PREVIEW');
+  const callCount = tools.runner.calls.length;
+  for (const [attackIds, code] of [
+    [['sql_injection', 'ransomware'], 'INVALID_ATTACK_COMBINATION'],
+    [['ransomware', 'clickfix'], 'ATTACK_DEPENDENCY_ORDER_MISMATCH'],
+    [['phishing', 'stored_xss', 'clickfix'], 'INVALID_ATTACK_SEQUENCE'],
+  ]) {
+    const result = await tools.post('/api/author/selection', { request: {
+      schemaVersion: '1.0', attackIds, settingId: 'company',
+    } }, token);
+    assert.equal(result.response.status, 400);
+    assert.equal(result.data.error.code, code);
+    assert.match(result.data.error.field, /request\.attackIds/);
+    assert.equal(tools.runner.calls.length, callCount);
+    assert.deepEqual((await tools.status(token)).data.author, before);
+  }
+});
+
 test('Author初期値のフィッシングを編集なしで提出でき、Evidence前にPreviewで停止する', async t => {
   const tools = await setup(t);
   const started = await tools.post('/api/author/start', {});
@@ -65,7 +135,14 @@ test('Author初期値のフィッシングを編集なしで提出でき、Evide
 });
 
 test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t => {
-  const tools = await setup(t, new MockCodexRunner({ reviewOutcomes: ['NEEDS_REVISION', 'VERIFIED'] }));
+  const runner = new MockCodexRunner({ reviewOutcomes: ['NEEDS_REVISION', 'VERIFIED'] });
+  const runJson = runner.runJson.bind(runner); let questions;
+  runner.runJson = async args => {
+    const draft = await runJson(args);
+    if (args.phase === 'GENERATING_EVIDENCE') questions = structuredClone(draft.courtQuestions);
+    return draft;
+  };
+  const tools = await setup(t, runner);
   const started = await tools.post('/api/author/start', {}); const token = started.data.token;
   assert.deepEqual(started.data.bootstrap.modes.map(item => item.id), ['MANUAL', 'MAKOTOMARU']);
   const configuration = createDefaultConfiguration({ mode: 'MANUAL', difficulty: 2,
@@ -102,7 +179,7 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
   const playerToken = result.data.token;
   assert.equal(result.data.game.currentState, 'TITLE');
   assert.doesNotMatch(JSON.stringify(result.data.game),
-    /groundTruth|verificationResult|correctEvidenceIds|classification|sourceEvidenceSetId|JSON Schema|Prompt/);
+    /groundTruth|verificationResult|correctEvidenceIds|classification|sourceEvidenceSetId|JSON Schema|Prompt|correctOptionIndex|supportingQuotes/);
 
   const play = async body => {
     const actionResult = await tools.post('/api/action', body, playerToken);
@@ -110,26 +187,24 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
     return actionResult.data.game;
   };
   await play({ action: 'begin' }); let game = await play({ action: 'continue' });
-  // 公開された取得元と操作だけで補助資料も取得できることを確認する。
-  for (let pass = 0; pass < 10; pass += 1) {
-    const before = game.collectedEvidence.length;
-    for (const target of game.investigationTargets) for (const action of target.availableActions) {
-      game = await play({ action: 'investigate', targetId: target.targetId,
-        investigationActionId: action.actionId });
-      for (const item of game.discoveredEvidence.filter(item => item.discoveryState === 'DISCOVERED')) {
-        game = await play({ action: 'collect', evidenceId: item.evidenceId });
-      }
-    }
-    if (game.collectedEvidence.length === before) break;
-  }
-  for (const type of ['EMAIL', 'WEB_ACCESS_LOG', 'TESTIMONY']) {
-    assert.ok(game.collectedEvidence.some(item => item.type === type), type);
-  }
-  for (const statementId of ['statement_issue_1', 'statement_issue_2', 'statement_seen_operation']) {
-    await play({ action: 'retrial' });
+  // 現在の調査先の資料は自動取得され、4択以外の準備操作は不要。
+  const collectedTypes = new Set();
+  const rounds = game.totalRounds;
+  for (let round = 1; round <= rounds; round += 1) {
+    assert.equal(game.investigationTargets.length, 1);
+    for (const item of game.collectedEvidence) collectedTypes.add(item.type);
+    assert.ok(game.currentEvidenceIds.every(id => game.collectedEvidence.some(item => item.evidenceId === id)));
+    assert.equal(game.courtQuestion.choices.length, 4);
+    const statementId = game.courtQuestion.statementId;
+    const question = questions.find(item => item.statementId === statementId);
+    const interpretationChoiceId = correctCourtChoiceId(question);
+    game = await play({ action: 'retrial', interpretationChoiceId });
+    assert.equal(game.pendingInterpretation.statementId, statementId);
+    assert.ok(game.testimonies.length);
     game = await play({ action: 'objection', statementId,
-      evidenceId: 'evidence_technical_a' });
+      evidenceId: question.supportingQuotes[0].evidenceId, interpretationChoiceId });
   }
+  for (const type of ['EMAIL', 'WEB_ACCESS_LOG']) assert.ok(collectedTypes.has(type), type);
   assert.equal(game.currentState, 'ACQUITTED');
 
   const menu = await tools.post('/api/author/menu', {}, token);

@@ -69,14 +69,33 @@ test('Network SVG 4種類とoriginal visual assetが存在しscriptを含まな�
       new URL(`../public/assets/${path}`, import.meta.url), 'utf8'), /<svg/);
 });
 
-test('Author通常画面は実装済みAttackを動的表示するWizard入口を持つ', async () => {
+// 2026-09-24 修正前: 統合前の契約。
+// // 2026-09-24 修正前: 自由入力UI。
+// test('Author通常画面は実装済みAttackを動的表示するWizard入口を持つ', async () => {
+// //   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
+// //   const script = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
+// //   assert.match(html, /攻撃と舞台/); assert.match(html, /attack-options/);
+// //   assert.match(html, /id="setting"/); assert.match(html, /この条件で事件案を作る/);
+// //   assert.doesNotMatch(html, /textarea|Developer Mode|JSON Import/);
+// //   assert.match(script, /attackId/); assert.match(script, /difficulty/);
+// // });
+// // 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+// 2026-09-24 修正後: 攻撃と舞台のみ入力。
+test('Author通常画面は攻撃連鎖と舞台を選ぶ入口を持つ', async () => {
   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
-  const script = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
-  assert.match(html, /Scenario作成方法/); assert.match(html, /attack-options/);
-  assert.match(html, /manual-difficulty/); assert.match(html, /Scenario案を作成/);
-  assert.doesNotMatch(html, /textarea|Developer Mode|JSON Import/);
-  assert.match(script, /attackId/); assert.match(script, /difficulty/);
+  assert.match(html, /攻撃と舞台/); assert.match(html, /attack-step-3/);
+  assert.match(html, /id="setting"/); assert.match(html, /id="game-start"/);
 });
+
+// 2026-09-24 修正前: この任意入力UIの検査は上の攻撃・舞台入力の検査へ置換。
+// test('Author通常画面は実装済みAttackを動的表示するWizard入口を持つ', async () => {
+//   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
+//   const script = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
+//   assert.match(html, /Scenario作成方法/); assert.match(html, /attack-options/);
+//   assert.match(html, /manual-difficulty/); assert.match(html, /Scenario案を作成/);
+//   assert.doesNotMatch(html, /textarea|Developer Mode|JSON Import/);
+//   assert.match(script, /attackId/); assert.match(script, /difficulty/);
+// });
 
 test('Introは事件・疑われた理由・罪状だけを公開しGround Truthを漏らさない', () => {
   const value = runtime('network-a', 1); const session = createXssPrototypeGame(value);

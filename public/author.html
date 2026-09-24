@@ -8,8 +8,9 @@
 <body class="author-page">
   <header><p>インシデントクラフト — 作って！解いて！攻撃を学ぶ！ —</p></header>
   <main class="author-main">
-    <nav aria-label="作成手順"><ol class="wizard-progress"><li data-flow-step="0">1 作成方法</li><li data-flow-step="1">2 Attack / 真実丸</li><li data-flow-step="2">3 Network</li><li data-flow-step="3">4 Scenario Preview</li><li data-flow-step="4">5 Game Generation</li></ol></nav>
+    <nav id="author-steps" aria-label="作成手順" hidden><ol class="wizard-progress"><li data-flow-step="0">1 攻撃と舞台</li><li data-flow-step="1">2 Scenario Preview</li><li data-flow-step="2">3 Game Generation</li></ol></nav>
     <p id="initialization-status" role="status" aria-live="polite">初期設定を読み込んでいます…</p>
+    <p id="operation-error" class="error-list" role="alert"></p>
     <section id="splash-panel" class="title-stage" aria-labelledby="splash-title">
       <div class="title-frame">
         <div class="title-lockup">
@@ -55,13 +56,13 @@
         </details>
         <div class="selection-heading"><p>SELECT YOUR PATH</p><h1 id="activity-title">何を始めますか？</h1><span>事件を組み立てるか、完成した事件の法廷へ向かいます。</span></div>
         <div class="activity-card-grid">
-          <article class="activity-card creation-card"><div class="activity-icon" aria-hidden="true"><span class="mini-gear">⚙</span><span class="mini-nodes">◇—◇</span></div><p class="mode-label">CASE CREATION</p><h2>ゲーム作成</h2><p>攻撃とNetworkを設計して、調査と裁判のScenarioを作ります。</p><button id="choose-creation" type="button">作成方法を選ぶ <span>→</span></button></article>
+          <article class="activity-card creation-card"><div class="activity-icon" aria-hidden="true"><span class="mini-gear">⚙</span><span class="mini-nodes">◇—◇</span></div><p class="mode-label">CASE CREATION</p><h2>ゲーム作成</h2><p>つながる攻撃手法と舞台を選んで、調査と裁判のScenarioを作ります。</p><button id="choose-creation" type="button">攻撃と舞台を選ぶ <span>→</span></button></article>
           <article class="activity-card court-card"><div class="activity-icon court-symbol" aria-hidden="true"><span>◆</span><span>⚖</span></div><p class="mode-label">COURT PLAY</p><h2>裁判</h2><p>作成済みのゲームで証拠を集め、矛盾を示して無罪を立証します。</p><button id="choose-court" type="button">裁判へ進む <span>→</span></button></article>
         </div>
       </div>
     </section>
     <section id="help-panel" class="choice-stage info-stage" hidden aria-labelledby="help-title">
-      <div class="selection-shell info-shell"><button id="help-back" class="stage-back" type="button">← モード選択へ</button><div class="selection-heading"><p>HOW TO PLAY</p><h1 id="help-title">遊び方</h1><span>事件を作り、記録を調べ、証拠で主張を検証します。</span></div><div class="guide-grid"><article><span>01</span><h2>ゲームを作る</h2><p>詳細設定または真実丸で、攻撃とNetworkを含むScenarioを作成します。</p></article><article><span>02</span><h2>事件を調査する</h2><p>保存したゲームを「裁判」から開き、端末やログを調べて証拠を登録します。</p></article><article><span>03</span><h2>法廷で示す</h2><p>証言の対象と証拠を選び、記録から説明できる矛盾を一つずつ示します。</p></article></div></div>
+      <div class="selection-shell info-shell"><button id="help-back" class="stage-back" type="button">← モード選択へ</button><div class="selection-heading"><p>HOW TO PLAY</p><h1 id="help-title">遊び方</h1><span>事件を作り、記録を調べ、証拠で主張を検証します。</span></div><div class="guide-grid"><article><span>01</span><h2>ゲームを作る</h2><p>攻撃手法を1～3件と舞台を選び、Scenario案を確認してゲームを作成します。</p></article><article><span>02</span><h2>事件を調査する</h2><p>保存したゲームを「裁判」から開き、端末やログを調べて証拠を登録します。</p></article><article><span>03</span><h2>法廷で示す</h2><p>証言の対象と証拠を選び、記録から説明できる矛盾を一つずつ示します。</p></article></div></div>
     </section>
     <section id="settings-panel" class="choice-stage info-stage" hidden aria-labelledby="settings-title">
       <div class="selection-shell info-shell settings-shell"><button id="settings-back" class="stage-back" type="button">← モード選択へ</button><div class="selection-heading"><p>SETTINGS</p><h1 id="settings-title">設定</h1><span>このブラウザでの表示方法を調整します。</span></div><div class="settings-card"><label>文字サイズ<select id="setting-text-size"><option value="STANDARD">標準</option><option value="LARGE">大きく</option></select></label><label>画面演出<select id="setting-motion"><option value="STANDARD">標準</option><option value="REDUCED">控えめ</option></select></label><p id="settings-status" role="status" aria-live="polite"></p><button id="settings-apply" type="button">設定を適用</button></div></div>
@@ -75,57 +76,29 @@
         <div id="court-empty" class="court-empty" hidden><div class="court-entry-mark" aria-hidden="true">⚖</div><h2>保存したゲームはありません</h2><p>先にScenarioを作成すると、完成したゲームがここに保存されます。</p><button id="court-create-game" type="button">ゲームを作成する <span>→</span></button></div>
       </div>
     </section>
-    <section id="mode-panel" class="choice-stage" hidden aria-labelledby="mode-title">
-      <div class="selection-shell build-selection-shell">
-        <button id="mode-flow-back" class="stage-back" type="button">← 選択へ戻る</button>
-        <div class="mode-choice-heading"><span>SELECT A BUILD MODE</span><h1 id="mode-title">Scenario作成方法</h1></div>
-        <div class="mode-card-grid">
-          <article class="mode-card manual-mode-card"><div class="mode-number">01</div><div class="mode-card-copy"><p class="mode-label">CUSTOM BUILD</p><h3>詳細設定</h3><p>事件、攻撃、調査方法、Networkを順番に組み立てます。</p><ul><li>すべて自分で設定</li><li>技術条件を細かく確認</li></ul></div><button id="choose-manual" type="button" disabled>詳細設定で作成 <span>→</span></button></article>
-          <article class="mode-card makotomaru-card"><div class="mode-number">02</div><div class="mode-card-copy"><p class="mode-label">ASSISTED BUILD</p><h3>真実丸に任せる</h3><p>難易度と好みから、成立するScenario条件をAIが提案します。</p><ul><li>選択項目は最小限</li><li>セキュリティ初学者向け</li></ul></div><button id="choose-makotomaru" type="button" disabled>真実丸と作成 <span>→</span></button></article>
-        </div>
+    <!-- 2026-09-24 修正後: mainの枠・配色を維持し、入力を攻撃と舞台に限定。旧画面はdocs/historyにコメント保存。 -->
+    <section id="selection-panel" hidden aria-labelledby="selection-title">
+      <div class="manual-heading"><div><p class="eyebrow">SCENARIO BUILDER</p><h1 id="selection-title">攻撃と舞台を選ぶ</h1></div><p id="selection-count" class="step-count" aria-live="polite"></p></div>
+      <div class="selection-fields">
+        <fieldset><legend>攻撃手法</legend><p class="step-hint">1件だけでも作成できます。2件目以降は、直前の攻撃からつながる候補を選びます。</p>
+          <div class="attack-chain-options">
+            <div id="attack-step-1"><label for="attack-1">1件目の攻撃</label><select id="attack-1" disabled></select></div>
+            <div id="attack-step-2" hidden><label for="attack-2">2件目の攻撃</label><select id="attack-2" disabled></select></div>
+            <div id="attack-step-3" hidden><label for="attack-3">3件目の攻撃</label><select id="attack-3" disabled></select></div>
+          </div><p id="attack-chain-status" role="status"></p>
+        </fieldset>
+        <fieldset><legend>舞台</legend><label for="setting">事件が起きる場所</label><select id="setting" disabled></select><p class="step-hint">選んだ攻撃と舞台から事件の条件を組み立てます。作成したScenario案を確認してからゲームを生成します。</p></fieldset>
       </div>
-    </section>
-    <section id="manual-panel" hidden aria-labelledby="manual-title">
-      <div class="manual-heading"><div><p class="eyebrow">SCENARIO BUILDER / 詳細設定</p><h1 id="manual-title">事件の条件を組み立てる</h1></div><p id="manual-step-count" class="step-count" aria-live="polite"></p></div>
-      <nav class="manual-flow" aria-label="詳細設定の流れ"><ol>
-        <li data-manual-step-label="0">事件情報</li><li data-manual-step-label="1">攻撃手法</li><li data-manual-step-label="2">攻撃内容・調査</li><li data-manual-step-label="3">Subnet</li>
-        <li data-manual-step-label="4">Node</li><li data-manual-step-label="5">Service</li><li data-manual-step-label="6">Connection</li><li data-manual-step-label="7">構成図確認</li>
-      </ol></nav>
-      <div id="manual-step-content" class="manual-step-content">
-      <fieldset data-manual-step="0"><legend>事件情報</legend><p class="step-hint">この事件の舞台と、最初に疑われた理由を決めます。</p><div class="form-grid">
-        <label>事件日<input id="incident-date" type="date" required></label><label>組織名<input id="organization-name" maxlength="120" required></label>
-        <label>被害System<input id="victim-system" maxlength="120" required></label><label>被告人の役割<input id="accused-role" maxlength="120" required></label>
-        <label class="wide">最初に疑われた理由<input id="suspicion-reason" maxlength="500" required></label><label>Difficulty<select id="manual-difficulty"><option value="1">★1</option><option value="2">★★</option><option value="3">★★★</option></select></label>
-      </div></fieldset>
-      <!-- 2026-09-20 修正前: 先頭からの連鎖を必須にしない
-      <fieldset data-manual-step="1" hidden><legend>攻撃手法（1～3個）</legend><p class="step-hint">事件で使う攻撃を選びます。複数選択はAttack Graphで因果関係を構築できる場合だけ利用できます。</p><div id="attack-options" class="choice-grid"></div></fieldset>
-      -->
-      <!-- 2026-09-20 修正後: 全段階を埋めず任意選択 -->
-      <fieldset data-manual-step="1" hidden><legend>攻撃手法（1～6個）</legend><p class="step-hint">一つだけでも、複数の段階からでも選べます。すべての段階を埋める必要はありません。独立した攻撃も選択でき、実際の前提条件が合う場合だけ連鎖します。</p><div id="attack-options" class="choice-grid"></div></fieldset>
-      <fieldset data-manual-step="2" hidden><legend>具体的な攻撃内容と調査方法</legend><p class="step-hint">攻撃の順序、対象、記録から調べる内容を決めます。</p><div class="item-pager"><button id="attack-details-previous" class="secondary" type="button">前の攻撃</button><span id="attack-details-position"></span><button id="attack-details-next" class="secondary" type="button">次の攻撃</button></div><div id="attack-details" class="builder-list attack-detail-list"></div></fieldset>
-      <fieldset data-manual-step="3" hidden><legend>サブネット構成</legend><p class="step-hint">検証済みのひな型を選ぶか、現在の構成を編集してネットワークの範囲と信頼境界を設定します。</p><div class="preset-picker"><label>構成テンプレート<select id="network-preset"></select></label><button id="apply-network-preset" class="secondary" type="button">この構成を読み込む</button><span id="network-preset-description"></span></div><div class="item-pager"><button id="subnet-previous" class="secondary" type="button">前のSubnet</button><span id="subnet-position"></span><button id="subnet-next" class="secondary" type="button">次のSubnet</button></div><div id="subnet-rows" class="builder-list"></div><button id="add-subnet" class="secondary add-item" type="button">Subnet追加</button></fieldset>
-      <fieldset data-manual-step="4" hidden><legend>サブネット内のノード設定</legend><p class="step-hint">端末の役割、OS、IP、取得できるログを設定します。</p><div class="item-pager"><button id="node-previous" class="secondary" type="button">前のNode</button><span id="node-position"></span><button id="node-next" class="secondary" type="button">次のNode</button></div><div id="node-rows" class="builder-list"></div><button id="add-node" class="secondary add-item" type="button">Node追加</button></fieldset>
-      <fieldset data-manual-step="5" hidden><legend>ノードごとのサービス設定</legend><p class="step-hint">各サービスを、動作するNodeに結び付けます。</p><div class="item-pager"><button id="service-previous" class="secondary" type="button">前のService</button><span id="service-position"></span><button id="service-next" class="secondary" type="button">次のService</button></div><div id="service-rows" class="builder-list"></div><button id="add-service" class="secondary add-item" type="button">Service追加</button></fieldset>
-      <fieldset data-manual-step="6" hidden><legend>各ノードの接続状況</legend><p class="step-hint">通信を許す接続元と接続先を設定します。</p><div class="item-pager"><button id="connection-previous" class="secondary" type="button">前のConnection</button><span id="connection-position"></span><button id="connection-next" class="secondary" type="button">次のConnection</button></div><div id="connection-rows" class="builder-list"></div><button id="add-connection" class="secondary add-item" type="button">Connection追加</button></fieldset>
-      <fieldset data-manual-step="7" hidden><legend>ネットワーク構成の確認</legend><p class="step-hint">構成図を確認してからScenario案を作成します。</p><p id="manual-network-summary" class="review-metrics"></p><svg id="manual-network-diagram" class="network-diagram" role="img" aria-label="設定中のNetwork Diagram"></svg><details><summary>Developer Detail</summary><div id="manual-detail-list" class="detail-list"></div></details></fieldset>
-      </div>
-      <div id="manual-errors" class="error-list" role="alert"></div>
-      <div class="button-row manual-actions"><button id="manual-back" class="secondary" type="button">作成方法へ戻る</button><span class="action-spacer"></span><button id="manual-previous" class="secondary" type="button">前へ</button><button id="manual-next" type="button">次へ</button><button id="manual-create" type="button" disabled hidden>Scenario案を作成</button></div>
-    </section>
-    <section id="makotomaru-panel" hidden aria-labelledby="makotomaru-title"><h1 id="makotomaru-title">真実丸</h1><p class="assistant-message">難易度と好みを選ぶと、登録済みの技術条件から成立するScenario Configurationを提案します。</p>
-      <div class="form-grid"><label>Difficulty<select id="makotomaru-difficulty"><option value="1">★1</option><option value="2">★★</option><option value="3">★★★</option></select></label>
-        <label>Attack Category<select id="attack-category"><option value="ANY">おまかせ</option><option value="WEB">Web攻撃</option><option value="AUTHENTICATION">認証攻撃</option><option value="SOCIAL_ENGINEERING">Social Engineering</option></select></label>
-        <label>Scenario Complexity<select id="complexity"><option value="SIMPLE">シンプル</option><option value="STANDARD" selected>標準</option><option value="COMPLEX">複雑</option></select></label></div>
-      <div class="button-row"><button id="makotomaru-back" class="secondary" type="button">作成方法へ戻る</button><button id="makotomaru-create" type="button" disabled>真実丸に考えてもらう</button></div><p id="makotomaru-error" role="alert"></p>
+      <div class="button-row manual-actions"><button id="selection-back" class="secondary" type="button">モード選択へ戻る</button><span class="action-spacer"></span><button id="create-scenario" type="button" disabled>Scenario案を作成</button></div>
     </section>
     <section id="preview-panel" hidden aria-labelledby="preview-title"><h1 id="preview-title">Scenario Preview</h1><p class="gate-notice">この時点ではゲーム生成へ進みません。内容を確認して承認してください。</p>
       <article class="preview-summary"><h2>事件概要</h2><p id="preview-summary"></p><dl><dt>対象System</dt><dd id="preview-target"></dd><dt>Difficulty</dt><dd id="preview-difficulty"></dd><dt>事前検証</dt><dd id="preview-verification"></dd></dl></article>
       <h2>攻撃手法・発生時刻・調査方法</h2><div id="preview-attacks" class="builder-list"></div><h2>Network Diagram</h2><svg id="preview-network-diagram" class="network-diagram" role="img" aria-label="Scenario Network Diagram"></svg>
-      <details><summary>制作者向け詳細</summary><div id="preview-author-details"></div></details><div class="button-row"><button id="preview-reject" class="secondary" type="button">条件を修正</button><button id="preview-regenerate" class="secondary" type="button" hidden>真実丸に作り直してもらう</button><button id="preview-approve" type="button">このScenarioでゲームを作成</button></div>
+      <details><summary>制作者向け詳細</summary><div id="preview-author-details"></div></details><div class="button-row"><button id="preview-reject" class="secondary" type="button">条件を修正</button><button id="preview-approve" type="button">このScenarioでゲームを作成</button></div>
     </section>
     <section id="generation-panel" aria-labelledby="generation-title" hidden><h1 id="generation-title">処理しています</h1><p id="generation-message" class="assistant-message"></p><ol id="generation-progress" class="generation-progress"></ol><div class="button-row"><button id="cancel" class="secondary" type="button">生成を中止</button></div><details><summary>詳細</summary><div id="detail-list" class="detail-list"></div></details></section>
     <section id="ready-panel" aria-labelledby="ready-title" hidden><h1 id="ready-title">ゲームが完成しました</h1><p id="ready-save-status" class="save-complete" role="status"></p><ol id="ready-progress" class="generation-progress"></ol><div class="button-row ready-actions"><button id="ready-back" class="secondary" type="button">モード選択へ戻る</button><a id="play-game" class="button-link" href="/">ゲームをプレイする</a></div></section>
-    <section id="failure-panel" aria-labelledby="failure-title" hidden><h1 id="failure-title">ゲーム生成に失敗しました</h1><p id="failure-message"></p><button id="retry" type="button">作成方法へ戻る</button><details><summary>詳細</summary><div id="failure-details" class="detail-list"></div></details></section>
+    <section id="failure-panel" aria-labelledby="failure-title" hidden><h1 id="failure-title">ゲーム生成に失敗しました</h1><p id="failure-message"></p><button id="retry" type="button">攻撃と舞台の選択へ戻る</button><details><summary>詳細</summary><div id="failure-details" class="detail-list"></div></details></section>
     <section id="shutdown-panel" class="shutdown-stage" hidden aria-labelledby="shutdown-title"><div><p class="title-kicker">SERVER CLOSED</p><h1 id="shutdown-title">ゲームを終了しました</h1><p>ローカルサーバーを停止しました。このタブを閉じてください。</p></div></section>
   </main>
   <dialog id="exit-dialog" class="exit-dialog" aria-labelledby="exit-dialog-title"><form method="dialog"><p class="title-kicker">GAME EXIT</p><h2 id="exit-dialog-title">ゲームを終了しますか？</h2><p>完成したゲームはすでにローカルへ自動保存されています。</p><p>「保存せず終了」は現在の未完了な制作状態だけを破棄します。保存済みゲームは削除されません。</p><div class="exit-dialog-actions"><button id="exit-cancel" class="secondary" value="cancel">キャンセル</button><button id="exit-without-save" class="secondary danger-link" type="button">保存せず終了</button><button id="exit-save" type="button">保存して終了</button></div></form></dialog>

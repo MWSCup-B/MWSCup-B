@@ -1,28 +1,24 @@
-let token = null;
-let bootstrap = null;
-let author = null;
-let polling = null;
-let networkModel = null;
-let activeNetworkPresetId = null;
-let initializationReady = false;
-let entryView = 'SPLASH';
-let savedGameItems = null;
-let savedGamesError = '';
-let manualStep = 0;
-let lastOverallStep = 0;
-const manualStepNames = ['事件情報', '攻撃手法', '攻撃内容・調査', 'Subnet',
-  'Node', 'Service', 'Connection', '構成図確認'];
-const itemIndexes = { 'attack-details': 0, subnet: 0, node: 0, service: 0, connection: 0 };
-const initializationHelp = 'サーバーを再起動（npm start）して画面を再読み込みしてください。';
+// 2026-09-24 修正後: mainのタイトル・モード・保存・設定UIとkawata-workの攻撃連鎖入力を接続。
+// 修正前の全文: docs/history/author-creation-before-2026-09-24.js
+let token = null, bootstrap = null, author = null, polling = null;
+let initialized = false, submitting = false, pollingRequest = false;
+let selectedAttacks = [], entryView = 'SPLASH';
+let savedGameItems = null, savedGamesError = '';
 const byId = id => document.getElementById(id);
-const panels = ['splash-panel', 'activity-panel', 'court-entry-panel', 'mode-panel',
-  'help-panel', 'settings-panel',
-  'manual-panel', 'makotomaru-panel', 'preview-panel', 'generation-panel',
-  'ready-panel', 'failure-panel', 'shutdown-panel'];
+const panels = ['splash-panel', 'activity-panel', 'court-entry-panel', 'help-panel', 'settings-panel',
+  'selection-panel', 'preview-panel', 'generation-panel', 'ready-panel', 'failure-panel', 'shutdown-panel'];
 const svgNs = 'http://www.w3.org/2000/svg';
 const settingsKey = 'incident-craft-settings-v1';
 const defaultSettings = { textSize: 'STANDARD', motion: 'STANDARD' };
-
+const initializationHelp = 'サーバーを再起動（npm start）して画面を再読み込みしてください。';
+function showError(message) { byId('operation-error').textContent = message; }
+function setInitializationState(ready, message = '') {
+  initialized = ready;
+  byId('initialization-status').textContent = message;
+  byId('initialization-status').hidden = ready;
+  syncControls();
+}
+function requireInitialized() { if (!initialized) throw new Error('初期設定の読み込みが完了していません。'); }
 function readSettings() {
   try {
     const value = JSON.parse(localStorage.getItem(settingsKey) ?? 'null');
@@ -44,81 +40,6 @@ function applySettings(settings, save = false) {
   }
 }
 
-function setInitializationState(ready, message = '') {
-  initializationReady = ready;
-  const notice = byId('initialization-status');
-  notice.textContent = message; notice.hidden = ready;
-  for (const id of ['choose-manual', 'choose-makotomaru', 'manual-create', 'makotomaru-create']) {
-    byId(id).disabled = !ready || Boolean(author?.canCancel);
-  }
-}
-
-function requireInitialized() {
-  if (!initializationReady) throw new Error(`初期設定の読み込みが完了していません。${initializationHelp}`);
-}
-
-function requireObject(value, field) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`初期設定の${field}が取得できないか、形式が不正です。${initializationHelp}`);
-  }
-}
-
-function requireArray(value, field) {
-  if (!Array.isArray(value)) {
-    throw new Error(`初期設定の${field}が配列ではありません。${initializationHelp}`);
-  }
-}
-
-function requireNetwork(value) {
-  requireObject(value, 'network');
-  for (const kind of ['subnets', 'nodes', 'services', 'connections']) {
-    requireArray(value[kind], `network.${kind}`);
-    value[kind].forEach(item => requireObject(item, `network.${kind}の項目`));
-  }
-  for (const node of value.nodes) {
-    requireArray(node.roles, 'network.nodes.roles');
-    requireArray(node.logSources, 'network.nodes.logSources');
-  }
-}
-
-function readInitialConfiguration(value) {
-  requireObject(value, 'bootstrap');
-  const preset = value.defaultManualConfiguration;
-  requireObject(preset, 'defaultManualConfiguration');
-  requireNetwork(preset.network);
-  requireObject(preset.incidentContext, 'incidentContext');
-  requireArray(preset.attacks, 'attacks');
-  for (const key of ['attacks', 'investigationTypes', 'nodeTypes']) requireArray(value[key], key);
-  if (value.networkPresets !== undefined) requireArray(value.networkPresets, 'networkPresets');
-  if (!preset.attacks.length || ![1, 2, 3].includes(preset.difficulty)) {
-    throw new Error(`初期設定の攻撃または難易度が不正です。${initializationHelp}`);
-  }
-  for (const attack of preset.attacks) {
-    requireObject(attack, 'attacksの項目');
-    requireArray(attack.investigationTypes, 'attacks.investigationTypes');
-    if (typeof attack.occurrenceTime !== 'string' || typeof attack.evidenceAnswer !== 'string'
-      || !value.attacks.some(item => item.id === attack.attackId)) {
-      throw new Error(`初期設定の攻撃・発生日時・証拠の答えが取得できません。${initializationHelp}`);
-    }
-  }
-  return preset;
-}
-
-function requireRenderedConfiguration() {
-  requireNetwork(networkModel);
-  for (const kind of ['subnets', 'nodes', 'services', 'connections']) {
-    const rows = document.querySelectorAll(`[data-network-kind="${kind}"]`);
-    if (rows.length !== networkModel[kind].length) {
-      throw new Error(`Network Builderの${kind}が正しく表示されていないため送信できません。${initializationHelp}`);
-    }
-  }
-  const selected = [...document.querySelectorAll('input[name="attack"]:checked')].map(item => item.value);
-  const cards = [...document.querySelectorAll('[data-attack-id]')];
-  if (cards.length !== selected.length || selected.some(id => !cards.some(card => card.dataset.attackId === id))) {
-    throw new Error(`攻撃の詳細が正しく表示されていないため送信できません。${initializationHelp}`);
-  }
-}
-
 async function api(path, body = null, method = null) {
   const response = await fetch(path, { method: method ?? (body == null ? 'GET' : 'POST'),
     headers: { ...(body == null ? {} : { 'Content-Type': 'application/json' }),
@@ -134,161 +55,114 @@ function text(parent, tag, value, className = '') {
   node.textContent = value; parent.append(node); return node;
 }
 
-function input(parent, label, value, key, type = 'text') {
-  const wrapper = document.createElement('label'); wrapper.textContent = label;
-  const control = document.createElement('input'); control.type = type; control.value = value ?? '';
-  control.dataset.key = key; wrapper.append(control); parent.append(wrapper); return control;
+function selectedIds() {
+  return [...selectedAttacks];
 }
-
-function select(parent, label, value, key, options) {
-  const wrapper = document.createElement('label'); wrapper.textContent = label;
-  const control = document.createElement('select'); control.dataset.key = key;
-  if (value && !options.some(([id]) => id === value)) {
-    options = [[value, `${value}（現在の構成にありません）`], ...options];
+function matchesPrefix(path, prefix) {
+  return prefix.every((id, index) => path[index] === id);
+}
+function nextChoices(prefix) {
+  const ids = new Set(bootstrap.attackSelectionPaths
+    .filter(path => path.length === prefix.length + 1 && matchesPrefix(path, prefix))
+    .map(path => path[prefix.length]));
+  return bootstrap.attackChoices.filter(choice => ids.has(choice.id));
+}
+function validSelectedPath() {
+  return Boolean(bootstrap?.attackSelectionPaths.some(path => path.length === selectedAttacks.length
+    && matchesPrefix(path, selectedAttacks)));
+}
+function syncControls() {
+  const busy = submitting || Boolean(author?.canCancel);
+  byId('choose-creation').disabled = !initialized || busy;
+  byId('court-create-game').disabled = !initialized || busy;
+  byId('selection-back').disabled = busy;
+  for (let index = 0; index < 3; index += 1) {
+    byId(`attack-${index + 1}`).disabled = !initialized || busy || byId(`attack-step-${index + 1}`).hidden;
   }
-  for (const [id, title] of options) { const option = document.createElement('option');
-    option.value = id; option.textContent = title; option.selected = id === value; control.append(option); }
-  wrapper.append(control); parent.append(wrapper); return control;
+  byId('setting').disabled = !initialized || busy;
+  byId('create-scenario').disabled = !initialized || busy || !validSelectedPath()
+    || !bootstrap.settings.some(item => item.id === byId('setting').value);
+  byId('preview-approve').disabled = submitting || !author?.canApprove;
+  byId('preview-reject').disabled = submitting || !author?.canApprove;
+  byId('cancel').disabled = submitting || !author?.canCancel;
+  byId('retry').disabled = busy;
+  byId('selection-count').textContent = `${selectedIds().length} / 3 種類を選択中`;
 }
-
-function multiSelect(parent, label, values, key, options) {
-  const wrapper = document.createElement('label'); wrapper.textContent = label;
-  const control = document.createElement('select'); control.dataset.key = key;
-  control.multiple = true; control.size = Math.min(5, options.length);
-  const selected = new Set(values);
-  for (const [id, title] of options) { const option = document.createElement('option');
-    option.value = id; option.textContent = title; option.selected = selected.has(id); control.append(option); }
-  wrapper.append(control); parent.append(wrapper); return control;
-}
-
-function removeButton(parent, collection, item) {
-  const button = document.createElement('button'); button.type = 'button'; button.className = 'danger-link';
-  button.textContent = '削除'; button.addEventListener('click', () => {
-    syncNetworkModel();
-    collection.splice(collection.indexOf(item), 1); renderNetworkBuilder(); renderAttackDetails();
-  }); parent.append(button);
-}
-
-function updateItemPager(kind) {
-  const target = byId(kind === 'attack-details' ? kind : `${kind}-rows`);
-  const rows = [...target.querySelectorAll('article')];
-  itemIndexes[kind] = Math.min(itemIndexes[kind], Math.max(0, rows.length - 1));
-  rows.forEach((row, index) => { row.hidden = index !== itemIndexes[kind]; });
-  byId(`${kind}-position`).textContent = rows.length
-    ? `${itemIndexes[kind] + 1} / ${rows.length}` : '0 / 0';
-  byId(`${kind}-previous`).disabled = itemIndexes[kind] === 0;
-  byId(`${kind}-next`).disabled = !rows.length || itemIndexes[kind] === rows.length - 1;
-}
-
-function resetManualScroll() { byId('manual-step-content').scrollTop = 0; }
-
-function showManualStep(index) {
-  if (index < 0 || index >= manualStepNames.length) return;
-  if (networkModel && manualStep >= 3 && manualStep <= 6) {
-    syncNetworkModel(); renderNetworkBuilder(); renderAttackDetails();
+function validateBootstrap(value) {
+  const choices = value?.attackChoices; const settings = value?.settings;
+  const defaults = value?.selectionDefaults;
+  if (value?.maxSelectedAttacks !== 3 || !Array.isArray(choices) || !choices.length
+    || !Array.isArray(settings) || !settings.length
+    || [...choices, ...settings].some(item => !item || typeof item.id !== 'string'
+      || !/^[a-z][a-z0-9_]*$/.test(item.id) || typeof item.label !== 'string' || !item.label)
+    || new Set(choices.map(item => item.id)).size !== choices.length
+    || new Set(settings.map(item => item.id)).size !== settings.length
+    || defaults?.schemaVersion !== '1.0' || !Array.isArray(defaults.attackIds)
+    || !defaults.attackIds.length || defaults.attackIds.length > 3
+    || new Set(defaults.attackIds).size !== defaults.attackIds.length
+    || defaults.attackIds.some(id => !choices.some(item => item.id === id))
+    || !settings.some(item => item.id === defaults.settingId)) {
+    throw new Error('攻撃と舞台の初期設定が不足しているか、形式が不正です。');
   }
-  manualStep = index;
-  for (const step of document.querySelectorAll('[data-manual-step]')) {
-    step.hidden = Number(step.dataset.manualStep) !== index;
+  const paths = value.attackSelectionPaths;
+  if (!Array.isArray(paths) || !paths.length || paths.length > 400
+    || paths.some(path => !Array.isArray(path) || !path.length || path.length > 3
+      || new Set(path).size !== path.length || path.some(id => !choices.some(choice => choice.id === id)))
+    || new Set(paths.map(path => JSON.stringify(path))).size !== paths.length
+    || choices.some(choice => !paths.some(path => path.length === 1 && path[0] === choice.id))
+    || paths.some(path => path.some((_, index) => !paths.some(prefix => prefix.length === index + 1
+      && matchesPrefix(path, prefix))))
+    || !paths.some(path => path.length === defaults.attackIds.length && matchesPrefix(path, defaults.attackIds))) {
+    throw new Error('関連する攻撃の選択順データが不足しているか、形式が不正です。');
   }
-  for (const label of document.querySelectorAll('[data-manual-step-label]')) {
-    const number = Number(label.dataset.manualStepLabel);
-    label.className = number === index ? 'current' : number < index ? 'complete' : '';
-    label.setAttribute('aria-current', number === index ? 'step' : 'false');
-  }
-  byId('manual-step-count').textContent = `${index + 1} / ${manualStepNames.length}　${manualStepNames[index]}`;
-  byId('manual-previous').disabled = index === 0;
-  byId('manual-next').hidden = index === manualStepNames.length - 1;
-  byId('manual-create').hidden = index !== manualStepNames.length - 1;
-  byId('manual-errors').replaceChildren();
-  resetManualScroll();
-  if (index === 7) {
-    byId('manual-network-summary').textContent =
-      `${networkModel.subnets.length} Subnets / ${networkModel.nodes.length} Nodes / `
-      + `${networkModel.services.length} Services / ${networkModel.connections.length} Connections`;
-    drawNetwork('manual-network-diagram', networkModel);
-  }
-  renderOverallProgress();
 }
-
-function splitList(value) { return value.split(',').map(item => item.trim()).filter(Boolean); }
-
-function syncNetworkModel() {
-  requireNetwork(networkModel);
-  for (const row of document.querySelectorAll('[data-network-kind]')) {
-    const kind = row.dataset.networkKind; const index = Number(row.dataset.index);
-    const item = networkModel[kind][index]; if (!item) continue;
-    for (const control of row.querySelectorAll('[data-key]')) {
-      const value = control.multiple ? (() => {
-        const selected = [...control.selectedOptions].map(option => option.value);
-        const previous = Array.isArray(item[control.dataset.key]) ? item[control.dataset.key] : [];
-        return [...previous.filter(id => selected.includes(id)),
-          ...selected.filter(id => !previous.includes(id))];
-      })()
-        : control.dataset.key === 'roles' ? splitList(control.value) : control.value;
-      item[control.dataset.key] = value;
+function renderAttackSteps() {
+  for (let index = 0; index < 3; index += 1) {
+    const control = byId(`attack-${index + 1}`);
+    const choices = index <= selectedAttacks.length ? nextChoices(selectedAttacks.slice(0, index)) : [];
+    byId(`attack-step-${index + 1}`).hidden = index > 0 && !choices.length;
+    control.replaceChildren();
+    const empty = document.createElement('option'); empty.value = '';
+    empty.textContent = index === 0 ? '1件目を選択してください' : `追加しない（${index}件で作成）`;
+    empty.selected = !selectedAttacks[index]; control.append(empty);
+    for (const choice of choices) {
+      const option = document.createElement('option'); option.value = choice.id;
+      option.textContent = choice.label; option.selected = choice.id === selectedAttacks[index];
+      control.append(option);
     }
   }
+  const count = selectedAttacks.length;
+  const labels = selectedAttacks.map(id => bootstrap.attackChoices.find(choice => choice.id === id).label);
+  byId('selection-count').textContent = `${count} / 3 種類を選択中`;
+  byId('attack-chain-status').textContent = !count ? 'まず1件目を選択してください。'
+    : `${labels.join(' → ')}。` + (count === 3 ? '最大3件まで選択しました。'
+      : nextChoices(selectedAttacks).length ? `この${count}件で作成するか、続くインシデントを追加できます。`
+        : `現在の教材には、この後に続く候補がありません。この${count}件で作成できます。`);
 }
-
-function networkRow(kind, item, index) {
-  const row = document.createElement('article'); row.className = 'builder-card compact-builder';
-  row.dataset.networkKind = kind; row.dataset.index = String(index);
-  if (kind === 'subnets') {
-    input(row, 'ID', item.subnetId, 'subnetId'); input(row, '表示名', item.label, 'label');
-    input(row, 'CIDR', item.cidr, 'cidr'); input(row, 'Trust Boundary', item.trustBoundaryId, 'trustBoundaryId');
-  } else if (kind === 'nodes') {
-    input(row, 'ID', item.nodeId, 'nodeId'); input(row, '表示名', item.label, 'label');
-    select(row, 'Node Type', item.nodeType, 'nodeType', bootstrap.nodeTypes.map(id => [id, id]));
-    select(row, 'OS', item.os, 'os', ['windows', 'linux', 'macos', 'network', 'other'].map(id => [id, id]));
-    input(row, 'IP', item.ip, 'ip'); select(row, 'Subnet', item.subnetId, 'subnetId',
-      optionPairs(networkModel.subnets, 'subnetId', 'label'));
-    input(row, 'Trust Boundary', item.trustBoundaryId, 'trustBoundaryId');
-    input(row, 'Roles（カンマ区切り）', item.roles.join(', '), 'roles');
-    multiSelect(row, 'Log Sources', item.logSources, 'logSources',
-      bootstrap.investigationTypes.map(value => [value.id, value.label]));
-  } else if (kind === 'services') {
-    input(row, 'ID', item.serviceId, 'serviceId'); input(row, '表示名', item.label, 'label');
-    select(row, 'Node', item.nodeId, 'nodeId', optionPairs(networkModel.nodes, 'nodeId', 'label'));
-    select(row, 'Service Type', item.serviceType, 'serviceType', [
-// 2026-09-20 修正前: SSHとローカル実行環境を編集可能にする
-//       'web_browser', 'email', 'web_application', 'sql_database', 'proxy', 'authentication', 'file', 'logging'].map(id => [id, id]));
-// 2026-09-20 修正後: SSHとローカル実行環境を編集可能にする
-      'web_browser', 'email', 'web_application', 'sql_database', 'proxy', 'authentication', 'file', 'logging', 'remote_access', 'local_execution'].map(id => [id, id]));
-    select(row, 'Platform', item.platform, 'platform',
-// 2026-09-20 修正前: 実行環境のOSを保持
-//       ['browser', 'email', 'web', 'sql', 'proxy', 'auth', 'file', 'logging'].map(id => [id, id]));
-// 2026-09-20 修正後: 実行環境のOSを保持
-      ['browser', 'email', 'web', 'sql', 'proxy', 'auth', 'file', 'logging', 'ssh', 'linux', 'windows'].map(id => [id, id]));
-  } else {
-    select(row, '接続元Node', item.fromNodeId, 'fromNodeId', optionPairs(networkModel.nodes, 'nodeId', 'label'));
-    select(row, '接続先Node', item.toNodeId, 'toNodeId', optionPairs(networkModel.nodes, 'nodeId', 'label'));
+function changeAttack(index) {
+  if (!initialized || submitting || author?.canCancel) return;
+  const value = byId(`attack-${index + 1}`).value;
+  if (index > selectedAttacks.length || (value && !nextChoices(selectedAttacks.slice(0, index))
+    .some(choice => choice.id === value))) {
+    showError('直前のインシデントからつながる候補を選択してください。');
+    renderAttackSteps(); syncControls(); return;
   }
-  removeButton(row, networkModel[kind], item); return row;
+  if (value === (selectedAttacks[index] ?? '')) return;
+  const cleared = selectedAttacks.length > index + 1;
+  selectedAttacks = [...selectedAttacks.slice(0, index), ...(value ? [value] : [])];
+  showError(''); renderAttackSteps(); syncControls();
+  if (cleared) byId('attack-chain-status').textContent += ' 前の選択を変えたため、それ以降の選択を解除しました。';
 }
-
-function renderNetworkBuilder() {
-  for (const kind of ['subnets', 'nodes', 'services', 'connections']) {
-    const target = byId(`${kind.slice(0, -1)}-rows`); target.replaceChildren();
-    networkModel[kind].forEach((item, index) => target.append(networkRow(kind, item, index)));
-    updateItemPager(kind.slice(0, -1));
+function renderChoices() {
+  selectedAttacks = [...bootstrap.selectionDefaults.attackIds];
+  renderAttackSteps();
+  const setting = byId('setting'); setting.replaceChildren();
+  for (const item of bootstrap.settings) {
+    const option = document.createElement('option'); option.value = item.id;
+    option.textContent = item.label; option.selected = item.id === bootstrap.selectionDefaults.settingId;
+    setting.append(option);
   }
-  drawNetwork('manual-network-diagram', networkModel);
 }
-
-function renderNetworkPresetPicker() {
-  const control = byId('network-preset'); control.replaceChildren();
-  for (const preset of bootstrap.networkPresets ?? []) {
-    const option = document.createElement('option'); option.value = preset.id;
-    option.textContent = preset.label; option.selected = preset.id === activeNetworkPresetId;
-    control.append(option);
-  }
-  const selected = bootstrap.networkPresets?.find(item => item.id === control.value);
-  byId('network-preset-description').textContent = selected?.description ??
-    '利用できる構成テンプレートはありません。';
-  byId('apply-network-preset').disabled = !selected;
-}
-
 function drawNetwork(id, network) {
   const svg = byId(id); svg.replaceChildren(); const rowHeight = 165;
   const subnetGroups = network.subnets.map((subnet, index) => ({ subnet, index,
@@ -327,172 +201,6 @@ function drawNetwork(id, network) {
     svg.insertBefore(line, svg.firstChild); }
 }
 
-// 2026-09-20 修正前: 段階を任意に絞り込み、全段階を必須にせず1～6件選択
-// function renderAttackOptions() {
-//   const target = byId('attack-options'); target.replaceChildren();
-//   for (const attack of bootstrap.attacks) { const label = document.createElement('label'); label.className = 'choice-card';
-//     const control = document.createElement('input'); control.type = 'checkbox'; control.name = 'attack'; control.value = attack.id;
-//     control.addEventListener('change', () => { const selected = [...document.querySelectorAll('input[name="attack"]:checked')];
-//       if (selected.length > 3) { control.checked = false; byId('manual-errors').textContent = '攻撃手法は最大3つです。'; }
-//       renderAttackDetails(); }); label.append(control); text(label, 'strong', attack.label); target.append(label); }
-// }
-//
-// 2026-09-20 修正後: 段階を任意に絞り込み、全段階を必須にせず1～6件選択
-function renderAttackOptions() {
-  const target = byId('attack-options'); target.replaceChildren(); target.className = 'attack-browser';
-  const filter = select(target, '攻撃の段階（どの段階からでも選べます）', '', 'stageFilter',
-    [['', 'すべて'], ...(bootstrap.attackStages ?? []).map(stage => [stage.id, stage.label])]);
-  const choices = document.createElement('div'); choices.className = 'choice-grid'; target.append(choices);
-  const status = text(target, 'p', '', 'step-hint'); status.id = 'attack-selection-status';
-  const refresh = () => {
-    for (const card of choices.children) card.hidden = Boolean(filter.value)
-      && !bootstrap.attacks.find(attack => attack.id === card.dataset.choiceId)?.stages?.includes(filter.value);
-    const ids = [...document.querySelectorAll('input[name="attack"]:checked')].map(input => input.value);
-    status.textContent = ids.length + ' / ' + (bootstrap.attackSelectionLimit ?? 6)
-      + '件を選択：' + ids.map(id => bootstrap.attacks.find(a => a.id === id).label).join('、');
-  };
-  for (const attack of bootstrap.attacks) {
-    const label = document.createElement('label'); label.className = 'choice-card'; label.dataset.choiceId = attack.id;
-    const control = document.createElement('input'); control.type = 'checkbox'; control.name = 'attack'; control.value = attack.id;
-    control.addEventListener('change', () => {
-      const count = document.querySelectorAll('input[name="attack"]:checked').length;
-      if (count > (bootstrap.attackSelectionLimit ?? 6)) {
-        control.checked = false; byId('manual-errors').textContent = '攻撃手法は最大' + (bootstrap.attackSelectionLimit ?? 6) + 'つです。';
-      } else byId('manual-errors').textContent = '';
-      renderAttackDetails(); refresh();
-    });
-    label.append(control); text(label, 'strong', attack.label);
-    text(label, 'small', (attack.stages ?? []).map(id => bootstrap.attackStages?.find(s => s.id === id)?.label ?? id).join('・'));
-    choices.append(label);
-  }
-  filter.addEventListener('change', refresh); refresh();
-}
-
-// 2026-09-20: 選択順で初期時刻を作る。カタログ位置による分の桁あふれを防ぐ。
-function initialAttackTime(index) {
-  const minute = 9 * 60 + 10 + index * 8;
-  return (byId('incident-date').value || '2026-01-15') + 'T'
-    + String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0');
-}
-
-// 2026-09-20: 途中解除後の追加でも、保存済み日時と同じ初期時刻を作らない。
-function nextAttackTime(index, existing) {
-  const latest = [...existing.values()].map(item => item.occurrenceTime?.slice(0, 16))
-    .filter(value => value && value.startsWith(byId('incident-date').value)).sort().at(-1);
-  if (!latest) return initialAttackTime(index);
-  const instant = new Date(latest + ':00Z');
-  return Number.isFinite(instant.getTime())
-    ? new Date(instant.getTime() + 8 * 60 * 1000).toISOString().slice(0, 16) : initialAttackTime(index);
-}
-
-function optionPairs(items, id, label) { return items.map(item => [item[id], item[label]]); }
-
-function renderAttackDetails(initialAttacks = []) {
-  // 初回のみBackendのプリセットを使い、その後の再描画では利用者の入力を優先する。
-  const defaults = initialAttacks.map(attack => [attack.attackId, {
-    ...attack, order: String(attack.order), occurrenceTime: attack.occurrenceTime.slice(0, 16),
-    ...Object.fromEntries(bootstrap.investigationTypes.map(({ id }) =>
-      [`investigation:${id}`, attack.investigationTypes.includes(id)])),
-  }]);
-  syncNetworkModel(); const target = byId('attack-details'); const existing = new Map(
-    [...defaults, ...[...target.querySelectorAll('[data-attack-id]')].map(node => [node.dataset.attackId, Object.fromEntries(
-      [...node.querySelectorAll('[data-key]')].map(control => [control.dataset.key, control.type === 'checkbox' ? control.checked : control.value]))])]);
-// 2026-09-20 修正前: 既存の選択順を保持し、途中解除後は1から連番へ振り直す
-//   target.replaceChildren(); const selected = [...document.querySelectorAll('input[name="attack"]:checked')].map(item => item.value);
-// 2026-09-20 修正後: 既存の選択順を保持し、途中解除後は1から連番へ振り直す
-  const checked = [...document.querySelectorAll('input[name="attack"]:checked')].map(item => item.value);
-  const retained = [...existing.keys()].filter(id => checked.includes(id))
-    .sort((a, b) => Number(existing.get(a).order) - Number(existing.get(b).order));
-  const selected = [...retained, ...checked.filter(id => !retained.includes(id))];
-  target.replaceChildren();
-  const nodes = optionPairs(networkModel.nodes, 'nodeId', 'label'); const services = optionPairs(networkModel.services, 'serviceId', 'label');
-  const activePreset = bootstrap.networkPresets?.find(item => item.id === activeNetworkPresetId);
-  selected.forEach((attackId, index) => { const attack = bootstrap.attacks.find(item => item.id === attackId);
-    const hint = activePreset?.attackDefaults?.find(item => item.attackId === attackId) ?? {};
-    const stored = existing.get(attackId);
-// 2026-09-20 修正前: 新規選択の時刻を選択順から作り、編集済みの値は維持
-//     const saved = stored ?? { ...hint, order: String(index + 1),
-//       occurrenceTime: hint.occurrenceTime
-//         ? `${byId('incident-date').value || hint.occurrenceTime.slice(0, 10)}${hint.occurrenceTime.slice(10, 16)}`
-//         : '' };
-//
-// 2026-09-20 修正後: 新規選択の時刻を選択順から作り、編集済みの値は維持
-    const saved = stored ?? { evidenceAnswer: attack.authoring?.evidenceAnswer ?? '', ...hint,
-      order: String(index + 1), occurrenceTime: nextAttackTime(index, existing) };
-    const card = document.createElement('article'); card.className = 'builder-card'; card.dataset.attackId = attackId;
-    text(card, 'h3', `Attack ${index + 1}: ${attack.label}`);
-// 2026-09-20 修正前: 選択数に応じた順番変更と開始条件・対応構成の表示
-//     select(card, 'Attack Order', saved.order ?? String(index + 1), 'order', ['1', '2', '3'].map(value => [value, value]));
-// 2026-09-20 修正後: 選択数に応じた順番変更と開始条件・対応構成の表示
-    text(card, 'p', attack.description ?? '', 'step-hint');
-    const compatiblePresets = (bootstrap.networkPresets ?? []).filter(preset => preset.attackDefaults.some(a => a.attackId === attackId));
-    text(card, 'p', '対応テンプレート：' + compatiblePresets.map(preset => preset.label).join(' / '), 'step-hint');
-    const conditions = document.createElement('details'); text(conditions, 'summary', '成立に必要な条件（前段がない場合は開始時点の設定）');
-    for (const condition of attack.startingConditions ?? []) text(conditions, 'p', condition);
-    card.append(conditions);
-    const orderControl = select(card, 'Attack Order', String(index + 1), 'order', selected.map((_, i) => [String(i + 1), String(i + 1)]));
-    orderControl.addEventListener('change', () => {
-      const cards = [...target.querySelectorAll('[data-attack-id]')];
-      cards.splice(cards.indexOf(card), 1); cards.splice(Number(orderControl.value) - 1, 0, card);
-      cards.forEach((item, i) => { item.querySelector('[data-key="order"]').value = String(i + 1); });
-      renderAttackDetails();
-      byId('manual-errors').textContent = '順番を変更しました。発生日時もこの順番になるよう確認してください。';
-    });
-    const occurrenceTime = saved.occurrenceTime?.length > 16
-      ? saved.occurrenceTime.slice(0, 16) : saved.occurrenceTime;
-    input(card, '発生日時', occurrenceTime ?? `${byId('incident-date').value || '2026-01-15'}T09:${String(10 + index * 8).padStart(2, '0')}`, 'occurrenceTime', 'datetime-local');
-// 2026-09-20 修正前: 対応しない構成では先頭Nodeを暗黙に選ばず、不足する指定を明示
-//     select(card, 'Source Node', saved.sourceNodeId ?? '', 'sourceNodeId', nodes);
-//     select(card, 'Target Node', saved.targetNodeId ?? '', 'targetNodeId', nodes);
-//     select(card, 'Target Service', saved.targetServiceId ?? '', 'targetServiceId', services);
-//     select(card, 'Investigation Source', saved.investigationSourceNodeId ?? '', 'investigationSourceNodeId', nodes);
-// 2026-09-20 修正後: 対応しない構成では先頭Nodeを暗黙に選ばず、不足する指定を明示
-    select(card, 'Source Node', saved.sourceNodeId ?? '', 'sourceNodeId', [['', '選択してください'], ...nodes]);
-    select(card, 'Target Node', saved.targetNodeId ?? '', 'targetNodeId', [['', '選択してください'], ...nodes]);
-    select(card, 'Target Service', saved.targetServiceId ?? '', 'targetServiceId', [['', '選択してください'], ...services]);
-    select(card, 'Investigation Source', saved.investigationSourceNodeId ?? '', 'investigationSourceNodeId', [['', '選択してください'], ...nodes]);
-    const group = document.createElement('fieldset'); text(group, 'legend', '調査方法');
-    attack.supportedInvestigationTypes.forEach((type, typeIndex) => { const label = document.createElement('label');
-      const box = document.createElement('input'); box.type = 'checkbox'; box.dataset.key = `investigation:${type}`;
-// 2026-09-20 修正前: カタログ先頭の調査方法ではなく攻撃定義の既定値を使う
-//       box.checked = saved[`investigation:${type}`] ?? typeIndex === 0; label.append(box);
-// 2026-09-20 修正後: カタログ先頭の調査方法ではなく攻撃定義の既定値を使う
-      box.checked = saved[`investigation:${type}`] ?? (saved.investigationTypes
-        ? saved.investigationTypes.includes(type) : type === attack.authoring?.preferredInvestigationType); label.append(box);
-      label.append(document.createTextNode(bootstrap.investigationTypes.find(item => item.id === type).label)); group.append(label); }); card.append(group);
-    const evidenceAnswer = input(card, '証拠から導く答え', saved.evidenceAnswer ?? '',
-      'evidenceAnswer');
-    evidenceAnswer.required = true;
-    evidenceAnswer.placeholder = '選択した記録から確認できる具体的な事実';
-    select(card, '想定効果', saved.expectedEffect ?? attack.expectedEffects[0].label,
-      'expectedEffect', attack.expectedEffects.map(effect => [effect.label, effect.label]));
-    input(card, 'Notes', saved.notes ?? '', 'notes'); target.append(card); });
-  const status = byId('attack-selection-status');
-  if (status) status.textContent = selected.length + ' / ' + (bootstrap.attackSelectionLimit ?? 6)
-    + '件を選択：' + selected.map(id => bootstrap.attacks.find(a => a.id === id).label).join('、');
-  updateItemPager('attack-details');
-}
-
-function collectConfiguration() {
-  requireInitialized(); requireRenderedConfiguration();
-  syncNetworkModel(); const difficulty = Number(byId('manual-difficulty').value); const attacks = [];
-  for (const card of document.querySelectorAll('[data-attack-id]')) {
-    const get = key => card.querySelector(`[data-key="${key}"]`)?.value ?? '';
-    const investigations = [...card.querySelectorAll('[data-key^="investigation:"]:checked')]
-      .map(control => control.dataset.key.split(':')[1]);
-    attacks.push({ attackId: card.dataset.attackId, order: Number(get('order')),
-      occurrenceTime: get('occurrenceTime'), sourceNodeId: get('sourceNodeId'),
-      targetNodeId: get('targetNodeId'), targetServiceId: get('targetServiceId'),
-      investigationTypes: investigations, investigationSourceNodeId: get('investigationSourceNodeId'),
-      evidenceAnswer: get('evidenceAnswer'), expectedEffect: get('expectedEffect'), notes: get('notes') });
-  }
-  return { schemaVersion: '1.0', configurationId: `configuration_${crypto.randomUUID().replaceAll('-', '')}`,
-    mode: 'MANUAL', difficulty, evidenceCount: difficulty, network: structuredClone(networkModel), attacks,
-    incidentContext: { incidentDate: byId('incident-date').value,
-      organizationName: byId('organization-name').value, victimSystem: byId('victim-system').value,
-      accusedRole: byId('accused-role').value, initialSuspicionReason: byId('suspicion-reason').value } };
-}
-
 function renderProgress(targetId) {
   const target = byId(targetId); target.replaceChildren(); for (const item of author.progress) {
     const suffix = item.status === 'COMPLETE' ? '✓' : item.status === 'RUNNING' ? '実行中…'
@@ -519,8 +227,6 @@ function renderDetails(targetId) {
     if (item.correctionHint) text(article, 'p', item.correctionHint);
     target.append(article); }
 }
-
-function showPanel(id) { panels.forEach(panel => { byId(panel).hidden = panel !== id; }); }
 
 function savedDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value ?? '');
@@ -581,24 +287,6 @@ async function loadSavedGames() {
   renderSavedGames();
 }
 
-function renderOverallProgress() {
-  const state = author?.currentState;
-  const current = state === 'MODE_SELECTION' ? 0
-    : state === 'MANUAL_CONFIGURATION' ? (manualStep < 3 ? 1 : 2)
-      : state === 'MAKOTOMARU_CONFIGURATION' ? 1
-        : state === 'SCENARIO_PREVIEW' ? 3
-          : ['FAILED', 'CANCELLED'].includes(state) ? lastOverallStep
-            : ['CHECKING_CODEX', 'GENERATING_SCENARIO', 'SCENARIO_VALIDATING',
-              'SCENARIO_REVIEWING', 'SCENARIO_REVISING', 'VERIFIED'].includes(state)
-              ? (author?.configuration?.mode === 'MANUAL' ? 2 : 1) : 4;
-  lastOverallStep = current;
-  for (const item of document.querySelectorAll('[data-flow-step]')) {
-    const number = Number(item.dataset.flowStep);
-    item.className = number === current ? 'current' : number < current ? 'complete' : '';
-    item.setAttribute('aria-current', number === current ? 'step' : 'false');
-  }
-}
-
 function renderPreview() {
   const preview = author.scenarioPreview; if (!preview) return; byId('preview-summary').textContent = preview.incidentSummary;
   byId('preview-target').textContent = preview.targetSystem; byId('preview-difficulty').textContent = preview.difficultyLabel;
@@ -616,68 +304,67 @@ function renderPreview() {
   for (const attack of author.configuration?.attacks ?? []) {
     text(detail, 'p', `Attack ${attack.order} の証拠の答え: ${attack.evidenceAnswer}`);
   }
-  byId('preview-regenerate').hidden = !author.canRegenerate;
+
 }
 
+
+function showPanel(id) {
+  panels.forEach(panel => { byId(panel).hidden = panel !== id; });
+  byId('author-steps').hidden = !['selection-panel', 'preview-panel', 'generation-panel', 'ready-panel', 'failure-panel'].includes(id);
+  const current = id === 'selection-panel' ? 0 : id === 'preview-panel' ? 1 : 2;
+  for (const item of document.querySelectorAll('[data-flow-step]')) {
+    const number = Number(item.dataset.flowStep);
+    item.className = number === current ? 'current' : number < current ? 'complete' : '';
+    item.setAttribute('aria-current', number === current ? 'step' : 'false');
+  }
+}
 function render() {
-  const state = author.currentState;
-  if (state === 'MODE_SELECTION') {
-    const entryPanels = { SPLASH: 'splash-panel', ACTIVITY: 'activity-panel',
-      COURT: 'court-entry-panel', MODE: 'mode-panel', HELP: 'help-panel',
-      SETTINGS: 'settings-panel' };
-    showPanel(entryPanels[entryView] ?? 'splash-panel');
-    if (entryView === 'COURT') renderSavedGames();
-  }
-  else if (state === 'MANUAL_CONFIGURATION') {
-    if (author.canCancel) {
-      showPanel('generation-panel'); renderProgress('generation-progress'); renderDetails('detail-list');
-      byId('cancel').disabled = false; byId('generation-message').textContent = 'Scenario条件を確認しています…';
-    } else { showPanel('manual-panel'); renderDetails('manual-detail-list'); showManualStep(manualStep); }
-    byId('manual-create').disabled = !initializationReady || author.canCancel; byId('manual-back').disabled = author.canCancel;
-  }
-  else if (state === 'MAKOTOMARU_CONFIGURATION') {
-    if (author.canCancel) {
-      showPanel('generation-panel'); renderProgress('generation-progress'); renderDetails('detail-list');
-      byId('cancel').disabled = false; byId('generation-message').textContent = '真実丸が事件Scenarioを考えています…';
-    } else showPanel('makotomaru-panel');
-    byId('makotomaru-create').disabled = !initializationReady || author.canCancel; byId('makotomaru-back').disabled = author.canCancel;
-  }
-  else if (state === 'SCENARIO_PREVIEW') { showPanel('preview-panel'); renderPreview(); }
+  const state = author?.currentState ?? 'MODE_SELECTION';
+  if (author?.canCancel) {
+    showPanel('generation-panel'); renderProgress('generation-progress'); renderDetails('detail-list');
+    byId('generation-message').textContent = state.includes('REVIEW') || state.includes('VALIDAT')
+      ? '攻撃経路と調査方法を確認しています…' : '選択した攻撃と舞台からゲームを作成しています…';
+  } else if (state === 'SCENARIO_PREVIEW') { showPanel('preview-panel'); renderPreview(); }
   else if (state === 'READY') {
     showPanel('ready-panel'); renderProgress('ready-progress'); byId('play-game').href = author.playUrl;
     byId('ready-save-status').textContent = author.saved
       ? '✓ このゲームはローカルに保存されました。「裁判」の一覧からいつでも開始できます。'
       : 'ゲームの保存状態を確認しています…';
+  } else if (['FAILED', 'CANCELLED'].includes(state)) {
+    showPanel('failure-panel'); byId('failure-message').textContent = author.failure?.message ?? '生成を中止しました。';
+    renderDetails('failure-details');
+  } else {
+    const entryPanels = { SPLASH: 'splash-panel', ACTIVITY: 'activity-panel', COURT: 'court-entry-panel',
+      SELECTION: 'selection-panel', HELP: 'help-panel', SETTINGS: 'settings-panel' };
+    showPanel(state === 'MODE_SELECTION' ? entryPanels[entryView] ?? 'splash-panel' : 'selection-panel');
+    if (entryView === 'COURT') renderSavedGames();
   }
-  else if (['FAILED', 'CANCELLED'].includes(state)) { showPanel('failure-panel'); byId('failure-message').textContent = author.failure?.message ?? '生成を中止しました。'; renderDetails('failure-details'); }
-  else { showPanel('generation-panel'); renderProgress('generation-progress'); renderDetails('detail-list');
-    byId('cancel').disabled = !author.canCancel; byId('generation-message').textContent = state === 'MAKOTOMARU_CONFIGURATION'
-      ? '真実丸が事件Scenarioを考えています…' : state.includes('REVIEW') || state.includes('VALIDAT') ? '攻撃経路と調査方法を確認しています…' : 'Contractに沿ってゲームを構築しています…'; }
-  renderOverallProgress();
-  if (!author.canCancel && polling) { clearInterval(polling); polling = null; }
+  syncControls();
+  if (!author?.canCancel && polling) { clearInterval(polling); polling = null; }
 }
-
-async function refresh() { try { author = (await api('/api/author/status')).author; render(); }
-  catch (error) {
-    byId('manual-errors').textContent = error.message;
-    byId('generation-message').textContent = `状態の更新またはゲームの保存に失敗しました。${error.message}`;
-  } }
-function beginPolling() { polling ??= setInterval(refresh, 400); }
-async function postAuthor(path, body = {}) { requireInitialized(); const value = await api(path, body); author = value.author; render(); if (author.canCancel) beginPolling(); }
-
-async function chooseMode(mode) {
-  try { if (mode === 'MANUAL') manualStep = 0;
-    await postAuthor('/api/author/select-mode', { mode }); }
-  catch (error) { const notice = byId('initialization-status'); notice.hidden = false; notice.textContent = error.message; }
+async function refresh() {
+  if (pollingRequest || submitting) return;
+  pollingRequest = true;
+  try { author = (await api('/api/author/status')).author; render(); }
+  catch (error) { showError(error.message); byId('generation-message').textContent = '状態の更新に失敗しました。' + error.message; }
+  finally { pollingRequest = false; }
+}
+async function postAuthor(path, body = {}) {
+  if (submitting) return;
+  requireInitialized(); submitting = true; syncControls(); showError('');
+  try {
+    author = (await api(path, body)).author;
+    if (author.canCancel) polling ??= setInterval(refresh, 400);
+  } catch (error) { showError(error.message); }
+  finally { submitting = false; render(); }
 }
 function bindAuthorControls() {
 byId('game-start').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
 byId('activity-back').addEventListener('click', () => { entryView = 'SPLASH'; render(); });
-byId('choose-creation').addEventListener('click', () => { entryView = 'MODE'; render(); });
+byId('choose-creation').addEventListener('click', () => { entryView = 'SELECTION'; render(); });
 byId('choose-court').addEventListener('click', async () => { entryView = 'COURT'; render(); await loadSavedGames(); });
 byId('court-entry-back').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
-byId('court-create-game').addEventListener('click', () => { entryView = 'MODE'; render(); });
-byId('mode-flow-back').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
+byId('court-create-game').addEventListener('click', () => { entryView = 'SELECTION'; render(); });
 byId('menu-help').addEventListener('click', () => { byId('app-menu').open = false; entryView = 'HELP'; render(); });
 byId('menu-settings').addEventListener('click', () => {
   byId('app-menu').open = false; const settings = readSettings();
@@ -713,112 +400,42 @@ for (const [id, saveData] of [['exit-save', true], ['exit-without-save', false]]
     }
   });
 }
-byId('choose-manual').addEventListener('click', () => chooseMode('MANUAL'));
-byId('choose-makotomaru').addEventListener('click', () => chooseMode('MAKOTOMARU'));
-byId('manual-back').addEventListener('click', () => { entryView = 'MODE'; author.currentState = 'MODE_SELECTION'; render(); });
-byId('manual-previous').addEventListener('click', () => showManualStep(manualStep - 1));
-byId('manual-next').addEventListener('click', () => {
-  if (manualStep === 1 && !document.querySelector('input[name="attack"]:checked')) {
-    byId('manual-errors').textContent = '攻撃手法を1つ以上選択してください。'; return;
-  }
-  showManualStep(manualStep + 1);
-});
-byId('makotomaru-back').addEventListener('click', () => { entryView = 'MODE'; author.currentState = 'MODE_SELECTION'; render(); });
-byId('manual-create').addEventListener('click', async () => { byId('manual-errors').replaceChildren(); try {
-  if (manualStep !== 7) return;
-  await postAuthor('/api/author/manual', { configuration: collectConfiguration() });
-  if (author.configurationValidation?.status === 'INVALID') for (const item of author.configurationValidation.errors) text(byId('manual-errors'), 'p', `${item.code} — ${item.field}: ${item.reason}`);
-} catch (error) { byId('manual-errors').textContent = error.message; } });
-byId('makotomaru-create').addEventListener('click', async () => { try { await postAuthor('/api/author/makotomaru', { request: {
-  schemaVersion: '1.0', difficulty: Number(byId('makotomaru-difficulty').value), attackCategory: byId('attack-category').value, complexity: byId('complexity').value } });
-} catch (error) { byId('makotomaru-error').textContent = error.message; } });
-byId('preview-approve').addEventListener('click', () => postAuthor('/api/author/approve'));
-byId('preview-reject').addEventListener('click', () => postAuthor('/api/author/reject'));
-byId('preview-regenerate').addEventListener('click', () => postAuthor('/api/author/regenerate'));
-byId('cancel').addEventListener('click', () => postAuthor('/api/author/cancel'));
-byId('ready-back').addEventListener('click', async () => {
-  try { entryView = 'ACTIVITY'; await postAuthor('/api/author/menu'); }
-  catch (error) { byId('ready-save-status').textContent = error.message; }
-});
-byId('retry').addEventListener('click', () => { entryView = 'MODE'; author.currentState = 'MODE_SELECTION'; render(); });
 
-for (const kind of Object.keys(itemIndexes)) {
-  byId(`${kind}-previous`).addEventListener('click', () => {
-    if (kind !== 'attack-details') syncNetworkModel();
-    itemIndexes[kind]--; updateItemPager(kind); resetManualScroll();
+  byId('selection-back').addEventListener('click', async () => {
+    entryView = 'ACTIVITY'; await postAuthor('/api/author/menu');
   });
-  byId(`${kind}-next`).addEventListener('click', () => {
-    if (kind !== 'attack-details') syncNetworkModel();
-    itemIndexes[kind]++; updateItemPager(kind); resetManualScroll();
+  for (let index = 0; index < 3; index++) byId('attack-' + (index + 1)).addEventListener('change', () => changeAttack(index));
+  byId('setting').addEventListener('change', () => { showError(''); syncControls(); });
+  byId('create-scenario').addEventListener('click', async () => {
+    if (!initialized || submitting || author?.canCancel || !validSelectedPath()) return;
+    const settingId = byId('setting').value;
+    if (!bootstrap.settings.some(item => item.id === settingId)) { showError('登録された舞台を選択してください。'); return; }
+    await postAuthor('/api/author/selection', { request: { schemaVersion: '1.0', attackIds: selectedIds(), settingId } });
   });
+  byId('preview-approve').addEventListener('click', () => author?.canApprove && postAuthor('/api/author/approve'));
+  byId('preview-reject').addEventListener('click', () => author?.canApprove && postAuthor('/api/author/reject'));
+  byId('cancel').addEventListener('click', () => author?.canCancel && postAuthor('/api/author/cancel'));
+  byId('ready-back').addEventListener('click', async () => { entryView = 'ACTIVITY'; await postAuthor('/api/author/menu'); });
+  byId('retry').addEventListener('click', async () => { entryView = 'SELECTION'; await postAuthor('/api/author/menu'); });
 }
-byId('add-subnet').addEventListener('click', () => { syncNetworkModel(); const n = networkModel.subnets.length + 1;
-  networkModel.subnets.push({ subnetId: `subnet-${n}`, label: `Subnet ${n}`, cidr: `10.${n}.0.0/24`, trustBoundaryId: `zone-${n}` }); itemIndexes.subnet = networkModel.subnets.length - 1;
-  renderNetworkBuilder(); renderAttackDetails(); });
-byId('add-node').addEventListener('click', () => { syncNetworkModel(); const n = networkModel.nodes.length + 1;
-  networkModel.nodes.push({ nodeId: `node-${n}`, label: `Node ${n}`, nodeType: 'SERVER', os: 'linux', ip: `10.10.0.${n + 50}`, subnetId: networkModel.subnets[0]?.subnetId ?? 'subnet-1', trustBoundaryId: networkModel.subnets[0]?.trustBoundaryId ?? 'zone-1', roles: ['server'], logSources: ['APPLICATION_LOG'] }); itemIndexes.node = networkModel.nodes.length - 1;
-  renderNetworkBuilder(); renderAttackDetails(); });
-byId('add-service').addEventListener('click', () => { syncNetworkModel(); const n = networkModel.services.length + 1;
-  networkModel.services.push({ serviceId: `service-${n}`, nodeId: networkModel.nodes[0]?.nodeId ?? 'node-1', label: `Service ${n}`, serviceType: 'logging', platform: 'logging' }); itemIndexes.service = networkModel.services.length - 1;
-  renderNetworkBuilder(); renderAttackDetails(); });
-byId('add-connection').addEventListener('click', () => { syncNetworkModel(); networkModel.connections.push({ fromNodeId: networkModel.nodes[0]?.nodeId ?? '', toNodeId: networkModel.nodes[1]?.nodeId ?? '' });
-  itemIndexes.connection = networkModel.connections.length - 1; renderNetworkBuilder(); renderAttackDetails(); });
-byId('network-preset').addEventListener('change', () => {
-  const selected = bootstrap.networkPresets?.find(item => item.id === byId('network-preset').value);
-  byId('network-preset-description').textContent = selected?.description ?? '';
-});
-byId('apply-network-preset').addEventListener('click', () => {
-  const selected = bootstrap.networkPresets?.find(item => item.id === byId('network-preset').value);
-  if (!selected) return;
-  activeNetworkPresetId = selected.id; networkModel = structuredClone(selected.network);
-  for (const key of Object.keys(itemIndexes)) if (key !== 'attack-details') itemIndexes[key] = 0;
-  const incidentDate = byId('incident-date').value;
-// 2026-09-20 修正前: 構成変更後も利用者の攻撃選択順を維持
-//   const selectedIds = new Set([...document.querySelectorAll('input[name="attack"]:checked')]
-//     .map(item => item.value));
-//   const defaults = selected.attackDefaults.filter(item => selectedIds.has(item.attackId))
-//     .map((item, index) => ({ ...item, order: index + 1,
-//       occurrenceTime: `${incidentDate}${item.occurrenceTime.slice(10)}` }));
-//
-// 2026-09-20 修正後: 構成変更後も利用者の攻撃選択順を維持
-  const selectedIds = [...byId('attack-details').querySelectorAll('[data-attack-id]')].map(card => card.dataset.attackId);
-  const defaults = selectedIds.map((id, index) => {
-    const item = selected.attackDefaults.find(attack => attack.attackId === id);
-    return { ...(item ?? { attackId: id, investigationTypes: [],
-      evidenceAnswer: bootstrap.attacks.find(a => a.id === id).authoring?.evidenceAnswer ?? '' }),
-      order: index + 1, occurrenceTime: initialAttackTime(index) + ':00+09:00' };
-  });
-  byId('attack-details').replaceChildren();
-  renderNetworkBuilder(); renderAttackDetails(defaults);
-});
-byId('incident-date').addEventListener('change', () => renderAttackDetails());
-for (const id of ['subnet-rows', 'node-rows', 'service-rows', 'connection-rows']) {
-  byId(id).addEventListener('input', () => { syncNetworkModel(); drawNetwork('manual-network-diagram', networkModel); });
-}
-}
-
 try {
   applySettings(readSettings());
   setInitializationState(false, '初期設定を読み込んでいます…');
   bindAuthorControls();
-  const value = await api('/api/author/start', {}); token = value.token; bootstrap = value.bootstrap;
-  const preset = readInitialConfiguration(bootstrap); author = value.author;
-  networkModel = structuredClone(preset.network);
-  activeNetworkPresetId = bootstrap.networkPresets?.find(item =>
-    JSON.stringify(item.network) === JSON.stringify(preset.network))?.id ?? null;
-  byId('manual-difficulty').value = String(preset.difficulty);
-  for (const [id, field] of [['incident-date', 'incidentDate'], ['organization-name', 'organizationName'],
-    ['victim-system', 'victimSystem'], ['accused-role', 'accusedRole'], ['suspicion-reason', 'initialSuspicionReason']]) {
-    byId(id).value = preset.incidentContext[field];
+  const value = await api('/api/author/start', {}); token = value.token;
+  validateBootstrap(value.bootstrap); bootstrap = value.bootstrap; author = value.author;
+  renderChoices();
+  const request = author.selection?.request;
+  if (request && bootstrap.attackSelectionPaths.some(path => path.length === request.attackIds.length && matchesPrefix(path, request.attackIds))
+    && bootstrap.settings.some(item => item.id === request.settingId)) {
+    selectedAttacks = [...request.attackIds]; byId('setting').value = request.settingId; renderAttackSteps();
   }
-  renderAttackOptions(); const selectedAttacks = new Set(preset.attacks.map(attack => attack.attackId));
-  for (const control of document.querySelectorAll('input[name="attack"]')) {
-    control.checked = selectedAttacks.has(control.value);
-  }
-  renderNetworkPresetPicker(); renderNetworkBuilder(); renderAttackDetails(preset.attacks); requireRenderedConfiguration();
   setInitializationState(true); render();
+  if (author.canCancel) polling ??= setInterval(refresh, 400);
 } catch (error) {
-  const message = error.message.includes(initializationHelp) ? error.message : `${error.message} ${initializationHelp}`;
-  setInitializationState(false, `初期設定の読み込みに失敗しました。${message}`);
+  initialized = false;
+  byId('initialization-status').hidden = false;
+  byId('initialization-status').textContent = '初期設定の読み込みに失敗しました。' + error.message + ' ' + initializationHelp;
   showPanel('splash-panel');
+  for (const id of ['choose-creation', 'court-create-game', 'create-scenario']) if (byId(id)) byId(id).disabled = true;
 }

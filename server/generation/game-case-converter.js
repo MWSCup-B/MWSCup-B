@@ -23,12 +23,14 @@ export function buildGameProgressionPlan({ scenarioId, evidenceSetId, attackGrap
   initialCourtEvidenceIds, initialCourtStatementIds, investigationEvidenceIds,
   investigationActions, investigationTargets, evidenceDiscoveryRules, initialAvailableTargetIds,
   retrialStatementIds, returnToCourtCondition, courtRoundCount = 1, courtIssueMode,
-  objectionRules, retryPolicy, publicMessages }) {
+  courtQuestions, investigationMode, objectionRules, retryPolicy, publicMessages }) {
   const core = structuredClone({ scenarioId, evidenceSetId, attackGraphRef,
     initialCourtEvidenceIds, initialCourtStatementIds, investigationEvidenceIds,
     investigationActions, investigationTargets, evidenceDiscoveryRules, initialAvailableTargetIds,
     retrialStatementIds, returnToCourtCondition, courtRoundCount,
     ...(courtIssueMode ? { courtIssueMode } : {}),
+    ...(courtQuestions ? { courtQuestions } : {}),
+    ...(investigationMode ? { investigationMode } : {}),
     objectionRules, retryPolicy, publicMessages });
   const fingerprint = digest(core);
   return validateGameProgressionPlan({ schemaVersion: '1.0',

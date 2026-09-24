@@ -52,6 +52,7 @@ test('canonical schema object自体をmutationしない', () => {
 
 for (const [key, expectedName] of [
   ['scenario', 'scenario-import-package'],
+  ['scenarioRevision', 'scenario-revision'],
   ['review', 'scenario-verification-review'],
   ['evidence', 'evidence-import-package'],
   ['evidenceDraft', 'evidence-generation-draft'],

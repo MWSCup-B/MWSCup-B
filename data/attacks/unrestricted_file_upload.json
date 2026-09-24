@@ -1,0 +1,238 @@
+{
+  "schemaVersion": "1.0",
+  "id": "unrestricted_file_upload",
+  "label": "不正ファイルアップロード",
+  "category": "web_upload",
+  "description": "内容検証が不足したアップロード機能で、本来許可しないファイルが保存される限定モデル。保存領域は非実行であり、Webシェル実行・OS権限取得・Stored XSSは追加条件なしには発生しない。",
+  "supportedInvestigationTypes": [
+    "WEB_LOG",
+    "APPLICATION_LOG",
+    "FILE",
+    "CONFIGURATION"
+  ],
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "source",
+      "kind": "node"
+    },
+    {
+      "id": "web_host",
+      "kind": "node"
+    },
+    {
+      "id": "web",
+      "kind": "service"
+    },
+    {
+      "id": "files",
+      "kind": "service"
+    },
+    {
+      "id": "request",
+      "kind": "entity"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    },
+    {
+      "binding": "request",
+      "values": [
+        "web_request"
+      ]
+    }
+  ],
+  "requiredRoles": [
+    {
+      "binding": "web_host",
+      "values": [
+        "web_server"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "web",
+      "values": [
+        "web"
+      ]
+    },
+    {
+      "binding": "files",
+      "values": [
+        "file"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "web",
+      "node": "web_host",
+      "values": [
+        "web_application"
+      ]
+    },
+    {
+      "binding": "files",
+      "node": "web_host",
+      "values": [
+        "file"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "vulnerabilities",
+      "predicate": "upload_validation_inadequate",
+      "args": [
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該アップロード機能の許可形式と内容の検査に不足があり、許可外の内容を受け入れる。拡張子だけの判定は十分でない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "upload_access_permitted",
+      "args": [
+        "$attacker",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "当該アップロード機能の認証・認可条件を満たす。教材は投稿用の初期権限を明示するが、管理者権限は付与しない。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "upload_request_submitted",
+      "args": [
+        "$attacker",
+        "$source",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "許可外の教材ファイルを含む対象要求が送信される。ファイル内容は実行しない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "upload_storage_writable",
+      "args": [
+        "$web",
+        "$files"
+      ],
+      "value": true,
+      "description": "アップロード処理のサービス主体が限定された保存領域へ書き込める。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "upload_storage_non_executable",
+      "args": [
+        "$web",
+        "$files"
+      ],
+      "value": true,
+      "description": "本教材の保存領域は非実行。アップロードをサーバー上のコード実行と同一視しない。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_node",
+      "args": [
+        "$attacker",
+        "$source"
+      ],
+      "value": true,
+      "description": "攻撃主体が送信元を制御できる。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "source",
+      "toService": "web",
+      "description": "送信元からアップロード先のWebサービスに到達する。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "disallowed_file_stored",
+      "args": [
+        "$attacker",
+        "$web",
+        "$files",
+        "$request"
+      ],
+      "value": true,
+      "description": "許可外ファイルが対象領域へ保存される。保存成功は実行成功やサーバーの乗っ取りを意味しない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "upload_receipt_record",
+      "description": "アップロード監査。時刻、要求ID、申告ファイル名・Content-Type、受入れ結果、保存ID。申告値は送信者が指定した未信頼情報で、実際の種類と区別する。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "upload_receipt_record_available",
+          "args": [
+            "$web"
+          ],
+          "value": true,
+          "description": "この教材では対象の計測・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+        }
+      ]
+    },
+    {
+      "id": "uploaded_file_record",
+      "description": "保存ファイルの調査記録。保存ID、保存時刻、ハッシュ、内容検査で確認した形式と許可外判定、非実行の保存先設定。実行できるファイル本体は含めず、拡張子や申告MIMEだけで内容を決めない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "uploaded_file_record_available",
+          "args": [
+            "$files"
+          ],
+          "value": true,
+          "description": "この教材では対象の計測・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "OWASP Unrestricted File Upload"
+  ],
+  "references": [
+    {
+      "id": "owasp_file_upload",
+      "title": "OWASP File Upload Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html",
+      "supports": "アップロード形式・内容・権限・保存場所の検証。保存からコード実行への追加条件を区別する。"
+    },
+    {
+      "id": "owasp_logging",
+      "title": "OWASP Logging Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "supports": "取得・保持・記録範囲の明示と秘密値の除外。製品の既定記録は保証しない。"
+    }
+  ],
+  "stages": [
+    "INITIAL_ACCESS"
+  ],
+  "authoring": {
+    "sourceNodeBinding": "source",
+    "targetServiceBinding": "web",
+    "investigationServiceBinding": "web",
+    "preferredInvestigationType": "APPLICATION_LOG",
+    "evidenceAnswer": "アップロード監査。時刻、要求ID、申告ファイル名・Content-Type、受入れ結果、保存ID。申告値は送信者が指定した未信頼情報で、実際の種類と区別する。 / 保存ファイルの調査記録。保存ID、保存時刻、ハッシュ、内容検査で確認した形式と許可外判定、非実行の保存先設定。実行できるファイル本体は含めず、拡張子や申告MIMEだけで内容を決めない。"
+  }
+}

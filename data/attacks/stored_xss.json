@@ -1,0 +1,315 @@
+{
+  "schemaVersion": "1.0",
+  "id": "stored_xss",
+  "label": "Stored XSS",
+  "category": "web_injection",
+  "description": "保存した投稿が後の閲覧応答で実行可能なスクリプトとして解釈される範囲。投稿権限、永続化、出力時の防御不足、閲覧、実行制御を分離する。資格情報窃取やOS侵害を効果にしない。",
+  "supportedInvestigationTypes": [
+    "APPLICATION_LOG",
+    "WEB_LOG",
+    "DEVICE",
+    "CONFIGURATION"
+  ],
+  "bindings": [
+    {
+      "id": "source",
+      "kind": "node"
+    },
+    {
+      "id": "client",
+      "kind": "node"
+    },
+    {
+      "id": "web_host",
+      "kind": "node"
+    },
+    {
+      "id": "browser",
+      "kind": "service"
+    },
+    {
+      "id": "web",
+      "kind": "service"
+    },
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "victim",
+      "kind": "entity"
+    },
+    {
+      "id": "request",
+      "kind": "entity"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    },
+    {
+      "binding": "victim",
+      "values": [
+        "user"
+      ]
+    },
+    {
+      "binding": "request",
+      "values": [
+        "web_request"
+      ]
+    }
+  ],
+  "requiredRoles": [
+    {
+      "binding": "client",
+      "values": [
+        "workstation"
+      ]
+    },
+    {
+      "binding": "web_host",
+      "values": [
+        "web_server"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "browser",
+      "values": [
+        "browser"
+      ]
+    },
+    {
+      "binding": "web",
+      "values": [
+        "web"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "browser",
+      "values": [
+        "web_browser"
+      ],
+      "node": "client"
+    },
+    {
+      "binding": "web",
+      "values": [
+        "web_application"
+      ],
+      "node": "web_host"
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "otherConditions",
+      "predicate": "stored_payload_precedes_retrieval",
+      "args": [
+        "$attacker",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "投稿権限を得た攻撃者が構成した投稿の保存は、当該閲覧リクエストより前に完了している。攻撃発生日時は閲覧時の実行時点であり、投稿日時とは別である。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "request_targets_service",
+      "args": [
+        "$request",
+        "$web"
+      ],
+      "value": true,
+      "description": "保存投稿の閲覧リクエストの対象はこのWebサービスである。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "user_uses_browser",
+      "args": [
+        "$victim",
+        "$browser"
+      ],
+      "value": true,
+      "description": "抽象的利用者がこのブラウザを利用する教材条件。被告人との同一性は設定しない。"
+    },
+    {
+      "source": "vulnerabilities",
+      "predicate": "stored_content_rendered_as_script",
+      "args": [
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "投稿内容を永続化した後、閲覧応答に適切なエンコード・サニタイズなしで挿入する欠陥がある。単なる文字列保存ではない。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "browser_request_issued",
+      "args": [
+        "$victim",
+        "$browser",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "保存後に利用者が閲覧リクエストを送る。前段のメール誘導効果または明示閲覧条件が必要。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "script_execution_permitted",
+      "args": [
+        "$browser",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "対象応答のスクリプトがブラウザ設定や実効CSPで阻止されない。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "request_access_permitted",
+      "args": [
+        "$victim",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "閲覧リクエストの認証・認可条件を満たす。投稿者と閲覧者を同一人物とみなさない。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "can_store_content",
+      "args": [
+        "$attacker",
+        "$web"
+      ],
+      "value": true,
+      "description": "投稿・保存権限がある。前段の不正ログイン効果または明示初期条件で確認する。"
+    },
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_node",
+      "args": [
+        "$attacker",
+        "$source"
+      ],
+      "value": true,
+      "description": "攻撃者が投稿元ノードを操作できる。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "source",
+      "toService": "web",
+      "description": "投稿元から保存先Webサービスへの到達性。"
+    },
+    {
+      "from": "client",
+      "toService": "web",
+      "description": "閲覧端末から保存投稿への到達性。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "script_executed_in_origin",
+      "args": [
+        "$attacker",
+        "$victim",
+        "$browser",
+        "$web",
+        "$request"
+      ],
+      "value": true,
+      "description": "保存済み投稿に由来するスクリプトが閲覧ブラウザの対象Webオリジンで実行される。資格情報窃取、OS権限、DB権限は含まない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "stored_content_record",
+      "description": "合成投稿の保存・取得内容と識別子の監査資料。非実行ソース抜粋と閲覧対象の対応を示す。保存だけでは実行の証明にならない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "stored_content_record_available",
+          "args": [
+            "$web",
+            "$request"
+          ],
+          "value": true,
+          "description": "対象記録の計測・保持・調査での取得が明示的に有効。秘密値は保持しない。"
+        }
+      ]
+    },
+    {
+      "id": "web_access_record",
+      "description": "対象リクエストのアクセス記録。取得設定と保持が確認された場合のみ候補にする。これだけではスクリプト実行や実際の操作者を断定できない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "access_record_available",
+          "args": [
+            "$web",
+            "$request"
+          ],
+          "value": true,
+          "description": "対象リクエストが記録対象で、必要な時刻・対象情報を含むアクセス記録が取得・保持されている。"
+        }
+      ]
+    },
+    {
+      "id": "browser_execution_record",
+      "description": "保存投稿の実行を識別できるブラウザ計測。アクセスログ、履歴、CSP違反を実行成功へ置き換えない。",
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "script_execution_record_available",
+          "args": [
+            "$browser",
+            "$web",
+            "$request"
+          ],
+          "value": true,
+          "description": "対象記録の計測・保持・調査での取得が明示的に有効。秘密値は保持しない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "OWASP Stored XSS"
+  ],
+  "references": [
+    {
+      "id": "owasp_stored_xss",
+      "title": "OWASP: Cross Site Scripting (Stored XSS)",
+      "url": "https://community.owasp.org/attacks/xss/",
+      "supports": "保存された攻撃入力を後で取得した利用者のブラウザで実行する仕組み。保存・閲覧・実行を分け、資格情報窃取は別条件とする。"
+    },
+    {
+      "id": "owasp_logging",
+      "title": "OWASP Logging Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "supports": "observableArtifacts: ログの取得内容・取得設定・保持を個別に確認する原則。製品固有のイベントIDや既定記録は保証しない。"
+    }
+  ],
+  "stages": [
+    "EXECUTION"
+  ],
+  "authoring": {
+    "sourceNodeBinding": "source",
+    "targetServiceBinding": "web",
+    "investigationServiceBinding": "web",
+    "preferredInvestigationType": "APPLICATION_LOG",
+    "evidenceAnswer": "合成投稿の保存・取得内容と識別子の監査資料。非実行ソース抜粋と閲覧対象の対応を示す。保存だけでは実行の証明にならない。 / 対象リクエストのアクセス記録。取得設定と保持が確認された場合のみ候補にする。これだけではスクリプト実行や実際の操作者を断定できない。 / 保存投稿の実行を識別できるブラウザ計測。アクセスログ、履歴、CSP違反を実行成功へ置き換えない。"
+  }
+}

@@ -1,1 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="t"><title id="t">オリジナル法廷背景</title><defs><linearGradient id="g" y2="1"><stop stop-color="#18324a"/><stop offset="1" stop-color="#08121f"/></linearGradient></defs><rect width="1600" height="900" fill="url(#g)"/><path d="M0 650h1600v250H0z" fill="#4b3027"/><path d="M580 170h440v230H580z" fill="#2a4357" stroke="#d6b16b" stroke-width="8"/><path d="M500 520h600l100 180H400z" fill="#6a4030" stroke="#2a1c19" stroke-width="10"/><g fill="#d6b16b" opacity=".35"><rect x="120" y="100" width="24" height="490"/><rect x="1456" y="100" width="24" height="490"/><rect x="280" y="100" width="14" height="410"/><rect x="1306" y="100" width="14" height="410"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="t d">
+  <title id="t">記録審理室の法廷</title>
+  <desc id="d">青緑の壁面、縦長の採光窓、銅色の装飾と木製の机を持つ、人物を含まないオリジナルの法廷背景。</desc>
+  <defs>
+    <linearGradient id="wall" x2="0" y2="1"><stop stop-color="#294d59"/><stop offset="1" stop-color="#102631"/></linearGradient>
+    <linearGradient id="light" x2="0" y2="1"><stop stop-color="#b9d5ce"/><stop offset="1" stop-color="#527c85"/></linearGradient>
+    <linearGradient id="wood" x2="0" y2="1"><stop stop-color="#866749"/><stop offset="1" stop-color="#342b27"/></linearGradient>
+    <pattern id="panels" width="200" height="900" patternUnits="userSpaceOnUse"><path d="M20 120h160v440H20z" fill="none" stroke="#62808a" stroke-width="3"/><path d="M30 130h140v420H30z" fill="none" stroke="#1b3844" stroke-width="2"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="url(#wall)"/>
+  <rect width="1600" height="640" fill="url(#panels)"/>
+  <path d="M0 65h1600v24H0zM0 592h1600v14H0z" fill="#ac8c63"/>
+  <g fill="url(#light)" stroke="#c1a878" stroke-width="7">
+    <path d="M88 175q95-70 190 0v327H88z"/><path d="M1322 175q95-70 190 0v327h-190z"/>
+  </g>
+  <g stroke="#3b606c" stroke-width="9"><path d="M183 140v362M88 275h190M88 385h190M1417 140v362M1322 275h190M1322 385h190"/></g>
+  <path d="M608 180h384v300H608z" fill="#16333e" stroke="#ae9167" stroke-width="5"/>
+  <path d="M682 292l118-66 118 66-118 66zM718 359l82 46 82-46" fill="none" stroke="#b8a17c" stroke-width="6"/>
+  <path d="M0 624h1600v276H0z" fill="url(#wood)"/>
+  <g fill="none" stroke="#bd9c6c" stroke-width="3" opacity=".55"><path d="M30 658h220v190H30zM290 658h220v190H290zM550 658h220v190H550zM810 658h220v190H810zM1070 658h220v190h-220zM1330 658h240v190h-240z"/></g>
+  <path d="M0 610h1600v28H0z" fill="#c2a47a"/><path d="M0 638h1600v17H0z" fill="#1d2226"/>
+</svg>

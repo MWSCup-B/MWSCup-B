@@ -6,6 +6,8 @@ import { findIncorrectObjectionPair, validateGameCaseResult } from './game-case-
 import { digest, sameValues, validateEvidenceSet } from './evidence-validator.js';
 import { validateScenarioVerificationResult } from './scenario-verifier.js';
 import { ValidationError, fail, validateDocument } from './schema.js';
+import { correctCourtChoiceId, publicCourtQuestion } from './court-questions.js';
+import { isSequential, stageEvidenceIds } from './sequential-investigation.js';
 
 const CATEGORIES = ['UPSTREAM_INTEGRITY', 'NORMAL_PLAYTHROUGH', 'RETRY_PLAYTHROUGH',
   'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY', 'INVESTIGATION_DISCLOSURE',
@@ -100,11 +102,15 @@ function allStatements(publicCase) {
 function correctPair(gameCase, round = 1) {
   const issue = gameCase.progression.courtIssues?.[round - 1];
   const rule = gameCase.judgment.judgmentRules.find(item => !issue || issue.judgmentRuleIds.includes(item.ruleId));
-  return rule && { statementId: rule.targetStatementId, evidenceId: rule.acceptedEvidenceIds[0] };
+  return rule && { statementId: rule.targetStatementId, evidenceId: rule.acceptedEvidenceIds[0],
+    ...(issue?.question ? { interpretationChoiceId: correctCourtChoiceId(issue.question) } : {}) };
 }
 
 function wrongPair(gameCase, publicCase, round = 1) {
   const issue = gameCase.progression.courtIssues?.[round - 1];
+  if (issue?.question) return { ...correctPair(gameCase, round),
+    interpretationChoiceId: publicCourtQuestion(issue.question).choices
+      .find(choice => choice.choiceId !== correctCourtChoiceId(issue.question)).choiceId };
   return findIncorrectObjectionPair({ statementIds: issue?.statementIds ?? allStatements(publicCase),
     presentableEvidenceIds: publicCase.progression.retrialCourt.presentableEvidenceIds,
     objectionRules: gameCase.judgment.judgmentRules.filter(item => !issue || issue.judgmentRuleIds.includes(item.ruleId)) });
@@ -137,18 +143,24 @@ function discoverEvidence(session, runtime, evidenceIds) {
   return [...wanted].every(id => session.discoveredEvidenceIds.includes(id));
 }
 
-function collectForCourt(session, runtime, extraIds = []) {
-  const required = runtime.gameCase.progression.investigation.requiredForCourtIds;
+function returnToCourt(session, runtime, pair = correctPair(runtime.gameCase, session.currentRound)) {
+  return actGenerated(session, runtime, { action: 'retrial',
+    ...(isSequential(runtime.gameCase) ? { interpretationChoiceId: pair.interpretationChoiceId } : {}) });
+}
+
+function collectForCourt(session, runtime, extraIds = [], pair) {
+  const required = isSequential(runtime.gameCase) ? stageEvidenceIds(runtime.gameCase, session.currentRound)
+    : runtime.gameCase.progression.investigation.requiredForCourtIds;
   const ids = [...new Set([...required, ...extraIds])];
   if (!discoverEvidence(session, runtime, ids)) throw new Error('Evidence discovery failed');
   for (const evidenceId of ids) {
     actGenerated(session, runtime, { action: 'collect', evidenceId });
   }
-  actGenerated(session, runtime, { action: 'retrial' });
+  returnToCourt(session, runtime, pair);
 }
 
 function disclosureFree(value) {
-  const forbidden = /^(groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|contradictionRef|exonerationRef|attackGraphRef|provenance|fingerprint|sourceRefs|requirementIds)$/i;
+  const forbidden = /^(groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|contradictionRef|exonerationRef|attackGraphRef|provenance|fingerprint|sourceRefs|requirementIds|correctOptionIndex|correctChoiceId|supportingQuotes)$/i;
   let safe = true;
   const walk = item => {
     if (Array.isArray(item)) item.forEach(walk);
@@ -236,18 +248,18 @@ export function evaluateGame(input) {
     const rounds = runtime.gameCase.progression.courtIssues?.length ?? 1;
     for (let round = 1; round <= rounds; round += 1) {
       const activeWrong = wrongPair(runtime.gameCase, runtime.publicGameCase, round);
-      collectForCourt(session, runtime, [activeWrong.evidenceId]);
+      collectForCourt(session, runtime, [activeWrong.evidenceId], activeWrong);
       const owned = [...session.collectedEvidenceIds];
       if (runtime.gameCase.progression.courtIssues) {
         actGenerated(session, runtime, { action: 'investigation' });
-        actGenerated(session, runtime, { action: 'retrial' });
+        returnToCourt(session, runtime, activeWrong);
         if (session.attemptCount !== 0) throw new Error('Voluntary investigation costs attempt');
       }
       const failed = actGenerated(session, runtime, { action: 'objection', ...activeWrong });
-      const retried = actGenerated(session, runtime, { action: 'retry' });
-      retryPassed &&= failed.currentState === 'GUILTY_RETRY' && retried.currentState === 'INVESTIGATION'
+      const retried = isSequential(runtime.gameCase) ? failed : actGenerated(session, runtime, { action: 'retry' });
+      retryPassed &&= failed.currentState === (isSequential(runtime.gameCase) ? 'INVESTIGATION' : 'GUILTY_RETRY') && retried.currentState === 'INVESTIGATION'
         && retried.currentRound === round && sameValues(owned, session.collectedEvidenceIds);
-      actGenerated(session, runtime, { action: 'retrial' });
+      returnToCourt(session, runtime);
       actGenerated(session, runtime, { action: 'objection', ...correctPair(runtime.gameCase, round) });
     }
   } catch { retryPassed = false; }
@@ -261,7 +273,7 @@ export function evaluateGame(input) {
   if (wrong) try {
     const session = createGeneratedGame(runtime); enterInvestigation(session, runtime);
     for (let attempt = 0; attempt < runtime.gameCase.progression.retryPolicy.maxCourtAttempts; attempt += 1) {
-      collectForCourt(session, runtime, [wrong.evidenceId]);
+      collectForCourt(session, runtime, [wrong.evidenceId], wrong);
       actGenerated(session, runtime, { action: 'objection', ...wrong });
       if (session.currentState === 'GUILTY_RETRY') actGenerated(session, runtime, { action: 'retry' });
     }
@@ -277,7 +289,24 @@ export function evaluateGame(input) {
   try {
     const session = createGeneratedGame(runtime); enterInvestigation(session, runtime);
     const required = runtime.gameCase.progression.investigation.requiredForCourtIds;
-    investigationReachable = discoverEvidence(session, runtime,
+    if (isSequential(runtime.gameCase)) {
+      for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round += 1) {
+        const view = generatedPlayerView(session, runtime);
+        if (view.investigationTargets.length !== 1) throw new Error('Multiple targets exposed');
+        const future = runtime.gameCase.detective.investigationTargets[round];
+        if (future) {
+          let rejected = false;
+          try { actGenerated(session, runtime, { action: 'investigate', targetId: future.targetId,
+            investigationActionId: future.availableActionIds[0] }); }
+          catch (error) { rejected = error.code === 'UNKNOWN_INVESTIGATION_TARGET'; }
+          if (!rejected) throw new Error('Future target opened early');
+        }
+        collectForCourt(session, runtime);
+        actGenerated(session, runtime, { action: 'objection', ...correctPair(runtime.gameCase, round) });
+      }
+      investigationReachable = session.currentState === 'ACQUITTED'
+        && runtime.gameCase.detective.evidence.every(item => session.collectedEvidenceIds.includes(item.evidenceId));
+    } else investigationReachable = discoverEvidence(session, runtime,
       runtime.gameCase.progression.investigation.availableEvidenceIds)
       && required.every(id => session.discoveredEvidenceIds.includes(id));
   } catch { investigationReachable = false; }
@@ -292,22 +321,27 @@ export function evaluateGame(input) {
   try {
     const session = createGeneratedGame(runtime); enterInvestigation(session, runtime);
     const initial = generatedPlayerView(session, runtime);
-    const firstEvidence = runtime.gameCase.progression.investigation.availableEvidenceIds[0];
+    const automatic = isSequential(runtime.gameCase);
+    const opened = automatic ? stageEvidenceIds(runtime.gameCase, 1) : [];
+    const hidden = runtime.gameCase.detective.evidence.filter(item => !opened.includes(item.evidenceId));
+    const firstEvidence = hidden[0]?.evidenceId ?? 'unavailable_evidence';
     let rejected = false;
     try { actGenerated(session, runtime, { action: 'collect', evidenceId: firstEvidence }); }
     catch (error) { rejected = error.code === 'EVIDENCE_NOT_DISCOVERED'; }
-    const hiddenValues = runtime.gameCase.detective.evidence.flatMap(item =>
+    const hiddenValues = hidden.flatMap(item =>
       [item.evidenceId, item.title, item.publicContent]);
     const initialText = JSON.stringify(initial);
     investigationDisclosureSafe = rejected
-      && initial.discoveredEvidence.length === 0
+      && sameValues(initial.discoveredEvidence.map(item => item.evidenceId), opened)
+      && (!automatic || (sameValues(initial.collectedEvidence.map(item => item.evidenceId), opened)
+        && initial.courtQuestion?.choices.length === 4))
       && hiddenValues.every(value => !initialText.includes(value));
   } catch { investigationDisclosureSafe = false; }
   addCheck('INVESTIGATION_DISCLOSURE', investigationDisclosureSafe,
     issue('INVESTIGATION_DISCLOSURE_FAILED', 'INVESTIGATION_DISCLOSURE',
       'generated-game.investigation-view',
-      '未発見Evidenceが公開されたか、調査なしで取得できました。',
-      'UNKNOWN Evidenceを非表示にし、Discovery後だけCollectionを許可してください。',
+      '現在の対象外の未取得資料が公開されたか、今回の資料を取得できません。',
+      '順次調査では現在の対象の資料だけを自動取得し、将来の資料へのアクセスを拒否してください。旧形式ではDiscovery後だけCollectionを許可してください。',
       ['phase9:session-response']));
 
   const publicStatements = new Set(allStatements(runtime.publicGameCase));
@@ -329,6 +363,8 @@ export function evaluateGame(input) {
     && (runtime.gameCase.progression.courtIssues ?? []).every((_, i) => wrongPair(runtime.gameCase, runtime.publicGameCase, i + 1))
     && sameValues(UI_API_CONTRACT.objectionInputs,
     ['statementId', 'evidenceId']) && !answerIds.some(id => feedback.includes(id))
+    && (!runtime.gameCase.progression.courtIssues?.some(item => item.question)
+      || sameValues(UI_API_CONTRACT.interpretationInputs, ['statementId', 'evidenceId', 'interpretationChoiceId']))
     && runtime.gameCase.progression.retryPolicy.maxCourtAttempts > 0
     && runtime.gameCase.detective.investigationTargets.length > 0;
   addCheck('BRUTE_FORCE_RESISTANCE', resistant, issue('INSUFFICIENT_BRUTE_FORCE_RESISTANCE',

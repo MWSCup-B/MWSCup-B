@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scenario Requirement Revision v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "requirementUpdates": {
+      "type": "array", "minItems": 0, "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "requirementId": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "description": { "type": ["string", "null"], "minLength": 1, "maxLength": 2000 },
+          "grounds": {
+            "type": ["array", "null"], "minItems": 1, "maxItems": 32,
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceType": { "enum": ["ATTACK_GRAPH_ARTIFACT", "TIMELINE_EVENT", "GROUND_TRUTH_FACT", "CHARACTER"] },
+                "sourceId": { "type": "string", "minLength": 1, "maxLength": 160 },
+                "attackNodeId": { "type": ["string", "null"], "maxLength": 160 }
+              },
+              "required": ["sourceType", "sourceId", "attackNodeId"], "additionalProperties": false
+            }
+          },
+          "stageText": {
+            "type": ["object", "null"],
+            "properties": {
+              "claim": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "questionFocus": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "expectedInference": { "type": "string", "minLength": 1, "maxLength": 1000 },
+              "limitedRefutation": { "type": "string", "minLength": 1, "maxLength": 1000 }
+            },
+            "required": ["claim", "questionFocus", "expectedInference", "limitedRefutation"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["requirementId", "description", "grounds", "stageText"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "requirementUpdates"], "additionalProperties": false
+}

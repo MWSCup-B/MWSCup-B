@@ -64,9 +64,12 @@
       "minItems": 1,
       "maxItems": 512
     },
-    "returnToCourtCondition": { "enum": ["AT_LEAST_ONE_EVIDENCE_COLLECTED", "ALL_REQUIRED_EVIDENCE_COLLECTED"] },
-    "courtRoundCount": { "enum": [1, 2, 3, 4] },
+    "returnToCourtCondition": { "enum": ["AT_LEAST_ONE_EVIDENCE_COLLECTED", "ALL_REQUIRED_EVIDENCE_COLLECTED", "CURRENT_TARGET_EVIDENCE_COLLECTED"] },
+    "courtRoundCount": { "type": "number" },
+    "investigationMode": { "const": "SEQUENTIAL_TARGETS" },
     "courtIssueMode": { "const": "DISTINCT_CLAIMS" },
+    "courtQuestions": { "type": "array", "minItems": 1, "maxItems": 128,
+      "items": { "type": "object", "additionalProperties": true } },
     "objectionRules": {
       "type": "array",
       "items": {
@@ -102,6 +105,8 @@
     "publicMessages": {
       "type": "object",
       "properties": {
+        "incidentOverview": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "prosecutionOpening": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "initialRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "acquittalRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "acquittalExplanation": { "type": "string", "minLength": 1, "maxLength": 2000 },

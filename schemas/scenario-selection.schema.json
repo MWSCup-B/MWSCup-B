@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ordered Causal Attack and Setting Selection v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "attackIds": { "type": "array", "minItems": 1, "maxItems": 3,
+      "items": { "enum": ["phishing", "stored_xss", "unauthorized_login", "clickfix", "sql_injection", "password_spray", "ransomware", "unrestricted_file_upload"] } },
+    "settingId": { "enum": ["company", "government", "school", "university", "hospital"] }
+  },
+  "required": ["schemaVersion", "attackIds", "settingId"],
+  "additionalProperties": false
+}

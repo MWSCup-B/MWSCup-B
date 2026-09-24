@@ -1,36 +1,44 @@
+// 2026-09-24: mainの外枠とkawata-workの選択フローを合わせて検証。旧テストはdocs/historyにコメント保存。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { autoAuthorBootstrap } from '../server/auto-generation-service.js';
-import { loadCatalog } from '../server/generation/catalog.js';
-import { normalizeScenarioConfiguration, validateScenarioConfiguration }
-  from '../server/generation/scenario-configuration.js';
+import { buildScenarioPreview } from '../server/generation/scenario-configuration.js';
 import { startAuthorDom } from './helpers/author-dom.js';
 
-const catalog = await loadCatalog();
-
-async function advanceToReview(page) {
-  for (let index = 0; index < 7; index++) await page.byId('manual-next').dispatch('click');
+async function choose(page, ids) {
+  page.byId('attack-1').value = ''; await page.byId('attack-1').dispatch('change');
+  for (const [index, id] of ids.entries()) {
+    const control = page.byId(`attack-${index + 1}`);
+    assert.ok(control.children.some(option => option.value === id), `${ids}: ${id}が候補にある`);
+    control.value = id; await control.dispatch('change');
+  }
 }
+const options = (page, index) => page.byId(`attack-${index}`).children.map(option => option.value).filter(Boolean);
 
-test('初期画面はGame Startだけを提示し、用途選択から作成方法へ段階遷移する', async () => {
+test('mainのタイトル・モード選択から攻撃と舞台へ進み、戻っても選択を保持する', async () => {
   const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
   assert.equal(page.byId('splash-panel').hidden, false);
-  assert.equal(page.byId('activity-panel').hidden, true);
-  assert.equal(page.byId('mode-panel').hidden, true);
-  assert.equal(page.byId('game-start').hidden, false);
-  assert.ok(page.byId('ready-back'));
+  assert.equal(page.byId('splash-panel').querySelectorAll('button').length, 1);
+  assert.equal(page.byId('selection-panel').hidden, true);
   await page.byId('game-start').dispatch('click');
-  assert.equal(page.byId('splash-panel').hidden, true);
   assert.equal(page.byId('activity-panel').hidden, false);
+  await page.byId('choose-creation').dispatch('click');
+  assert.equal(page.byId('selection-panel').hidden, false);
+  assert.equal(page.byId('choose-manual'), null);
+  assert.equal(page.byId('choose-makotomaru'), null);
+  await choose(page, ['clickfix', 'ransomware']); page.byId('setting').value = 'school';
+  await page.byId('selection-back').dispatch('click');
+  assert.equal(page.byId('activity-panel').hidden, false);
+  await page.byId('choose-creation').dispatch('click');
+  assert.equal(page.byId('attack-2').value, 'ransomware');
+  assert.equal(page.byId('setting').value, 'school');
+  await page.byId('selection-back').dispatch('click');
   await page.byId('choose-court').dispatch('click');
-  assert.equal(page.byId('court-entry-panel').hidden, false);
   assert.equal(page.byId('court-empty').hidden, false);
   await page.byId('court-create-game').dispatch('click');
-  assert.equal(page.byId('mode-panel').hidden, false);
-  assert.equal(page.byId('choose-manual').disabled, false);
-  assert.deepEqual(page.calls.map(call => call.path), ['/api/author/start', '/api/author/games']);
+  assert.equal(page.byId('selection-panel').hidden, false);
+  assert.ok(!page.calls.some(call => call.path === '/api/author/selection'));
 });
-
 test('裁判画面は保存済みゲームを表示し、起動URLと削除操作を提供する', async () => {
   const gameId = `saved_${'1'.repeat(32)}`;
   const page = startAuthorDom(autoAuthorBootstrap(), { savedGames: [{ gameId,
@@ -90,145 +98,174 @@ test('ゲーム終了は保存確認後にshutdown APIを呼び、終了画面�
   assert.equal(page.byId('shutdown-panel').hidden, false);
 });
 
-test('Author実scriptが4項目と証拠の答えを表示し、入力済みの有効なNetworkを送信する', async () => {
-  const bootstrap = autoAuthorBootstrap(); const page = startAuthorDom(bootstrap); await page.ready;
+test('入力は8種の攻撃と舞台だけで、自動設定項目を送信しない', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
   assert.equal(page.byId('initialization-status').hidden, true);
-  assert.equal(page.byId('choose-manual').disabled, false);
-  for (const [kind, count] of [['subnets', 2], ['nodes', 5], ['services', 4], ['connections', 5]]) {
-    assert.equal(page.document.querySelectorAll(`[data-network-kind="${kind}"]`).length, count);
-  }
-  const cards = page.document.querySelectorAll('[data-attack-id]');
-  assert.equal(cards.length, 1); assert.equal(cards[0].dataset.attackId, 'phishing');
-  assert.equal(cards[0].querySelector('[data-key="evidenceAnswer"]').value,
-    'メール文のリンク先と実際に遷移するリンク先が異なること');
-  await page.byId('choose-manual').dispatch('click');
-  assert.equal(page.document.querySelector('[data-manual-step="0"]').hidden, false);
-  assert.equal(page.document.querySelector('[data-manual-step="1"]').hidden, true);
-  await page.byId('manual-create').dispatch('click', { force: true });
-  assert.equal(page.calls.some(call => call.path === '/api/author/manual'), false);
-  await advanceToReview(page);
-  assert.equal(page.document.querySelector('[data-manual-step="7"]').hidden, false);
-  assert.equal(page.byId('manual-create').hidden, false);
-  await page.byId('manual-create').dispatch('click');
-  const submitted = page.calls.find(call => call.path === '/api/author/manual').body.configuration;
-  assert.deepEqual(submitted.network, bootstrap.defaultManualConfiguration.network);
-  const result = validateScenarioConfiguration(normalizeScenarioConfiguration(submitted, catalog), catalog);
-  assert.equal(result.status, 'VALID', JSON.stringify(result.errors));
+  assert.equal(page.document.querySelectorAll('input').length, 0);
+  assert.equal(page.byId('selection-panel').querySelectorAll('select').length, 4);
+  assert.equal(options(page, 1).length, 8);
+  assert.equal(page.byId('setting').children.length, 5);
+  assert.equal(page.byId('create-scenario').disabled, false);
+  await page.byId('create-scenario').dispatch('click');
+  const submitted = page.calls.find(call => call.path === '/api/author/selection').body;
+  assert.deepEqual(submitted, { request: { schemaVersion: '1.0', attackIds: ['phishing'], settingId: 'company' } });
+  assert.ok(!page.calls.some(call => /manual|makotomaru|approve/.test(call.path)));
 });
 
-test('初期設定応答を待つ間は操作できず、強制呼出しでもnetwork:nullを送信しない', async () => {
+for (const id of ['clickfix', 'sql_injection', 'password_spray', 'ransomware', 'unrestricted_file_upload']) {
+  test(`新しい攻撃 ${id} と学校を選んで送信できる`, async () => {
+    const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
+    await choose(page, [id]); page.byId('setting').value = 'school';
+    await page.byId('create-scenario').dispatch('click');
+    assert.deepEqual(page.calls.at(-1).body.request,
+      { schemaVersion: '1.0', attackIds: [id], settingId: 'school' });
+  });
+}
+test('1→2→3の候補を直前に合わせて絞り、選択順で送信する', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
+  assert.deepEqual(options(page, 2), ['stored_xss', 'unauthorized_login', 'clickfix']);
+  assert.equal(page.byId('attack-step-3').hidden, true);
+  await choose(page, ['phishing', 'clickfix']);
+  assert.deepEqual(options(page, 3), ['ransomware']);
+  assert.equal(page.byId('attack-step-3').hidden, false);
+  await choose(page, ['phishing', 'clickfix', 'ransomware']);
+  assert.equal(page.byId('attack-4'), null);
+  assert.match(page.byId('attack-chain-status').textContent, /最大3件/);
+  await page.byId('create-scenario').dispatch('click');
+  assert.deepEqual(page.calls.at(-1).body.request.attackIds, ['phishing', 'clickfix', 'ransomware']);
+  await choose(page, ['password_spray', 'unauthorized_login']);
+  assert.deepEqual(options(page, 3), ['stored_xss']);
+  page.byId('attack-3').value = 'stored_xss'; await page.byId('attack-3').dispatch('change');
+  await page.byId('create-scenario').dispatch('click');
+  assert.deepEqual(page.calls.at(-1).body.request.attackIds, ['password_spray', 'unauthorized_login', 'stored_xss']);
+});
+test('前段を変えた場合だけ後続を解除し、2件目からの分岐・逆順を候補に出さない', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
+  await choose(page, ['phishing', 'clickfix', 'ransomware']);
+  await page.byId('attack-1').dispatch('change');
+  assert.equal(page.byId('attack-3').value, 'ransomware', '同じ値の再選択なら保持');
+  page.byId('attack-2').value = 'unauthorized_login'; await page.byId('attack-2').dispatch('change');
+  assert.equal(page.byId('attack-3').value, '');
+  assert.deepEqual(options(page, 3), ['stored_xss']);
+  assert.match(page.byId('attack-chain-status').textContent, /解除/);
+  page.byId('attack-1').value = 'clickfix'; await page.byId('attack-1').dispatch('change');
+  assert.equal(page.byId('attack-2').value, '');
+  assert.deepEqual(options(page, 2), ['ransomware']);
+  assert.equal(page.byId('attack-step-3').hidden, true);
+  await choose(page, ['phishing', 'stored_xss']);
+  assert.deepEqual(options(page, 3), [], '1件目からは関連しても2件目から続かないClickFixは出さない');
+});
+test('後続候補のない攻撃も1件で生成でき、2件で止める選択もできる', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
+  for (const id of ['sql_injection', 'ransomware', 'unrestricted_file_upload', 'stored_xss']) {
+    await choose(page, [id]);
+    assert.equal(page.byId('attack-step-2').hidden, true);
+    assert.equal(page.byId('attack-step-3').hidden, true);
+    assert.match(page.byId('attack-chain-status').textContent, /候補がありません.*1件で作成/);
+    assert.equal(page.byId('create-scenario').disabled, false);
+  }
+  await choose(page, ['phishing', 'clickfix', 'ransomware']);
+  page.byId('attack-3').value = ''; await page.byId('attack-3').dispatch('change');
+  await page.byId('create-scenario').dispatch('click');
+  assert.deepEqual(page.calls.at(-1).body.request.attackIds, ['phishing', 'clickfix']);
+});
+test('候補外の項目を画面へ注入しても選択・送信に採用しない', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
+  await choose(page, ['phishing', 'clickfix']);
+  const injected = page.document.createElement('option'); injected.value = 'sql_injection';
+  page.byId('attack-3').append(injected); page.byId('attack-3').value = 'sql_injection';
+  await page.byId('attack-3').dispatch('change');
+  assert.match(page.byId('operation-error').textContent, /直前/);
+  assert.equal(page.byId('attack-3').value, '');
+  await page.byId('create-scenario').dispatch('click');
+  assert.deepEqual(page.calls.at(-1).body.request.attackIds, ['phishing', 'clickfix']);
+});
+test('0件では生成できず、強制クリックでも送信しない', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
+  await choose(page, []);
+  assert.equal(page.byId('create-scenario').disabled, true);
+  await page.byId('create-scenario').dispatch('click', { force: true });
+  assert.equal(page.calls.length, 1);
+});
+
+test('初期応答を待つ間や失敗時は生成APIに送信しない', async () => {
   let resolveBootstrap;
   const page = startAuthorDom(new Promise(resolve => { resolveBootstrap = resolve; }));
-  assert.equal(page.byId('choose-manual').disabled, true);
-  assert.equal(page.byId('manual-create').disabled, true);
-  await page.byId('choose-manual').dispatch('click', { force: true });
-  await page.byId('manual-create').dispatch('click', { force: true });
+  assert.equal(page.byId('create-scenario').disabled, true);
+  await page.byId('create-scenario').dispatch('click', { force: true });
   assert.deepEqual(page.calls.map(call => call.path), ['/api/author/start']);
   resolveBootstrap(autoAuthorBootstrap()); await page.ready;
-  assert.equal(page.byId('choose-manual').disabled, false);
+  assert.equal(page.byId('create-scenario').disabled, false);
 });
 
 for (const [label, mutate] of [
-  ['旧サーバー応答（presetなし）', value => { delete value.defaultManualConfiguration; }],
-  ['network:null', value => { value.defaultManualConfiguration.network = null; }],
-  ['network配列', value => { value.defaultManualConfiguration.network = []; }],
-  ['nodes欠落', value => { delete value.defaultManualConfiguration.network.nodes; }],
-]) test(`${label}は見える位置に初期化エラーを表示し、生成APIへ送信しない`, async () => {
+  ['選択肢欠落', value => { delete value.attackChoices; }],
+  ['舞台欠落', value => { value.settings = []; }],
+  ['不正な初期攻撃', value => { value.selectionDefaults.attackIds = ['unknown']; }],
+  ['重複選択肢', value => { value.attackChoices.push(value.attackChoices[0]); }],
+  ['不正な最大数', value => { value.maxSelectedAttacks = 4; }],
+  ['関連候補なしの旧サーバー応答', value => { delete value.attackSelectionPaths; }],
+  ['関連候補に未知ID', value => { value.attackSelectionPaths.push(['phishing', 'unknown']); }],
+  ['関連候補の前段欠落', value => { value.attackSelectionPaths = value.attackSelectionPaths.filter(path =>
+    path.join('>') !== 'phishing>clickfix'); }],
+  ['関連候補の重複', value => { value.attackSelectionPaths.push(value.attackSelectionPaths[0]); }],
+]) test(`${label}は見える位置へエラーを表示する`, async () => {
   const bootstrap = autoAuthorBootstrap(); mutate(bootstrap);
   const page = startAuthorDom(bootstrap); await page.ready;
   assert.equal(page.byId('initialization-status').hidden, false);
   assert.match(page.byId('initialization-status').textContent, /初期設定.*再起動/);
-  assert.equal(page.byId('choose-manual').disabled, true);
-  assert.equal(page.byId('choose-makotomaru').disabled, true);
-  await page.byId('manual-create').dispatch('click', { force: true });
-  await page.byId('makotomaru-create').dispatch('click', { force: true });
-  assert.deepEqual(page.calls.map(call => call.path), ['/api/author/start']);
+  await page.byId('create-scenario').dispatch('click', { force: true });
+  assert.equal(page.calls.length, 1);
 });
 
-test('フォーム要素の欠落も初期化未完了とし、生成を許可しない', async () => {
-  const page = startAuthorDom(autoAuthorBootstrap(), { missingElementId: 'service-rows' });
-  await page.ready;
-  assert.equal(page.byId('initialization-status').hidden, false);
-  assert.equal(page.byId('manual-create').disabled, true);
-  await page.byId('manual-create').dispatch('click', { force: true });
-  assert.equal(page.calls.length, 0);
+test('部品欠落とAPIエラーを空の正常画面として扱わない', async () => {
+  for (const options of [{ missingElementId: 'setting' }, { startError: new Error('接続エラー') }]) {
+    const page = startAuthorDom(autoAuthorBootstrap(), options); await page.ready;
+    assert.equal(page.byId('initialization-status').hidden, false);
+    assert.equal(page.byId('create-scenario').disabled, true);
+  }
 });
 
-test('初期設定API失敗を空の詳細設定画面として扱わない', async () => {
-  const page = startAuthorDom(null, { startError: new Error('通信できませんでした。') });
-  await page.ready;
-  assert.equal(page.byId('initialization-status').hidden, false);
-  assert.equal(page.byId('choose-manual').disabled, true);
+test('開始応答を待つ間の二重送信を防ぎ、処理中はキャンセルだけを許可する', async () => {
+  let resolveResponse;
+  const page = startAuthorDom(autoAuthorBootstrap(), { responses: {
+    '/api/author/selection': () => new Promise(resolve => { resolveResponse = resolve; }),
+  } }); await page.ready;
+  const pending = page.byId('create-scenario').dispatch('click');
+  await page.byId('create-scenario').dispatch('click', { force: true });
+  assert.equal(page.calls.filter(call => call.path === '/api/author/selection').length, 1);
+  resolveResponse({ currentState: 'SCENARIO_REVIEWING', canCancel: true }); await pending;
+  assert.equal(page.byId('generation-panel').hidden, false);
+  assert.equal(page.byId('setting').disabled, true);
+  assert.equal(page.byId('cancel').disabled, false);
 });
 
-test('再描画で編集値を戻さず、Network欄が消えた状態では送信しない', async () => {
-  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
-  await page.byId('choose-manual').dispatch('click');
-  const card = page.document.querySelector('[data-attack-id]');
-  card.querySelector('[data-key="evidenceAnswer"]').value = '利用者が編集した証拠の答え';
-  await page.byId('incident-date').dispatch('change');
-  assert.equal(page.document.querySelector('[data-key="evidenceAnswer"]').value,
-    '利用者が編集した証拠の答え');
-  await advanceToReview(page);
-  page.byId('node-rows').replaceChildren();
-  await page.byId('manual-create').dispatch('click');
-  assert.match(page.byId('manual-errors').textContent, /nodes.*送信できません/);
-  assert.deepEqual(page.calls.map(call => call.path),
-    ['/api/author/start', '/api/author/select-mode']);
+test('プレビュー承認を自動送信せず、選び直し後も攻撃と舞台を保持する', async () => {
+  const bootstrap = autoAuthorBootstrap();
+  const preview = buildScenarioPreview(bootstrap.defaultManualConfiguration);
+  preview.verification = { status: 'VERIFIED', checks: [] };
+  const page = startAuthorDom(bootstrap, { responses: {
+    '/api/author/selection': () => ({ currentState: 'SCENARIO_PREVIEW', canApprove: true,
+      scenarioPreview: preview, configuration: bootstrap.defaultManualConfiguration }),
+    '/api/author/reject': () => ({ currentState: 'MANUAL_CONFIGURATION', canApprove: false }),
+  } }); await page.ready;
+  await choose(page, ['clickfix']); page.byId('setting').value = 'government';
+  await page.byId('create-scenario').dispatch('click');
+  assert.equal(page.byId('preview-panel').hidden, false);
+  assert.ok(!page.calls.some(call => call.path.endsWith('/approve')));
+  assert.ok(page.byId('preview-network-diagram').children.length > 0);
+  await page.byId('preview-reject').dispatch('click');
+  assert.equal(page.byId('selection-panel').hidden, false);
+  assert.equal(page.byId('setting').value, 'government');
+  assert.equal(page.byId('attack-1').value, 'clickfix');
 });
 
-test('Network presetで複数Attackを選んでも日時をdatetime-local形式で連番送信する', async () => {
-  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
-  await page.byId('choose-manual').dispatch('click');
-  page.byId('network-preset').value = 'dmz-web';
-  await page.byId('apply-network-preset').dispatch('click');
-  const xss = page.document.querySelectorAll('input[name="attack"]')
-    .find(item => item.value === 'reflected_xss');
-  xss.checked = true; await xss.dispatch('change');
-  const cards = page.document.querySelectorAll('[data-attack-id]');
-  assert.equal(cards.length, 2);
-  assert.deepEqual(cards.map(card => card.querySelector('[data-key="order"]').value), ['1', '2']);
-  assert.ok(cards.every(card => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
-    .test(card.querySelector('[data-key="occurrenceTime"]').value)));
-  await advanceToReview(page);
-  await page.byId('manual-create').dispatch('click');
-  const submitted = page.calls.find(call => call.path === '/api/author/manual').body.configuration;
-  assert.deepEqual(submitted.attacks.map(item => item.order), [1, 2]);
-  const result = validateScenarioConfiguration(normalizeScenarioConfiguration(submitted, catalog), catalog);
-  assert.equal(result.status, 'VALID', JSON.stringify(result.errors));
-});
-
-test('詳細設定は順番に進み、Nodeなど複数件は1件ずつ表示して入力を保つ', async () => {
-  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
-  await page.byId('choose-manual').dispatch('click');
-  const organization = page.byId('organization-name'); organization.value = '編集後の組織';
-  await page.byId('manual-next').dispatch('click');
-  assert.equal(page.document.querySelector('[data-manual-step="1"]').hidden, false);
-  await page.byId('manual-next').dispatch('click');
-  await page.byId('manual-next').dispatch('click');
-  await page.byId('manual-next').dispatch('click');
-  assert.equal(page.document.querySelector('[data-manual-step="4"]').hidden, false);
-  assert.equal(page.byId('node-position').textContent, '1 / 5');
-  assert.equal(page.document.querySelectorAll('[data-network-kind="nodes"]').filter(row => !row.hidden).length, 1);
-  await page.byId('node-next').dispatch('click');
-  assert.equal(page.byId('node-position').textContent, '2 / 5');
-  await page.byId('manual-previous').dispatch('click');
-  await page.byId('manual-previous').dispatch('click');
-  await page.byId('manual-previous').dispatch('click');
-  await page.byId('manual-previous').dispatch('click');
-  assert.equal(page.byId('organization-name').value, '編集後の組織');
-});
-
-test('NetworkのNode IDを変更しても攻撃対象を別Nodeへ黙って切り替えない', async () => {
-  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
-  await page.byId('choose-manual').dispatch('click');
-  for (let index = 0; index < 4; index++) await page.byId('manual-next').dispatch('click');
-  const row = page.document.querySelectorAll('[data-network-kind="nodes"]')
-    .find(item => item.querySelector('[data-key="nodeId"]').value === 'web-host');
-  row.querySelector('[data-key="nodeId"]').value = 'renamed-web-host';
-  await page.byId('manual-next').dispatch('click');
-  const target = page.document.querySelector('[data-attack-id]')
-    .querySelector('[data-key="targetNodeId"]');
-  assert.equal(target.value, 'web-host');
-  assert.match(target.children[0].textContent, /現在の構成にありません/);
+test('送信エラーは画面上で伝え、入力を保持して操作を回復する', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap(), { responses: {
+    '/api/author/selection': () => { throw new Error('通信に失敗しました'); },
+  } }); await page.ready;
+  await page.byId('create-scenario').dispatch('click');
+  assert.match(page.byId('operation-error').textContent, /通信に失敗/);
+  assert.equal(page.byId('create-scenario').disabled, false);
+  assert.equal(page.byId('setting').value, 'company');
 });

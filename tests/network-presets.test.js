@@ -19,13 +19,16 @@ test('全Network presetで登録済みの各Attackを固定Node IDなしに構�
 // 2026-09-20 修正前: SSH・権限昇格対応の明示テンプレートを追加
 //     ['branch-proxy', 'corporate-flat', 'dmz-web']);
 // 2026-09-20 修正後: SSH・権限昇格対応の明示テンプレートを追加
-    ['branch-proxy', 'corporate-flat', 'dmz-web', 'enterprise-lab']);
+    ['branch-proxy', 'corporate-flat', 'dmz-web', 'enterprise-lab', 'extended-incidents']);
   for (const preset of bootstrap.networkPresets) {
 // 2026-09-20 修正前: 構成ごとに対応できる攻撃だけを初期値として提示
 //     assert.equal(preset.attackDefaults.length, catalog.length, preset.id);
 // 2026-09-20 修正後: 構成ごとに対応できる攻撃だけを初期値として提示
     assert.ok(preset.attackDefaults.length >= 3, preset.id);
-    if (preset.id === 'enterprise-lab') assert.equal(preset.attackDefaults.length, catalog.length);
+    // 2026-09-24 修正前: enterprise-labだけで全攻撃を検証。
+    // if (preset.id === 'enterprise-lab') assert.equal(preset.attackDefaults.length, catalog.length);
+    // 2026-09-24 修正後: 認証・端末サービスを明示した追加構成で全16攻撃を検証。
+    if (preset.id === 'extended-incidents') assert.equal(preset.attackDefaults.length, catalog.length);
     for (const attack of preset.attackDefaults) {
       const result = validateScenarioConfiguration(configurationFor(preset, attack), catalog);
       assert.equal(result.status, 'VALID', `${preset.id}/${attack.attackId}: ${JSON.stringify(result.errors)}`);

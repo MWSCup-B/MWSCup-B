@@ -10,7 +10,7 @@ import { buildGameEvaluationInput, evaluateGame } from '../server/generation/gam
 import { buildGeneratedGame } from '../server/generation/game-make.js';
 import { CodexOutputError } from '../server/codex/codex-errors.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
-import { currentCorrectPair } from './helpers/court-issues.js';
+import { currentCorrectPair, syncQuestionQuotes, collectCurrentTarget, enterCurrentCourt } from './helpers/court-issues.js';
 
 const observationId = 'statement_mail_link_observation';
 
@@ -35,9 +35,10 @@ async function generate({ difficulty = 1, alreadyPlayable = false, repair = appe
     } else {
       // メール・Web記録のどちらも同じ人物断定への反駁資料となる実生成相当の構成。
       // 通常mockはメールだけを正解にするため、この全組合せ正解のケースを見落としていた。
-      for (const contradiction of draft.contradictions) {
-        contradiction.conflictingEvidenceIds = ['evidence_technical_a', 'evidence_technical_b'];
-      }
+      // The final attribution claim uses both sources; the first stage remains solvable with its own source.
+      draft.contradictions.find(item => item.statementRef === 'statement_seen_operation')
+        .conflictingEvidenceIds = ['evidence_technical_a', 'evidence_technical_b'];
+      syncQuestionQuotes(draft);
       const testimony = draft.evidenceArtifacts.find(item => item.type === 'TESTIMONY');
       testimony.testimony.statements = testimony.testimony.statements.filter(item => item.technicalAssessment === 'CONTRADICTED');
       testimony.publicContent = testimony.testimony.statements.map(item => item.spokenContent).join('\n');
@@ -65,11 +66,7 @@ function collectAll(runtime) {
   const player = createGeneratedGame(runtime);
   actGenerated(player, runtime, { action: 'begin' });
   actGenerated(player, runtime, { action: 'continue' });
-  for (const rule of runtime.gameCase.detective.evidenceDiscoveryRules) {
-    actGenerated(player, runtime, { action: 'investigate', targetId: rule.targetId,
-      investigationActionId: rule.actionId });
-    actGenerated(player, runtime, { action: 'collect', evidenceId: rule.evidenceId });
-  }
+  collectCurrentTarget(player, runtime);
   return player;
 }
 
@@ -119,30 +116,29 @@ for (const difficulty of [1, 2, 3]) {
       }
     }
     const runtime = session.runtime;
-    const rule = runtime.gameCase.judgment.judgmentRules[0];
+    const rule = runtime.gameCase.judgment.judgmentRules.find(item => item.targetStatementId === 'statement_seen_operation');
     assert.deepEqual(rule.acceptedEvidenceIds, ['evidence_technical_a', 'evidence_technical_b']);
-    const incorrect = { statementId: observationId, evidenceId: 'evidence_technical_a' };
+    const incorrect = { ...currentCorrectPair(runtime), statementId: observationId, evidenceId: 'evidence_technical_a' };
     const player = collectAll(runtime);
-    actGenerated(player, runtime, { action: 'retrial' });
+    enterCurrentCourt(player, runtime);
     const failed = actGenerated(player, runtime, { action: 'objection', ...incorrect });
-    assert.equal(failed.currentState, 'GUILTY_RETRY'); assert.equal(failed.attemptCount, 1);
+    assert.equal(failed.currentState, 'INVESTIGATION'); assert.equal(failed.attemptCount, 1);
     assert.doesNotMatch(JSON.stringify(failed), /acceptedEvidenceIds|technicalAssessment|groundTruthRefs/);
-    assert.equal(actGenerated(player, runtime, { action: 'retry' }).currentState, 'INVESTIGATION');
-    for (let round = 1; round <= difficulty + 1; round += 1) {
-      const court = actGenerated(player, runtime, { action: 'retrial' });
+    for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round += 1) {
+      collectCurrentTarget(player, runtime);
+      const court = enterCurrentCourt(player, runtime);
       assert.ok(court.testimonies.some(item => item.statements.some(statement =>
         statement.statementId === observationId)));
       const result = actGenerated(player, runtime, { action: 'objection', ...currentCorrectPair(runtime, round) });
-      assert.equal(result.currentState, round === difficulty + 1 ? 'ACQUITTED' : 'INVESTIGATION');
+      assert.equal(result.currentState, round === runtime.gameCase.progression.courtRoundCount ? 'ACQUITTED' : 'INVESTIGATION');
     }
     const limited = collectAll(runtime);
     assert.equal(runtime.gameCase.progression.retryPolicy.maxCourtAttempts, 3);
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      actGenerated(limited, runtime, { action: 'retrial' });
+      enterCurrentCourt(limited, runtime);
       const result = actGenerated(limited, runtime, { action: 'objection', ...incorrect });
       assert.equal(result.attemptCount, attempt);
-      assert.equal(result.currentState, attempt === 3 ? 'BLOCKED' : 'GUILTY_RETRY');
-      if (attempt < 3) actGenerated(limited, runtime, { action: 'retry' });
+      assert.equal(result.currentState, attempt === 3 ? 'BLOCKED' : 'INVESTIGATION');
     }
   });
 }
@@ -195,8 +191,10 @@ test('全組合せ正解のGameは最終Evaluationも拒否し、retryPolicy不�
   const evidenceSet = session.evidenceImportResult.evidenceSet;
   const progressionPlan = buildGameProgressionPlan({ ...session.progressionPlan,
     // Backward-compatible legacy contract: the final evaluator must still reject it.
-    courtIssueMode: undefined, courtRoundCount: 1,
-    retrialStatementIds: session.progressionPlan.retrialStatementIds.filter(id => id !== observationId) });
+    courtIssueMode: undefined, courtQuestions: undefined, investigationMode: undefined, courtRoundCount: 1,
+    returnToCourtCondition: 'ALL_REQUIRED_EVIDENCE_COLLECTED',
+    objectionRules: session.progressionPlan.objectionRules.filter(item => item.targetStatementId === 'statement_seen_operation'),
+    retrialStatementIds: ['statement_seen_operation'] });
   const conversionInput = buildGameCaseConversionInput({ evidenceSet, progressionPlan,
     evidenceImportResult: session.evidenceImportResult,
     gameCaseHandoff: session.evidenceImportResult.gameCaseHandoff,

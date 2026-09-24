@@ -28,21 +28,28 @@ test('承認された3種類を外部JSONから読込み、指定の効果だけ
 // 2026-09-20 修正前: 拡張カタログでも従来3攻撃の効果を検証
 //   assert.deepEqual(definitions.map(x => x.id).sort(), ['phishing', 'reflected_xss', 'sql_injection']);
 // 2026-09-20 修正後: 拡張カタログでも従来3攻撃の効果を検証
-  assert.equal(definitions.length, 9);
+  assert.equal(definitions.length, 16);
   assert.ok(['phishing', 'reflected_xss', 'sql_injection'].every(id => definitions.some(d => d.id === id)));
   const expected = new Map([
     ['phishing', 'browser_request_issued'],
     ['reflected_xss', 'script_executed_in_origin'],
     ['sql_injection', 'sql_query_structure_modified'],
+    ['stored_xss', 'script_executed_in_origin'],
+    ['clickfix', 'endpoint_execution_available'], ['password_spray', 'credential_available'],
+    ['ransomware', 'target_files_encrypted'], ['unrestricted_file_upload', 'disallowed_file_stored'],
   ]);
 // 2026-09-20 修正前: 既存3攻撃の効果についての検証範囲を明示
 //   for (const definition of definitions) {
 // 2026-09-20 修正後: 既存3攻撃の効果についての検証範囲を明示
   for (const definition of definitions.filter(d => expected.has(d.id))) {
     assert.equal(definition.schemaVersion, '1.0');
-    assert.equal(definition.effects.length, 1);
-    assert.equal(definition.effects[0].predicate, expected.get(definition.id));
-    assert.equal(definition.effects[0].source, 'otherConditions');
+    if (expected.has(definition.id)) {
+      assert.equal(definition.effects.length, 1);
+      assert.equal(definition.effects[0].predicate, expected.get(definition.id));
+      assert.equal(definition.effects[0].source, 'otherConditions');
+    } else assert.deepEqual(definition.effects.map(effect => effect.predicate),
+      definition.id === 'credential_phishing' ? ['browser_request_issued', 'credential_available']
+        : ['account_session_established', 'can_store_content']);
     assert.ok(definition.references.every(x => x.supports && x.url.startsWith('https://')));
     assert.ok(definition.observableArtifacts.every(x => x.conditions.length > 0));
   }

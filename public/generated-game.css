@@ -3,6 +3,7 @@ body.playing-generated { background: #09141d; color: #f0f2ec; }
 .playing-generated > header { display: none; }
 .playing-generated > main { max-width: 1440px; margin: 0 auto; padding: 0; }
 .playing-generated #error:not(:empty) { margin: 1rem; padding: 1rem; color: #ffcfcb; background: #502729; border: 1px solid #f5a39a; }
+.playing-generated #error:empty { display: none; }
 .case-game { --accent: #f0c683; position: relative; isolation: isolate; min-height: 100svh; padding: 0 0 2rem; border-radius: 0; background: #101f2d; overflow: clip; }
 .case-game.case-court { background: linear-gradient(#09141d80, #09141def), url('/assets/backgrounds/courtroom.svg') center top / cover fixed; }
 .case-game.case-investigation { --accent: #8fddd2; background: linear-gradient(#0a2028aa, #0a2028ed), url('/assets/backgrounds/investigation.svg') center / cover fixed; }
@@ -15,6 +16,10 @@ body.playing-generated { background: #09141d; color: #f0f2ec; }
 .case-game button:hover:not(:disabled) { background: #3c5462; border-color: var(--accent); }
 .case-game button:disabled { opacity: .5; cursor: not-allowed; }
 .case-game button:focus-visible, .case-game [tabindex]:focus-visible { outline: 3px solid #ffe5a3; outline-offset: 4px; }
+.case-game a:focus-visible, .case-game summary:focus-visible { outline: 3px solid #ffe5a3; outline-offset: 4px; }
+.case-return-link { display: inline-block; border: 1px solid #c7ad80; border-radius: 4px; padding: .7rem .9rem; color: #fff0ce; background: #172b38; text-decoration: none; font-size: .85rem; }
+.case-return-link:hover { background: #36505d; }
+.case-player-role { color: #b5eee3; border: 1px solid #577c7b; padding: .4rem .6rem; font-size: .8rem; white-space: nowrap; }
 .case-game .case-primary { color: #10212c; background: var(--accent); border-color: var(--accent); font-weight: 750; padding: .85rem 1.2rem; }
 .case-game .case-primary:hover:not(:disabled) { background: #fff0cb; color: #10212c; }
 .case-topbar { padding: 1rem clamp(1rem, 4vw, 3rem); display: flex; justify-content: space-between; gap: 1rem; align-items: center; background: #08141deb; border-bottom: 1px solid #53606a; }
@@ -29,11 +34,17 @@ body.playing-generated { background: #09141d; color: #f0f2ec; }
 .case-participants { display: flex; gap: 1rem; flex-wrap: wrap; padding-top: .5rem; color: #c3d0d4; font-size: .78rem; }
 .case-participants > div { display: flex; align-items: center; gap: .5rem; }
 .case-participants img { width: 32px; height: 38px; object-fit: cover; object-position: top; background: #35434b; border-radius: 4px; }
-.case-stage { height: clamp(170px, 26vh, 300px); display: grid; grid-template-columns: 1fr .8fr 1fr; align-items: end; gap: 1rem; max-width: 950px; margin: auto; overflow: hidden; }
-.case-person { margin: 0; min-width: 0; height: 92%; text-align: center; position: relative; opacity: .65; filter: saturate(.7); }
-.case-person:nth-child(2) { height: 80%; }
+.case-stage { position: relative; height: clamp(240px, 38vh, 440px); display: flex; justify-content: center; align-items: end; max-width: 1100px; margin: 1rem auto 0; overflow: hidden; border: 1px solid #aa9776; border-bottom: 0; background: linear-gradient(90deg, #10262b99, transparent 65%), url('/assets/backgrounds/courtroom.svg') left center / cover; }
+.case-stage-prosecutor { background-position: right center; background-image: linear-gradient(-90deg, #4d223b99, transparent 65%), url('/assets/backgrounds/courtroom.svg'); }
+.case-stage-defense { border-top: 3px solid #8fddd2; }
+.case-stage-prosecutor { border-top: 3px solid #deb7b8; }
+.case-investigation .case-stage-defense { background-image: linear-gradient(90deg, #10262b99, transparent 65%), url('/assets/backgrounds/investigation.svg'); }
+.case-person { margin: 0; width: min(65%, 400px); min-width: 0; height: 96%; text-align: center; position: relative; z-index: 1; }
+.case-stage-defense .case-person { transform: translateX(-15%); }
+.case-stage-prosecutor .case-person { transform: translateX(15%); }
 .case-person img { display: block; height: 100%; width: 100%; object-fit: contain; object-position: bottom; }
-.case-person figcaption { position: absolute; bottom: 0; left: 0; right: 0; background: #10202bea; font-size: .82rem; padding: .3rem .5rem; }
+.case-person figcaption { position: absolute; bottom: 14%; left: 0; right: 0; z-index: 3; background: #10202bea; font-size: .82rem; padding: .3rem .5rem; }
+.case-bench { position: absolute; z-index: 2; bottom: 0; width: 100%; height: 12%; background: linear-gradient(#9b7757 0 12%, #3e3029 13% 24%, #654c38 25% 75%, #3e3029 76%); border-top: 3px solid #d4b587; box-shadow: 0 -6px 20px #09131c55; }
 .case-person.is-speaking { opacity: 1; filter: none; }
 .case-person.is-speaking figcaption { color: var(--accent); border-top: 2px solid var(--accent); }
 .case-game .case-dialogue { background: #101e2ff5; border: 1px solid #82909c; border-left: 5px solid var(--accent); padding: 1.1rem 1.5rem; box-shadow: 0 12px 40px #0004; }
@@ -46,15 +57,71 @@ body.playing-generated { background: #09141d; color: #f0f2ec; }
 .case-muted { color: #bccbd2; font-size: .85rem; }
 .case-target-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin: 1rem 0; }
 .case-target { position: relative; min-height: 90px; text-align: left; overflow-wrap: anywhere; }
-.case-target::before { content: ''; display: block; width: 1.7rem; height: 1.1rem; border: 2px solid #8fddd2; border-bottom-width: 4px; margin-bottom: .5rem; }
+.case-target strong { display: block; }
+.case-target-icon { display: block; position: relative; width: 3rem; height: 2.2rem; margin: .3rem 0 .8rem; border: 2px solid #8fddd2; border-radius: 3px; }
+.case-target-icon.icon-mail { border-color: #f0cf96; background: linear-gradient(35deg, transparent 48%, #f0cf9666 49%, #f0cf9666 52%, transparent 53%), linear-gradient(-35deg, transparent 48%, #f0cf9666 49%, #f0cf9666 52%, transparent 53%); }
+.case-target-icon.icon-server { width: 2.5rem; height: 2.8rem; background: repeating-linear-gradient(transparent 0 .5rem, #8fddd266 .5rem .6rem); }
+.case-target-icon.icon-log { width: 2.2rem; height: 2.7rem; border-color: #a6caff; border-left-width: 5px; background: repeating-linear-gradient(transparent 0 .4rem, #a6caff55 .4rem .45rem); }
+.case-target-icon.icon-device { border-bottom-width: 5px; box-shadow: 0 6px 0 -3px #8fddd2; }
+.case-target-icon.icon-file { width: 2rem; height: 2.6rem; border-color: #e4d7b0; background: repeating-linear-gradient(transparent 0 .5rem, #e4d7b055 .5rem .6rem); }
+.case-target-icon.icon-browser { border-top-width: 6px; }
+.case-target-icon.icon-network { border-radius: 50%; box-shadow: 7px 0 0 -4px #8fddd2, -7px 0 0 -4px #8fddd2; }
+.case-target-status { display: block; margin-top: .5rem; color: #a9f1d0; font-size: .75rem; }
 .case-target small { display: block; font-size: .65rem; color: #c0d2d8; margin-top: .2rem; }
-.case-methods { display: flex; flex-wrap: wrap; gap: .5rem; }
+.case-methods { display: grid; gap: .7rem; }
+.case-method-card { padding: .7rem; border: 1px solid #506979; border-radius: 4px; background: #162d3a; }
+.case-method-card button { width: 100%; text-align: left; font-weight: 700; }
+.case-method-card p, .case-method-card small { font-size: .8rem; line-height: 1.65; }
+.case-method-card small { color: #bde5dd; }
+.case-help { margin: .75rem 0; border: 1px solid #536b7a; border-radius: 5px; background: #102330ed; padding: .8rem 1rem; }
+.case-help summary { cursor: pointer; color: #c6eee7; font-weight: 650; }
+.case-help li { margin: .75rem 0; line-height: 1.75; }
+.case-help p { line-height: 1.7; }
+.case-interpretations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin-top: 1rem; }
+.case-interpretation { text-align: left; line-height: 1.8; min-height: 6rem; padding: 1rem; }
 .case-search-result { background: #16333d; border-left: 3px solid #8fddd2; margin-top: 1rem; padding: .8rem; font-size: .9rem; }
 .case-file-list { display: flex; gap: .5rem; overflow-x: auto; padding: .3rem .1rem .8rem; }
 .case-file-list .case-file { flex: 0 0 11rem; font-size: .8rem; text-align: left; overflow-wrap: anywhere; }
 .case-game button.is-selected { border-color: var(--accent); background: #355162; box-shadow: inset 0 -3px var(--accent); }
 .case-document { background: #e9ecdf; color: #142b38; padding: 1rem; border-radius: 4px; margin: .4rem 0 .8rem; }
 .case-document .case-eyebrow { color: #345a63; }
+.case-document-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .7rem; margin: -1rem -1rem 1rem; padding: .65rem 1rem; background: #203b4d; color: #edf5f5; border-bottom: 3px solid #76a9aa; }
+.case-document-app { font-weight: 700; font-size: .9rem; }
+.case-document-mode { font-size: .7rem; }
+.case-mail-viewer { background: #f6f8f9; border: 1px solid #b8c9d2; }
+.case-mail-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); margin: 0; padding: .8rem 0; border-block: 1px solid #cad4db; font-size: .85rem; gap: .4rem .9rem; }
+.case-mail-fields dt { color: #4b6473; font-weight: 700; }
+.case-mail-fields dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.case-mail-body { padding: 1rem .4rem; min-height: 9rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.case-mail-body p { margin: 0; }
+.case-log-viewer { background: #101e29; color: #dce9ee; border: 1px solid #506c7f; }
+.case-log-viewer .case-eyebrow { color: #a7d7d0; }
+.case-log-viewer .case-document-toolbar { background: #223746; border-bottom-color: #82b7a9; }
+.case-log-scroll { max-width: 100%; max-height: 340px; overflow: auto; border: 1px solid #526a7a; }
+.case-log-table { width: 100%; border-collapse: collapse; font: .82rem / 1.8 ui-monospace, monospace; text-align: left; }
+.case-log-table th { background: #2b4557; color: #d5e6ed; padding: .35rem .65rem; position: sticky; top: 0; }
+.case-log-table td { border-bottom: 1px solid #2d4454; padding: .3rem .65rem; white-space: pre; }
+.case-log-table tr:nth-child(even) { background: #1a2b38; }
+.case-log-table .case-line-number { color: #a0b6c3; text-align: right; width: 2rem; border-right: 1px solid #415b6c; user-select: none; }
+.case-document-note { font-size: .75rem; opacity: .85; }
+.case-record-sheet { background: #f4f0e6; border-top: 4px solid #8b8064; }
+.case-sheet-body { padding: .5rem 1rem; background: repeating-linear-gradient(transparent 0 1.95rem, #c6c6b944 1.95rem 2rem); line-height: 2rem; }
+.case-sheet-body p { margin: 0; white-space: pre-wrap; }
+.case-mail-text { font: inherit; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.case-incident-overview { white-space: pre-line; }
+.case-allegation { white-space: pre-wrap; }
+.case-reasoning-desk { max-width: 1100px; margin-inline: auto; }
+.case-desk-source { color: #b5eee3; padding-bottom: .65rem; border-bottom: 1px solid #516573; }
+.case-desk-documents { display: grid; gap: .7rem; }
+.case-previous-evidence { padding: .8rem 0; margin-bottom: 1rem; }
+.case-previous-evidence > summary { cursor: pointer; color: #b5eee3; margin-bottom: .6rem; }
+.case-reasoning-desk > .case-dialogue { margin-block: 1.2rem; }
+.case-incident-report { max-width: 900px; margin: 1.5rem auto; padding: clamp(1rem, 3vw, 2.5rem); background: #f1eddf; color: #213645; border-top: 6px solid #bd985e; box-shadow: 0 10px 30px #0004; line-height: 1.8; }
+.case-incident-report > h2 { border-bottom: 1px solid #8b9799; padding-bottom: .6rem; }
+.case-incident-report > h3 { margin-top: 1.2rem; }
+.case-incident-report .case-eyebrow { color: #49636c; }
+.case-incident-report .case-report-note { padding: .65rem; border-left: 3px solid #92713c; background: #e5deca; }
+.case-incident-report .case-document-content { max-height: none; }
 .case-document-content { font: .86rem / 1.8 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; margin: .5rem 0 0; }
 .case-game .case-presentation { padding: 1rem; margin-top: 1rem; background: #13283ce8; border: 1px solid #738493; }
 .case-presentation h2 { font-size: 1rem; }
@@ -73,7 +140,12 @@ body.playing-generated { background: #09141d; color: #f0f2ec; }
   .case-title { display: none; }
   .case-body { padding: 0 .7rem; }
   .case-workspace { grid-template-columns: 1fr; }
-  .case-stage { gap: .2rem; height: 180px; }
+  .case-interpretations { grid-template-columns: 1fr; }
+  .case-stage { height: 240px; }
+  .case-player-role { font-size: .7rem; }
+  .case-return-link { width: 100%; text-align: center; }
+  .case-document-toolbar { flex-wrap: wrap; }
+  .case-log-scroll { max-height: 280px; }
   .case-dialogue { padding: .8rem !important; }
   .case-controls button { flex: 1 1 auto; }
   .case-issue-track { padding: .6rem; gap: .3rem; }
@@ -82,4 +154,258 @@ body.playing-generated { background: #09141d; color: #f0f2ec; }
 @media (prefers-reduced-motion: reduce) {
   .case-game *, .case-transition { animation: none !important; transition: none !important; }
   .case-transition { display: none; }
+}
+
+/* Reference-image redesign: illustrated scenes, navy/gold records and cyan nameplates.
+   Text and evidence are live DOM; no reference screenshot is used as the UI. */
+.playing-generated > main { max-width: 1680px; }
+.case-game { --accent: #efd080; --gold: #cbaa62; --blue: #55dcff; font-family: "Noto Sans JP", "Yu Gothic", system-ui, sans-serif; }
+.case-game.case-court { background: linear-gradient(#120c0840, #0a1320c9), url('/assets/backgrounds/courtroom-v2.png') center / cover fixed; }
+.case-game.case-investigation { --accent: #efd080; background: linear-gradient(#080f1a66, #080f1ad1), url('/assets/backgrounds/investigation-v2.png') center / cover fixed; }
+.case-topbar { border-bottom: 3px double var(--gold); background: linear-gradient(105deg, #071429f5, #122239e8); padding-block: .8rem; }
+.case-topbar h1 { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; letter-spacing: .22em; color: #fff3cf; }
+.case-player-role { background: linear-gradient(#125b94, #063454); border-color: var(--blue); color: #ebfaff; }
+.case-issue-track { background: #071426e8; border-bottom: 1px solid #8e7b53; flex-wrap: wrap; }
+.case-issue-track li { max-width: none; min-width: 5rem; border-color: #766345; }
+.case-issue-track .is-current { border-color: var(--blue); color: #97edff; }
+.case-body { padding-inline: clamp(.8rem, 3vw, 2.8rem); }
+.case-briefing { margin: .6rem 0; padding: .45rem .9rem; border: 1px solid #7c705a; background: #091528ed; font-size: .85rem; }
+.case-briefing > summary { cursor: pointer; color: #eed7a1; }
+.case-briefing > summary, .case-help > summary { background: #102238; }
+.case-game .case-panel { border-radius: 0; border: 3px double var(--gold); background: linear-gradient(145deg, #0c2036f7, #081321f5); box-shadow: 0 8px 30px #0008; }
+.case-panel > h2 { font-family: "Yu Mincho", serif; letter-spacing: .12em; color: #f4dfb1; border-bottom: 1px solid #8b7445; padding-bottom: .65rem; }
+.case-game button { border-radius: 0; background: linear-gradient(#18334e, #0c1d32); border-color: #8192a6; }
+.case-game button:hover:not(:disabled) { border-color: var(--blue); background: linear-gradient(#195581, #163650); }
+.case-game button.is-selected { border: 2px solid var(--blue); background: linear-gradient(#116ca6, #103958); box-shadow: inset 0 0 0 2px #11263c, 0 0 12px #2fcaff30; }
+.case-game .case-primary { background: linear-gradient(#f8e6ab, #cba354); color: #10203a; border: 1px solid #fff0c7; }
+.case-game .case-primary:hover:not(:disabled) { background: linear-gradient(#fff2c9, #e2bf73); }
+.case-game .case-stage { max-width: none; border: 0; height: clamp(290px, 52vw, 650px); margin-top: .6rem; background: none; }
+.case-person { width: min(95%, 1100px); height: 98%; }
+.case-stage-defense .case-person, .case-stage-prosecutor .case-person { transform: none; }
+.case-person img { object-fit: contain; object-position: center bottom; filter: drop-shadow(0 8px 12px #0004); }
+.case-person figcaption { bottom: .8rem; left: auto; right: 1rem; width: auto; border: 1px solid var(--gold); padding: .3rem .8rem; }
+.case-bench { display: none; }
+.case-game .case-dialogue { position: relative; border: 3px double #bcc8da; border-radius: 0; padding: 1.4rem 2rem 1.2rem;
+  background: linear-gradient(120deg, #0b162aef, #101b30f7); box-shadow: 0 6px 24px #0007, inset 0 0 0 4px #0c1424; }
+.case-dialogue h2 { display: inline-block; margin: .1rem 0 .5rem; padding: .45rem 2rem; font-family: "Yu Mincho", serif;
+  border: 2px solid var(--blue); color: #f6fcff; background: linear-gradient(100deg, #0875ab, #12365e); letter-spacing: .15em; }
+.case-dialogue > .case-eyebrow { display: block; color: #dcc897; font-size: .7rem; }
+.case-dialogue p { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: clamp(1rem, 1.75vw, 1.45rem); line-height: 1.85; color: #fffaf0; }
+.case-cinematic { position: relative; padding-bottom: .5rem; }
+.case-cinematic .case-stage { margin: 0; height: clamp(300px, calc(100dvh - 540px), 690px); }
+.case-cinematic > .case-dialogue { margin: -3rem 1.2rem 0; z-index: 3; min-height: 160px; padding-top: 1.1rem; }
+.case-cinematic > .case-dialogue h2 { position: absolute; top: -1.45rem; left: 2rem; margin: 0; font-size: 1.05rem; }
+.case-cinematic > .case-dialogue p { margin-top: .9rem; }
+.case-cinematic > .case-controls { position: relative; z-index: 4; padding: .6rem 1.2rem; background: #081322dc; }
+.case-cinematic > .case-controls .case-primary::after { content: '  »'; font-size: 1.4em; }
+.case-evidence-workbench { display: grid; grid-template-columns: minmax(170px, .28fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.case-evidence-workbench.is-single { grid-template-columns: minmax(0, 1fr); }
+.case-evidence-selector { min-width: 0; display: grid; gap: .55rem; padding: .7rem; border: 2px solid #7392ac; background: #07172de8; }
+.case-evidence-selector h3 { color: #f2db9e; font-size: .85rem; letter-spacing: .12em; margin: .3rem 0; }
+.case-game .case-evidence-card { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr); gap: .1rem .5rem; width: 100%; padding: .8rem; text-align: left; border-width: 2px; min-height: 78px; }
+.case-evidence-card strong { font-size: .9rem; overflow-wrap: anywhere; }
+.case-evidence-card small { grid-column: 2; color: #c3d6e7; font-size: .7rem; }
+.case-evidence-symbol { grid-row: span 2; align-self: center; text-align: center; font-size: 2rem; color: #eed4a1; }
+.case-evidence-reading { min-width: 0; }
+.case-evidence-counter { color: #ebd8a4; font-size: .8rem; padding: .4rem .8rem; border: 1px solid #c2a269; background: linear-gradient(90deg, #4c1929, #211527); margin: 0 !important; }
+.case-active-evidence .case-document { margin-top: 0; border: 2px solid #baa371; border-radius: 0; }
+.case-document-toolbar { background: linear-gradient(90deg, #162e4c, #0c1a30); border-bottom: 1px solid #bda576; }
+.case-log-viewer .case-document-toolbar { background: linear-gradient(90deg, #162e4c, #0c1a30); border-bottom-color: #bda576; }
+.case-log-viewer { background: #091626; border-color: #bfa56c; }
+.case-log-scroll { max-height: 300px; }
+.case-evidence-reasoning { margin-top: 1.1rem; }
+.case-evidence-reasoning > .case-dialogue { padding: .8rem 1rem; border-width: 1px; box-shadow: none; margin-bottom: 1rem; }
+.case-evidence-reasoning > .case-dialogue h2 { position: static; font: 700 .85rem system-ui; padding: .2rem .7rem; margin: .4rem 0; }
+.case-evidence-reasoning > .case-dialogue p { font: .9rem / 1.75 system-ui; }
+.case-evidence-reasoning > h3 { color: #ffe3a9; font-size: 1.05rem; line-height: 1.8; }
+.case-interpretation { min-height: 5rem; font-size: .95rem; line-height: 1.8; border-width: 2px !important; }
+.case-reasoning-desk { max-width: none; }
+.case-incident-report { background: linear-gradient(110deg, #f8f0db, #e7dcc1); border: 4px double #c29c55; box-shadow: 0 10px 40px #0008; }
+.case-incident-report > h2 { font-family: "Yu Mincho", serif; letter-spacing: .2em; text-align: center; }
+.case-verdict-scene { text-align: center; }
+.case-verdict-scene .case-verdict { margin: 0; padding: .25rem; color: #ffe5a1; font: bold clamp(1.2rem, 3vw, 2rem) / 1.5 "Yu Mincho", serif; text-shadow: 0 3px #542018; }
+.case-verdict-scene > .case-dialogue { border-color: #deb668; background: linear-gradient(#501624ef, #111a30f5); }
+@media (max-width: 720px) {
+  .case-evidence-workbench { grid-template-columns: minmax(0, 1fr); }
+  .case-evidence-selector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .case-evidence-selector h3 { grid-column: 1 / -1; }
+  .case-game .case-evidence-card { grid-template-columns: 1.7rem minmax(0, 1fr); padding: .5rem; }
+  .case-evidence-symbol { font-size: 1.4rem; }
+  .case-evidence-card strong { font-size: .78rem; }
+  .case-cinematic .case-stage { height: clamp(280px, 68vw, 460px); }
+  .case-cinematic > .case-dialogue { margin-inline: 0; margin-top: -1.5rem; padding: 1.35rem .9rem .8rem !important; }
+  .case-cinematic > .case-dialogue h2 { left: .7rem; padding: .3rem .8rem; font-size: .85rem; }
+  .case-cinematic > .case-controls { padding-inline: .3rem; }
+  .case-stage { height: 300px; }
+  .case-person { width: 100%; }
+  .case-dialogue p { font-family: "Yu Mincho", serif; }
+  .case-dialogue h2 { padding: .3rem .8rem; }
+  .case-topbar { gap: .5rem; }
+  .case-game.case-court, .case-game.case-investigation { background-attachment: scroll; }
+}
+
+/* Quoted records and hypotheses sit outside character speech. */
+.case-reference { padding: .7rem 1rem; border: 1px solid #b99e65; border-left: 4px solid #c5a25f; background: #09172bee; color: #e8edf2; }
+.case-reference > strong { display: block; font-size: .85rem; margin-top: .2rem; }
+.case-reference p { font-size: .9rem; line-height: 1.75; white-space: pre-wrap; }
+.case-investigation-desk { display: grid; grid-template-columns: minmax(210px, .32fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.case-assistant-guide { position: sticky; top: 1rem; min-width: 0; padding-top: 1rem; }
+.case-assistant-guide .case-person { width: 100%; height: 360px; }
+.case-assistant-guide .case-person figcaption { display: none; }
+.case-evidence-reasoning > .case-reference { margin-bottom: 1rem; }
+.case-investigation-desk .case-evidence-workbench { grid-template-columns: minmax(145px, .32fr) minmax(0, 1fr); }
+.case-investigation-desk .case-evidence-workbench.is-single { grid-template-columns: minmax(0, 1fr); }
+.case-investigation-desk .case-evidence-card { grid-template-columns: 1fr; text-align: center; }
+.case-investigation-desk .case-evidence-card small { grid-column: 1; }
+.case-investigation-desk .case-evidence-symbol { grid-row: auto; font-size: 2.5rem; }
+
+/* The court fits the viewport; long original sources use lossless page controls. */
+.case-game.case-court-viewport { height: 100dvh; min-height: 0; padding-bottom: 0; display: flex; flex-direction: column; }
+.case-court-viewport .case-topbar { flex: 0 0 auto; padding: .5rem 1.2rem; }
+.case-court-viewport .case-topbar h1 { font-size: 1.35rem; }
+.case-court-viewport .case-topbar .case-eyebrow { font-size: .6rem; }
+.case-court-viewport .case-topbar .case-title { font-size: .75rem; margin: 0; }
+.case-court-viewport .case-return-link { padding: .4rem .6rem; font-size: .72rem; }
+.case-court-viewport .case-issue-track { flex: 0 0 auto; padding: .3rem 1.2rem; }
+.case-court-viewport .case-issue-track li { padding: .15rem .4rem; font-size: .72rem; }
+.case-court-viewport .case-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 1rem; }
+.case-court-viewport .case-briefing { flex: 0 0 auto; padding: .2rem .6rem; margin: .35rem 0; }
+.case-court-viewport .case-briefing > summary { padding: .25rem; }
+.case-court-viewport .case-briefing[open] { position: absolute; top: 6rem; left: 1rem; right: 1rem; max-height: calc(100dvh - 8rem); overflow: auto; z-index: 8; }
+.case-court-layout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); grid-template-rows: minmax(0, 1fr) auto; gap: .65rem 1rem; flex: 1; min-height: 0; }
+.case-court-speaker { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.case-court-speaker > .case-stage { flex: 1; min-height: 80px; height: auto; margin: 0; }
+.case-court-speaker > .case-stage .case-person { max-width: 580px; }
+.case-court-speaker .case-person figcaption { display: none; }
+.case-court-speaker > .case-dialogue { padding: .65rem 1rem; }
+.case-court-speaker > .case-dialogue h2 { font-size: .85rem; padding: .2rem .8rem; margin: 0; }
+.case-court-speaker > .case-dialogue p { font-size: .98rem; line-height: 1.65; margin: .4rem 0; }
+.case-court-speaker > .case-reference { margin-bottom: .5rem; }
+.case-court-speaker > .case-reference p { font-size: .85rem; line-height: 1.65; }
+.case-court-layout > .case-evidence-browser { margin: 0; padding: .7rem; min-height: 0; display: flex; flex-direction: column; }
+.case-court-layout .case-evidence-browser > h2 { font-size: 1rem; padding-bottom: .4rem; margin: 0 0 .4rem; }
+.case-court-layout .case-file-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 0 0 auto; overflow: visible; gap: .35rem; padding: 0 0 .5rem; }
+.case-court-layout .case-file-list .case-file { min-width: 0; font-size: .75rem; padding: .4rem .6rem; line-height: 1.5; border: 2px solid #607f98; }
+.case-court-document { display: flex; flex-direction: column; flex: 1; min-height: 0; margin: 0; border: 2px solid #b79c65; padding: .65rem .8rem; background: #f0eadb; color: #142b38; }
+.case-court-document h3 { font-size: .92rem; margin: .2rem 0 .4rem; padding-bottom: .4rem; border-bottom: 1px solid #bcae90; }
+.case-court-source { flex: 1; min-height: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: .86rem / 1.75 ui-monospace, monospace; tab-size: 4; }
+.case-document-pages { display: flex; justify-content: space-between; gap: .3rem; align-items: center; padding-top: .4rem; font-size: .72rem; }
+.case-document-pages button { font-size: .72rem; padding: .3rem .5rem; }
+.case-court-layout > .case-controls, .case-court-layout > .case-presentation { grid-column: 1 / -1; margin: 0; padding: .5rem 0 .65rem; }
+.case-court-layout > .case-presentation { display: flex; align-items: center; justify-content: space-between; gap: .7rem; border: 0; }
+.case-court-layout > .case-presentation > h2, .case-court-layout > .case-presentation > .case-muted { display: none; }
+.case-court-layout > .case-presentation > p { max-width: 25%; font-size: .72rem; }
+.case-court-layout > .case-presentation .case-controls { padding: 0; }
+.case-court-viewport button { padding: .5rem .7rem; font-size: .85rem; }
+.case-court-viewport .case-primary { padding: .55rem .9rem; }
+.case-court-viewport .case-cinematic { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; }
+.case-court-viewport .case-cinematic > .case-stage { flex: 1; min-height: 80px; height: auto; }
+.case-court-viewport .case-cinematic > .case-dialogue { flex: 0 0 auto; margin: -1rem 1rem 0; min-height: 0; padding: 1rem 1.4rem .6rem; }
+.case-court-viewport .case-cinematic > .case-reference { flex: 0 0 auto; margin: .4rem 1rem 0; }
+.case-cinematic > .case-scene-reference { position: relative; }
+.case-scene-reference h2 { display: inline-block; margin: .1rem 0 .5rem; padding: .2rem .8rem; font: 700 .85rem / 1.7 "Yu Mincho", serif; border: 2px solid var(--blue); color: #f6fcff; background: linear-gradient(100deg, #0875ab, #12365e); letter-spacing: .15em; }
+.case-cinematic > .case-scene-reference h2 { padding: .3rem 1rem; font-size: 1rem; }
+.case-cinematic > .case-scene-reference p { font: 1.05rem / 1.7 "Yu Mincho", serif; }
+.case-court-viewport .case-cinematic > .case-dialogue p { font-size: 1.05rem; line-height: 1.7; }
+.case-court-viewport .case-cinematic > .case-controls { flex: 0 0 auto; }
+.case-court-question-layout .case-court-speaker > .case-stage { max-height: 140px; }
+.case-court-question-layout .case-court-speaker > .case-panel { margin-top: .4rem; padding: .5rem; }
+.case-court-question-layout .case-court-speaker > .case-panel h2 { font-size: .85rem; margin: 0; padding-bottom: .25rem; }
+.case-court-question-layout .case-court-speaker > .case-panel p { font-size: .75rem; }
+.case-court-question-layout .case-interpretations { margin-top: .4rem; gap: .35rem; }
+.case-court-question-layout .case-interpretation { padding: .45rem; min-height: 0; font-size: .75rem; line-height: 1.6; }
+.case-entry { min-height: 80dvh; display: grid; place-content: center; text-align: center; background: #101f2d; color: #fff3cf; }
+.case-opening { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; gap: 1.5rem; padding-bottom: 1rem; }
+.case-opening > .case-stage { height: 100%; min-height: 0; margin: 0; }
+.case-opening .case-intro { width: 100%; margin: 0; padding: 1.3rem; }
+.case-opening .case-intro h2 { font-size: clamp(1.4rem, 2.6vw, 2.4rem); letter-spacing: .08em; }
+.case-opening .case-intro p { font-size: .9rem; }
+.case-paged-text > .case-eyebrow:empty { display: none; }
+.case-result { flex: 1; min-height: 0; width: min(100%, 1040px); margin: 0 auto; display: flex; flex-direction: column; justify-content: center; gap: .7rem; padding: .5rem 0 1rem; }
+.case-result > .case-dialogue { padding: .7rem 1.2rem; margin: 0; }
+.case-result .case-dialogue h2 { font-size: .9rem; padding: .2rem 1rem; }
+.case-result .case-dialogue p { font-size: 1.1rem; line-height: 1.7; margin: .3rem 0; }
+.case-result .case-reference p { font-size: .95rem; line-height: 1.7; }
+.case-result > .case-primary { align-self: center; }
+/* The complete incident explanation stays together after the closing dialogue. */
+.case-final-verdict .case-issue-track { display: none; }
+.case-final-verdict .case-verdict-scene > .case-dialogue { text-align: left; }
+.case-final-verdict .case-dialogue .case-ruling { font-weight: bold; font-size: 1.2rem; }
+.case-final-verdict .case-dialogue .case-conclusion-paragraph { font-size: 1rem; line-height: 1.8; margin: .6em 0 0; }
+.case-court-question-layout .case-paged-text { padding: .3rem .5rem; }
+.case-court-question-layout .case-paged-text > strong { display: none; }
+.case-court-question-layout .case-paged-text p { margin: .2rem 0; }
+.case-court-question-layout .case-court-speaker > .case-stage { min-height: 0; }
+.case-court-speaker > .case-controls { gap: .3rem; padding: .4rem 0; flex-wrap: nowrap; }
+.case-court-speaker > .case-controls button { font-size: .72rem; }
+@media (max-width: 900px) {
+  .case-investigation-desk { grid-template-columns: 1fr; }
+  .case-assistant-guide { position: static; }
+  .case-assistant-guide .case-person { height: 180px; }
+}
+@media (max-width: 720px) {
+  .case-investigation-desk .case-evidence-workbench { grid-template-columns: minmax(0, 1fr); }
+  .case-court-viewport .case-topbar { flex-wrap: nowrap; gap: .4rem; padding: .35rem .6rem; }
+  .case-court-viewport .case-topbar h1 { font-size: 1rem; }
+  .case-court-viewport .case-player-role, .case-court-viewport .case-topbar .case-eyebrow { display: none; }
+  .case-court-viewport .case-status { font-size: .7rem; }
+  .case-court-viewport .case-return-link { width: auto; max-width: 9rem; }
+  .case-court-viewport .case-body { padding-inline: .5rem; }
+  .case-court-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: .4rem; }
+  .case-court-speaker { position: relative; padding-left: 80px; min-height: 110px; }
+  .case-court-speaker > .case-stage { position: absolute; left: 0; top: 0; width: 78px; height: 100%; min-height: 0; background: transparent; }
+  .case-court-speaker .case-reference { padding: .35rem .5rem; margin: 0; }
+  .case-court-speaker .case-reference p { font-size: .75rem; line-height: 1.6; margin: .25rem 0; }
+  .case-court-speaker .case-dialogue { padding: .4rem .5rem !important; }
+  .case-court-speaker .case-dialogue h2 { font-size: .7rem; }
+  .case-court-speaker .case-dialogue p { font-size: .76rem; line-height: 1.6; }
+  /* The spoken prompt was already read in the dialogue sequence. Keep the chosen
+     hypothesis and original evidence visible when the mobile screen is short. */
+  .case-court-speaker:has(> .case-reference) > .case-dialogue { display: none; }
+  .case-court-speaker .case-eyebrow { font-size: .6rem; }
+  .case-court-layout .case-file-list { padding-bottom: .3rem; }
+  .case-court-layout .case-file-list .case-file { font-size: .67rem; padding: .25rem .4rem; }
+  .case-court-layout .case-evidence-browser { padding: .45rem; }
+  .case-court-layout .case-evidence-browser > h2 { font-size: .85rem; }
+  .case-court-document { padding: .4rem .55rem; }
+  .case-court-document > .case-eyebrow { display: none; }
+  .case-court-document h3 { font-size: .8rem; margin-top: 0; padding-bottom: .2rem; }
+  .case-court-viewport .case-document-pages button { font-size: .67rem; padding: .25rem .4rem; }
+  .case-court-viewport .case-document-pages { padding-top: .2rem; }
+  .case-court-source { font-size: .75rem; line-height: 1.55; }
+  .case-court-layout > .case-controls { gap: .4rem; padding-block: .25rem .4rem; }
+  .case-court-viewport button, .case-court-viewport .case-primary { font-size: .72rem; padding: .4rem .5rem; }
+  .case-court-layout > .case-presentation { flex-wrap: wrap; }
+  .case-court-layout > .case-presentation > p { display: none; }
+  .case-court-layout > .case-presentation .case-controls { width: 100%; }
+  .case-court-question-layout .case-interpretations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .case-opening { position: relative; display: flex; align-items: end; padding: 0 0 .6rem; }
+  .case-opening > .case-stage { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; opacity: .65; }
+  .case-opening .case-intro { padding: .8rem; background: #0a182bef; }
+  .case-opening .case-intro h2 { font-size: 1.45rem; }
+  .case-opening .case-intro p { font-size: .8rem; }
+  .case-opening .case-intro button { margin-top: .4rem; }
+  .case-opening .case-intro > .case-eyebrow { font-size: .65rem; }
+  .case-result { gap: .4rem; padding-bottom: .5rem; }
+  .case-result .case-dialogue p { font-size: .95rem; }
+  .case-result .case-reference { padding: .5rem .7rem; }
+  .case-result .case-reference p { font-size: .83rem; }
+  .case-final-verdict .case-result > .case-dialogue { padding: .5rem .75rem; }
+  .case-final-verdict .case-dialogue .case-ruling { font-size: .95rem; }
+  .case-final-verdict .case-dialogue .case-conclusion-paragraph { font-size: .85rem; line-height: 1.6; margin-top: .45em; }
+  .case-final-verdict .case-verdict { font-size: 1.1rem; }
+  .case-result .case-muted, .case-result .case-hint { font-size: .75rem; }
+  .case-court-question-layout .case-court-speaker { padding-left: 0; min-height: 0; }
+  .case-court-question-layout .case-court-speaker > .case-stage { display: none; }
+  .case-court-question-layout .case-panel > h2 { display: none; }
+  .case-court-question-layout .case-paged-text { padding: .2rem .4rem; }
+  .case-court-question-layout .case-interpretation { font-size: .7rem; padding: .25rem .4rem; }
+}
+@media (max-width: 720px) and (max-height: 740px) {
+  .case-final-verdict .case-dialogue .case-conclusion-paragraph { font-size: .8125rem; line-height: 1.5; margin-top: .35em; }
+  .case-final-verdict .case-result > .case-dialogue { padding: .4rem .65rem; }
+  .case-final-verdict .case-verdict { display: none; }
+  .case-final-verdict .case-dialogue h2 { float: left; font-size: .8rem; line-height: 1.5; padding: .15rem .5rem; margin: 0 .6rem 0 0; }
+  .case-final-verdict .case-dialogue .case-ruling { min-height: 1.6rem; line-height: 1.6; margin: 0 0 .2rem; }
+  .case-final-verdict .case-conclusion-paragraph { clear: both; }
 }

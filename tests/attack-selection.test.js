@@ -10,7 +10,10 @@ import { startAuthorDom } from './helpers/author-dom.js';
 import { SCENARIO_PROMPT_TEMPLATE } from '../server/generation/scenario-interface.js';
 
 const bootstrap = autoAuthorBootstrap(), catalog = await loadCatalog();
-const preset = bootstrap.networkPresets.find(item => item.id === 'enterprise-lab');
+// 2026-09-24 修正前: mainの9攻撃用構成。
+// const preset = bootstrap.networkPresets.find(item => item.id === 'enterprise-lab');
+// 2026-09-24 修正後: 両ブランチの16攻撃を収容する構成で生成を検証。
+const preset = bootstrap.networkPresets.find(item => item.id === 'extended-incidents');
 test('コメント保存した旧生成指示をAIへ送信しない', async () => {
   class PromptRunner extends MockCodexRunner {
     async runJson(args) {
@@ -82,46 +85,48 @@ test('0件と7件は件数検証で拒否する', () => {
     assert.equal(result.status, 'INVALID'); assert.equal(result.errors[0].code, 'INVALID_COUNT');
   }
 });
-test('UIは初期攻撃を解除しても任意の攻撃だけをorder=1で送信する', async () => {
-  const page = startAuthorDom(bootstrap); await page.ready;
-  await page.byId('choose-manual').dispatch('click');
-  const toggle = async (id, checked) => {
-    const control = page.document.querySelectorAll('input[name="attack"]').find(c => c.value === id);
-    control.checked = checked; await control.dispatch('change');
-  };
-  await toggle('sql_injection', true); await toggle('phishing', false);
-  assert.equal(page.document.querySelector('[data-attack-id="sql_injection"]').querySelector('[data-key="order"]').value, '1');
-  for (let i = 0; i < 7; i++) await page.byId('manual-next').dispatch('click');
-  await page.byId('manual-create').dispatch('click');
-  const submitted = page.calls.find(call => call.path.endsWith('/manual')).body.configuration;
-  assert.deepEqual(submitted.attacks.map(a => [a.attackId, a.order]), [['sql_injection', 1]]);
-  assert.equal(validateScenarioConfiguration(normalizeScenarioConfiguration(submitted, catalog), catalog).status, 'VALID');
-});
-test('段階フィルターは他段階の選択を消さず、選択順をカタログ順へ戻さない', async () => {
-  const page = startAuthorDom(bootstrap); await page.ready;
-  for (const id of ['sql_injection', 'path_traversal']) {
-    const control = page.document.querySelectorAll('input[name="attack"]').find(c => c.value === id);
-    control.checked = true; await control.dispatch('change');
-  }
-  const filter = page.document.querySelector('[data-key="stageFilter"]');
-  filter.value = 'PRIVILEGE_ESCALATION'; await filter.dispatch('change');
-  const cards = page.byId('attack-details').querySelectorAll('[data-attack-id]');
-  assert.deepEqual(cards.map(c => c.dataset.attackId), ['phishing', 'sql_injection', 'path_traversal']);
-  assert.equal(page.document.querySelector('[data-choice-id="phishing"]').hidden, true);
-  assert.equal(page.document.querySelector('[data-choice-id="sudo_misconfiguration"]').hidden, false);
-  const order = cards[2].querySelector('[data-key="order"]'); order.value = '1'; await order.dispatch('change');
-  assert.deepEqual(page.byId('attack-details').querySelectorAll('[data-attack-id]').map(c => c.dataset.attackId),
-    ['path_traversal', 'phishing', 'sql_injection']);
-});
-
-test('途中解除して追加した攻撃には、残した攻撃より後の初期時刻を割り当てる', async () => {
-  const page = startAuthorDom(bootstrap); await page.ready;
-  for (const [id, checked] of [['sql_injection', true], ['phishing', false], ['path_traversal', true]]) {
-    const control = page.document.querySelectorAll('input[name="attack"]').find(c => c.value === id);
-    control.checked = checked; await control.dispatch('change');
-  }
-  const cards = page.byId('attack-details').querySelectorAll('[data-attack-id]');
-  assert.deepEqual(cards.map(card => card.querySelector('[data-key="order"]').value), ['1', '2']);
-  assert.ok(cards[0].querySelector('[data-key="occurrenceTime"]').value
-    < cards[1].querySelector('[data-key="occurrenceTime"]').value);
-});
+// 2026-09-24: 旧任意選択UIのテストは履歴保存。新UIの連鎖選択はauthor-ui.test.jsで検証。
+// test('UIは初期攻撃を解除しても任意の攻撃だけをorder=1で送信する', async () => {
+//   const page = startAuthorDom(bootstrap); await page.ready;
+//   await page.byId('choose-manual').dispatch('click');
+//   const toggle = async (id, checked) => {
+//     const control = page.document.querySelectorAll('input[name="attack"]').find(c => c.value === id);
+//     control.checked = checked; await control.dispatch('change');
+//   };
+//   await toggle('sql_injection', true); await toggle('phishing', false);
+//   assert.equal(page.document.querySelector('[data-attack-id="sql_injection"]').querySelector('[data-key="order"]').value, '1');
+//   for (let i = 0; i < 7; i++) await page.byId('manual-next').dispatch('click');
+//   await page.byId('manual-create').dispatch('click');
+//   const submitted = page.calls.find(call => call.path.endsWith('/manual')).body.configuration;
+//   assert.deepEqual(submitted.attacks.map(a => [a.attackId, a.order]), [['sql_injection', 1]]);
+//   assert.equal(validateScenarioConfiguration(normalizeScenarioConfiguration(submitted, catalog), catalog).status, 'VALID');
+// });
+// test('段階フィルターは他段階の選択を消さず、選択順をカタログ順へ戻さない', async () => {
+//   const page = startAuthorDom(bootstrap); await page.ready;
+//   for (const id of ['sql_injection', 'path_traversal']) {
+//     const control = page.document.querySelectorAll('input[name="attack"]').find(c => c.value === id);
+//     control.checked = true; await control.dispatch('change');
+//   }
+//   const filter = page.document.querySelector('[data-key="stageFilter"]');
+//   filter.value = 'PRIVILEGE_ESCALATION'; await filter.dispatch('change');
+//   const cards = page.byId('attack-details').querySelectorAll('[data-attack-id]');
+//   assert.deepEqual(cards.map(c => c.dataset.attackId), ['phishing', 'sql_injection', 'path_traversal']);
+//   assert.equal(page.document.querySelector('[data-choice-id="phishing"]').hidden, true);
+//   assert.equal(page.document.querySelector('[data-choice-id="sudo_misconfiguration"]').hidden, false);
+//   const order = cards[2].querySelector('[data-key="order"]'); order.value = '1'; await order.dispatch('change');
+//   assert.deepEqual(page.byId('attack-details').querySelectorAll('[data-attack-id]').map(c => c.dataset.attackId),
+//     ['path_traversal', 'phishing', 'sql_injection']);
+// });
+//
+// test('途中解除して追加した攻撃には、残した攻撃より後の初期時刻を割り当てる', async () => {
+//   const page = startAuthorDom(bootstrap); await page.ready;
+//   for (const [id, checked] of [['sql_injection', true], ['phishing', false], ['path_traversal', true]]) {
+//     const control = page.document.querySelectorAll('input[name="attack"]').find(c => c.value === id);
+//     control.checked = checked; await control.dispatch('change');
+//   }
+//   const cards = page.byId('attack-details').querySelectorAll('[data-attack-id]');
+//   assert.deepEqual(cards.map(card => card.querySelector('[data-key="order"]').value), ['1', '2']);
+//   assert.ok(cards[0].querySelector('[data-key="occurrenceTime"]').value
+//     < cards[1].querySelector('[data-key="occurrenceTime"]').value);
+// });
+//

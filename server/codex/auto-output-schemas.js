@@ -20,8 +20,11 @@ const [scenarioPackage, review, evidencePackage, scenarioDraft, groundTruth, cha
 // Structured Outputs requires closed objects, so only the CLI-facing copies are expanded.
 const scenarioOutputSchema = structuredClone(scenarioPackage);
 Object.assign(scenarioOutputSchema.properties, {
-  scenarioDraft, groundTruth, characters, timeline, learningObjectives, evidenceRequirements,
+  scenarioDraft, groundTruth, characters, timeline, learningObjectives,
+  evidenceRequirements: structuredClone(evidenceRequirements),
 });
+// 外部v1の省略可能フィールドはCLI用だけ必須nullableにする。
+scenarioOutputSchema.properties.evidenceRequirements.properties.requirements.items.required.push('investigationStage');
 
 const evidenceOutputSchema = structuredClone(evidencePackage);
 evidenceOutputSchema.properties.evidenceArtifacts.items = evidenceArtifact;
@@ -32,6 +35,9 @@ const makotomaruOutputSchema = structuredClone(makotomaruResult);
 makotomaruOutputSchema.properties.configuration = scenarioConfiguration;
 
 export const AUTO_CODEX_OUTPUT_SCHEMAS = Object.freeze({
+  scenarioRevision: Object.freeze({
+    name: 'scenario-revision', canonicalSchema: await loadSchema('scenario-revision'),
+  }),
   scenario: Object.freeze({
     name: 'scenario-import-package', canonicalSchema: scenarioOutputSchema,
   }),

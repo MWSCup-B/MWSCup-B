@@ -23,6 +23,22 @@
           "requirementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
           "purpose": { "enum": ["ATTACK_TRACE", "TIMELINE_PROOF", "IDENTITY_PROOF", "CONTRADICTION_PROOF", "EXONERATION_PROOF"] },
           "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "investigationStage": {
+            "type": ["object", "null"],
+            "properties": {
+              "targetId": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "order": { "type": "number" },
+              "sourceNodeId": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "witnessCharacterId": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "subjectCharacterId": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "claim": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "questionFocus": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "expectedInference": { "type": "string", "minLength": 1, "maxLength": 1000 },
+              "limitedRefutation": { "type": "string", "minLength": 1, "maxLength": 1000 }
+            },
+            "required": ["targetId", "order", "sourceNodeId", "witnessCharacterId", "subjectCharacterId", "claim", "questionFocus", "expectedInference", "limitedRefutation"],
+            "additionalProperties": false
+          },
           "grounds": {
             "type": "array",
             "items": {

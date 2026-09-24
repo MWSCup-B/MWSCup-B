@@ -106,7 +106,10 @@ function documentFromHtml() {
     const node = new Element(tag);
     for (const [, key, value] of attributes.matchAll(/([\w-]+)(?:="([^"]*)")?/g)) node.setAttribute(key, value ?? '');
     stack.at(-1).append(node);
-    if (!['meta', 'link', 'input', 'br', 'hr', 'img'].includes(tag)) stack.push(node);
+    // 2026-09-24 修正前: SVGの自己終了タグを開いたままにして後続画面を内包していた。
+    // if (!['meta', 'link', 'input', 'br', 'hr', 'img'].includes(tag)) stack.push(node);
+    // 2026-09-24 修正後: mainのSVGタイトルもブラウザ同様に区切って解析する。
+    if (!['meta', 'link', 'input', 'br', 'hr', 'img'].includes(tag) && !/\/>$/.test(part)) stack.push(node);
   }
   document.getElementById = id => document.querySelector(`[id="${id}"]`);
   document.createElement = tag => new Element(tag);
@@ -116,7 +119,7 @@ function documentFromHtml() {
 }
 
 export function startAuthorDom(bootstrap, { missingElementId = null, startError = null,
-  savedGames = [], initialAuthor = null } = {}) {
+  savedGames = [], initialAuthor = null, responses = {} } = {}) {
   const document = documentFromHtml(); const calls = [];
   let storedGames = structuredClone(savedGames);
   if (missingElementId) {
@@ -132,6 +135,11 @@ export function startAuthorDom(bootstrap, { missingElementId = null, startError 
       const value = await bootstrap;
       return { ok: true, json: async () => ({ token: 'a'.repeat(64),
         bootstrap: structuredClone(value), author: structuredClone(author) }) };
+    }
+    // 2026-09-24: 選択・承認・拒否の応答と通信待ちを実scriptで検証する。
+    if (responses[path]) {
+      Object.assign(author, await responses[path](calls.at(-1).body));
+      return { ok: true, json: async () => ({ author: structuredClone(author) }) };
     }
     if (path === '/api/author/games' && options.method === 'GET') {
       return { ok: true, json: async () => ({ games: structuredClone(storedGames) }) };

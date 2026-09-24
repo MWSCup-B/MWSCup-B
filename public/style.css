@@ -26,6 +26,10 @@ legend { font-weight: bold; }
 .makotomaru-card { background: linear-gradient(145deg, #fff, #eef8ff); border-color: #2778a5; }
 .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .7rem; }
 .choice-card { display: flex; gap: .6rem; align-items: center; padding: .8rem; border: 1px solid #9caaba; border-radius: 8px; }
+.attack-chain-options { display: grid; gap: .6rem; }
+.attack-chain-options > div { padding: .8rem; border-left: 3px solid #2778a5; background: #f1f6fa; }
+.attack-chain-options select { font: inherit; margin-bottom: 0; }
+#attack-chain-status { overflow-wrap: anywhere; color: #315267; }
 .builder-list { display: grid; gap: .8rem; margin: .8rem 0; }
 .builder-card { padding: 1rem; border: 1px solid #aab6c3; border-radius: 10px; background: #fff; color: #172431; }
 .compact-builder { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; align-items: end; }
@@ -410,5 +414,21 @@ code { font-family: ui-monospace, monospace; }
 .attack-browser .choice-card[hidden] { display: none; }
 .attack-browser .choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .attack-browser .step-hint { margin: 0; overflow-wrap: anywhere; }
+/* 2026-09-24: mainの配色・部品を使い、攻撃連鎖と舞台の2項目を画面内に収める。 */
+.author-page .wizard-progress { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.author-page .author-main { display: flex; flex-direction: column; }
+.author-page .author-main > section { flex: 1; }
+.author-page #operation-error { margin: 0; }
+.author-page #operation-error:empty { display: none; }
+.author-page #selection-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: clamp(.4rem, 1.5vh, 1rem); overflow: hidden; }
+.selection-fields { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: clamp(.5rem, 2vw, 1.5rem); min-height: 0; overflow: auto; }
+.selection-fields fieldset { min-width: 0; margin: 0; align-self: start; }
+.selection-fields select { width: 100%; font: inherit; }
+.selection-fields .attack-chain-options { gap: clamp(.3rem, 1vh, .7rem); }
+.selection-fields .attack-chain-options > div { border-radius: .45rem; padding: clamp(.45rem, 1vh, .8rem); }
+.selection-fields label { display: block; font-weight: 700; }
+.selection-fields #attack-chain-status { margin-bottom: 0; font-size: .85rem; }
+@media (max-width: 650px) { .selection-fields { grid-template-columns: minmax(0, 1fr); } }
+@media (max-height: 650px) { .selection-fields fieldset { padding: .5rem; } .selection-fields select { padding: .35rem; } }
 @media (max-width: 700px) { .attack-browser .choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-height: 650px) { .attack-browser .choice-card { padding: .35rem; font-size: .85rem; } }

@@ -168,5 +168,8 @@ test('複数攻撃で1000文字の調査目的を設定しても要件の長さ�
   const template = buildScenarioTemplate({ configuration, generationInput: validation.technical.generationInput });
   for (const requirement of template.evidenceRequirements.requirements) assert.ok(requirement.description.length <= 2000);
   for (const attack of configuration.attacks) assert.ok(template.evidenceRequirements.requirements
-    .some(r => r.requirementId.startsWith('requirement_observation_') && r.description.includes(attack.evidenceAnswer)));
+// 2026-09-24 修正前: 統合前の契約。
+//     .some(r => r.requirementId.startsWith('requirement_observation_') && r.description.includes(attack.evidenceAnswer)));
+// 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
+    .some(r => r.requirementId.startsWith('requirement_goal_') && r.description.includes(attack.evidenceAnswer)));
 });

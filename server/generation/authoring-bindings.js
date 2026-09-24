@@ -2,7 +2,8 @@
 import { fail } from './schema.js';
 
 export const AUTHORING_BINDING_SEARCH_LIMIT = 10000;
-const entityIds = { actor: 'actor-a', user: 'user-a', database_principal: 'db-account' };
+// 2026-09-24: 認証情報取得とログインで同一の明示アカウントを参照する。
+const entityIds = { actor: 'actor-a', user: 'user-a', database_principal: 'db-account', account: 'account-a' };
 
 export function entityType(definition, name) {
   const requirements = definition.targetTypes.filter(item => item.binding === name);

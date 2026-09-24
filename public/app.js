@@ -9,6 +9,8 @@ let generatedRenderer = null;
 const parameters = new URLSearchParams(location.search);
 const playId = parameters.get('game');
 const savedGameId = parameters.get('saved');
+// 2026-09-24: mainの保存URLもkawata-workの事件ファイル直接開始へ接続する。
+const entryRequest = savedGameId ? { gameId: savedGameId } : playId ? { playId } : null;
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -51,6 +53,8 @@ async function request(path, body) {
   } catch (error) {
     errorBox.textContent = error instanceof TypeError
       ? '通信できません。サーバーの起動を確認してください。' : error.message;
+    // 2026-09-24 修正前: if (!game && playId) renderEntry(true);
+    if (!game && entryRequest) renderEntry(true);
   } finally {
     busy = false;
     screen.setAttribute('aria-busy', 'false');
@@ -60,6 +64,17 @@ async function request(path, body) {
 
 function action(actionName, fields = {}) {
   return request('/api/action', { action: actionName, ...fields });
+}
+
+function renderEntry(failed = false) {
+  document.body.classList.add('playing-generated');
+  screen.className = 'case-entry';
+  screen.replaceChildren();
+  const title = element('h1', failed ? '事件ファイルを開けませんでした' : '事件ファイルを開いています…');
+  title.id = 'screen-title'; title.tabIndex = -1;
+  screen.append(title);
+  // 2026-09-24 修正前: if (failed) screen.append(button('もう一度開く', () => request('/api/start', { playId })));
+  if (failed) screen.append(button('もう一度開く', () => request('/api/start', entryRequest)));
 }
 
 function evidenceCard(item) {
@@ -205,6 +220,8 @@ function render() {
   document.body.classList.remove('playing-generated');
   screen.className = ''; screen.style.backgroundImage = '';
   if (!game) {
+    // 2026-09-24 修正前: if (playId) { renderEntry(); return; }
+    if (entryRequest) { renderEntry(); return; }
     const title = element('h1', 'インシデントクラフト');
     title.id = 'screen-title'; title.tabIndex = -1;
     screen.append(title, element('p', 'ゲームデータを検証して開始します。'),
@@ -218,3 +235,5 @@ function render() {
 }
 
 render();
+// 2026-09-24 修正前: if (playId) request('/api/start', { playId });
+if (entryRequest) request('/api/start', entryRequest);

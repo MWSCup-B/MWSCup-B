@@ -3,7 +3,8 @@ import { CodexUnavailableError, CodexCancelledError, CodexOutputError, CodexTime
 import { verifiedScenarioFixture, semanticReview } from './verified-scenario.js';
 import { phase7Fixture } from './phase7-evidence.js';
 import { createDefaultConfiguration } from '../../server/generation/scenario-configuration.js';
-import { addDistinctClaims } from './court-issues.js';
+import { addCourtQuestions, addDistinctClaims, assignStageSupports } from './court-issues.js';
+import { observationAnchors } from '../../server/generation/court-questions.js';
 
 export class MockCodexRunner {
   constructor({ unavailable = false, reviewOutcomes = ['VERIFIED'], malformedScenario = false,
@@ -51,6 +52,7 @@ export class MockCodexRunner {
       if (this.scenarioCalls <= this.malformedScenarioOutput) throw new CodexOutputError(
         'Codex出力が単一のJSONオブジェクトではありません。', { phase });
       if (this.malformedScenario) return { schemaVersion: '1.0' };
+      if (outputSchemaName === 'scenario-revision') return { schemaVersion: '1.0', requirementUpdates: [] };
       const scenarioPackage = data.scenarioTemplate ? structuredClone(data.scenarioTemplate)
         : verifiedScenarioFixture(data.scenarioGenerationInput).scenarioPackage;
       if (this.changeScenarioSummaryOnRevision && this.scenarioCalls > 1) {
@@ -85,9 +87,25 @@ export class MockCodexRunner {
       const agent = input.evidenceAgentInput;
       const draft = phase7Fixture({ verificationInput: agent.scenarioVerificationInput,
         verificationResult: agent.verificationResult,
-        scenarioPackage: agent.scenarioImportPackage }).evidencePackage;
+        scenarioPackage: agent.scenarioVerificationInput.scenarioPackage }).evidencePackage;
       for (const artifact of draft.evidenceArtifacts) delete artifact.integrity;
       if (data.requestedCourtIssueCount) addDistinctClaims(draft, data.requestedCourtIssueCount);
+      const stageRequirements = agent.scenarioVerificationInput.scenarioPackage.evidenceRequirements.requirements
+        .filter(item => item.investigationStage);
+      if (data.investigationStages) assignStageSupports(draft, data.investigationStages, stageRequirements);
+      addCourtQuestions(draft);
+      const statements = draft.evidenceArtifacts.filter(item => item.type === 'TESTIMONY')
+        .flatMap(item => item.testimony.statements).filter(item => item.technicalAssessment === 'CONTRADICTED');
+      for (const requirement of stageRequirements) {
+        const plan = requirement.investigationStage;
+        const question = draft.courtQuestions.find(item => item.statementId === statements[plan.order - 1]?.statementId);
+        if (question) {
+          const values = question.supportingQuotes.map(item => observationAnchors(item.quote)[0]);
+          question.prompt = `${values[0]}を含む資料について、${plan.questionFocus}`;
+          question.choices[0] = plan.expectedInference.split('。')[0] + '。';
+          question.explanation = `${plan.expectedInference}\n照合する記録値：${values.join('、')}。`;
+        }
+      }
       return draft;
     }
     throw new Error(`unexpected phase: ${phase}`);

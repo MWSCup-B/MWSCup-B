@@ -11,7 +11,10 @@ export const UI_API_CONTRACT = Object.freeze({ schemaVersion: '1.0',
     RETRIAL_COURT: ['objection', 'investigation'], GUILTY_RETRY: ['retry'],
     OBJECTION: [], ACQUITTED: [], BLOCKED: [],
   },
-  objectionInputs: ['statementId', 'evidenceId'], rendering: 'TEXT_CONTENT_ONLY' });
+  objectionInputs: ['statementId', 'evidenceId'],
+  interpretationInputs: ['statementId', 'evidenceId', 'interpretationChoiceId'],
+  sequentialRetrialInputs: ['interpretationChoiceId'],
+  rendering: 'TEXT_CONTENT_ONLY' });
 
 function validateGameMakeResult(result) {
   validateDocument('game-make-result', result);

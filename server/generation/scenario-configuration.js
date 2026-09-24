@@ -4,6 +4,8 @@ import { validateDocument, ValidationError } from './schema.js';
 import { buildAttackGraphs } from './attack-graph.js';
 import { buildScenarioGenerationInputs } from './scenario-interface.js';
 import { requestedCourtIssueCount } from './court-issues.js';
+import { AUTHOR_ATTACK_CHOICES, SCENARIO_SETTINGS } from './author-options.js';
+import { buildIncidentOverview } from './incident-report.js';
 
 export const INVESTIGATION_TYPES = Object.freeze({
   WEB_LOG: { label: 'Webアクセスログ', actionId: 'action_audit_log' },
@@ -11,7 +13,7 @@ export const INVESTIGATION_TYPES = Object.freeze({
   AUTH_LOG: { label: '認証ログ', actionId: 'action_review_auth_log' },
   APPLICATION_LOG: { label: 'Applicationログ', actionId: 'action_audit_log' },
   NETWORK_LOG: { label: 'Networkログ', actionId: 'action_analyze_network_log' },
-  EMAIL: { label: 'メール', actionId: 'action_inspect_file' },
+  EMAIL: { label: 'メール', actionId: 'action_check_email' },
   BROWSER_HISTORY: { label: 'ブラウザ履歴', actionId: 'action_inspect_device' },
   DEVICE: { label: '端末', actionId: 'action_inspect_device' },
   FILE: { label: 'ファイル', actionId: 'action_inspect_file' },
@@ -47,7 +49,83 @@ export const DEFAULT_DESIGN_NETWORK = Object.freeze({
 
 const labels = Object.freeze({
   phishing: 'フィッシング', reflected_xss: '反射型XSS', sql_injection: 'SQLインジェクション',
+  credential_phishing: 'フィッシング（資格情報入力）', stored_xss: 'Stored XSS',
+  unauthorized_login: '不正ログイン',
+  ...Object.fromEntries(AUTHOR_ATTACK_CHOICES.map(item => [item.id, item.label])),
 });
+
+export const MANUAL_ATTACK_CHOICES = Object.freeze([
+  { id: 'phishing', label: 'フィッシング' },
+  { id: 'stored_xss', label: 'Stored XSS' },
+  { id: 'unauthorized_login', label: '不正ログイン' },
+]);
+
+// 受信Configurationの補完ではなく、攻撃確定時に利用者が確認する初期値だけを作る。
+// 入力後の変更・検証・真実丸には適用しない。旧リンク誘導モデルも維持する。
+export function createManualAttackPreset(attackIds, catalog) {
+  if (!Array.isArray(attackIds) || !attackIds.length || attackIds.length > 3
+    || new Set(attackIds).size !== attackIds.length
+    || attackIds.some(id => !MANUAL_ATTACK_CHOICES.some(choice => choice.id === id))) {
+    throw new ValidationError('INVALID_ATTACK_SELECTION', 'attackIds', '登録済みの攻撃を重複なく1～3種類選択してください。');
+  }
+  const has = id => attackIds.includes(id);
+  const capture = has('phishing') && has('unauthorized_login');
+  const ids = [has('phishing') && (capture ? 'credential_phishing' : 'phishing'),
+    has('unauthorized_login') && 'unauthorized_login', has('stored_xss') && 'stored_xss'].filter(Boolean);
+  const configuration = createDefaultConfiguration({ attackIds: [], difficulty: attackIds.length,
+    incidentDate: '2026-09-18' });
+  if (has('unauthorized_login')) {
+    configuration.incidentContext.victimSystem = '社内ポータル（認証連携・投稿機能）';
+    configuration.incidentContext.initialSuspicionReason =
+      '調査担当者が認証成功のアカウントを被告人の利用と結び付けたため。アカウントと人物の対応は疑う側の主張であり、技術記録からは未確認。';
+  } else if (has('stored_xss')) {
+    configuration.incidentContext.initialSuspicionReason =
+      '調査担当者が投稿の閲覧記録を被告人による投稿と結び付けたため。閲覧者と投稿者の同一性や、被告人との対応は未確認。';
+  }
+  const { network } = configuration;
+  if (has('unauthorized_login')) {
+    network.nodes.push({ nodeId: 'auth-host', label: '認証サーバー', nodeType: 'SERVER', os: 'linux',
+      ip: '10.10.0.60', subnetId: 'internal-net', trustBoundaryId: 'internal',
+      roles: ['authentication_server'], logSources: ['AUTH_LOG', 'APPLICATION_LOG', 'CONFIGURATION'] });
+    network.services.push({ serviceId: 'auth-service', nodeId: 'auth-host', label: 'Portal Authentication',
+      serviceType: 'authentication', platform: 'auth' });
+    network.connections.push({ fromNodeId: 'sender-host', toNodeId: 'auth-host' },
+      { fromNodeId: 'web-host', toNodeId: 'auth-host' });
+  }
+  if (capture) {
+    network.nodes.push({ nodeId: 'lure-host', label: '偽フォームサーバー（教材）', nodeType: 'WEB_SERVER', os: 'linux',
+      ip: '203.0.113.20', subnetId: 'external-net', trustBoundaryId: 'external',
+      roles: ['web_server'], logSources: ['WEB_LOG', 'APPLICATION_LOG', 'CONFIGURATION'] });
+    network.services.push({ serviceId: 'lure-service', nodeId: 'lure-host', label: 'Synthetic Lure Web',
+      serviceType: 'web_application', platform: 'web' });
+    network.connections.push({ fromNodeId: 'client-host', toNodeId: 'lure-host' },
+      { fromNodeId: 'sender-host', toNodeId: 'lure-host' });
+  }
+  const specs = {
+    phishing: { investigationTypes: ['EMAIL'], investigationSourceNodeId: 'mail-host',
+      evidenceAnswer: 'メール文のリンク先と実際に遷移するリンク先が異なること',
+      notes: 'リンク誘導のみ。メール保存とクリックは区別する。資格情報窃取は含まない。' },
+    credential_phishing: { targetNodeId: 'lure-host', targetServiceId: 'lure-service',
+      investigationTypes: ['EMAIL'], investigationSourceNodeId: 'mail-host',
+      evidenceAnswer: 'メールの表示URLと実際のhrefが異なり、偽フォームへの送信記録は正規サービスでの認証成功とは別であること。',
+      notes: 'リンク誘導に加え、偽フォームへの資格情報入力・送信・受信を明示した教材。送信記録は調査可能な合成資料で秘密値を含めない。認証先はauth-service。クリックだけで窃取とはしない。' },
+    unauthorized_login: { investigationTypes: ['AUTH_LOG'], investigationSourceNodeId: 'auth-host',
+      evidenceAnswer: '認証ログとWeb側のセッション監査は同じアカウントの認証・投稿権限を示すが、それだけで実際の操作者を被告人と特定できないこと。',
+      notes: `${capture ? '前段の偽フォームで取得した' : '初期条件として取得済みの'}有効な資格情報を悪用する。認証先auth-service、投稿先web-service。教材はパスワードのみの認証・投稿権限に限定し、MFA突破や管理者権限は仮定しない。` },
+    stored_xss: { investigationTypes: ['APPLICATION_LOG', 'WEB_LOG'], investigationSourceNodeId: 'web-host',
+      evidenceAnswer: '保存投稿と後の閲覧記録・ブラウザ計測を照合するとStored XSSの実行を確認できるが、閲覧端末の利用記録は投稿者の特定にはならないこと。',
+      notes: `${has('unauthorized_login') ? '前段の不正ログインによる投稿権限' : '初期条件として明示した投稿権限'}を使用。投稿の保存は閲覧前に完了している条件。発生日時は閲覧時の実行時点で、投稿時刻とは別。出力エンコード・サニタイズが不足し、実効CSPは実行を阻止しない。ブラウザ計測を取得可能とする。資格情報窃取は効果に含めない。` },
+  };
+  configuration.attacks = ids.map((attackId, index) => {
+    const definition = catalog.find(item => item.id === attackId);
+    if (!definition) throw new ValidationError('UNREGISTERED_ATTACK', 'attackIds', `攻撃定義${attackId}がありません。`);
+    return { attackId, order: index + 1,
+      occurrenceTime: `2026-09-18T09:${10 + index * 8}:00+09:00`,
+      sourceNodeId: 'sender-host', targetNodeId: 'web-host', targetServiceId: 'web-service',
+      expectedEffect: definition.effects.at(-1).description, ...specs[attackId] };
+  });
+  return configuration;
+}
 
 // 2026-09-20 修正前: 対象OS・全Role・ローカル攻撃を識別し、カタログ位置から独立した初期値を作成
 // function presetAttackConfiguration(definition, network, index = 0, incidentDate = '2026-01-15') {
@@ -104,13 +182,17 @@ function presetAttackConfiguration(definition, network, index = 0, incidentDate 
     : roles.length ? roles.every(role => node.roles.includes(role)) : node.nodeType === 'EXTERNAL');
   if (!target || !investigation || sources.length !== 1) return null;
   const minute = 9 * 60 + 10 + index * 8;
-  return { attackId: definition.id, order: index + 1,
+  const attack = { attackId: definition.id, order: index + 1,
     occurrenceTime: incidentDate + 'T' + String(Math.floor(minute / 60)).padStart(2, '0') + ':'
       + String(minute % 60).padStart(2, '0') + ':00+09:00',
     sourceNodeId: sources[0].nodeId, targetNodeId: target.nodeId, targetServiceId: target.serviceId,
     investigationTypes: [definition.authoring.preferredInvestigationType],
     investigationSourceNodeId: investigation.nodeId, evidenceAnswer: definition.authoring.evidenceAnswer,
     expectedEffect: definition.effects[0].description, notes: '' };
+  // 2026-09-24: 追加攻撃の補助Serviceも解決できる構成だけを候補表示する。
+  try { resolveAuthoringBindings(canonicalNetwork(network), attack, definition); }
+  catch (error) { if (error instanceof ValidationError) return null; throw error; }
+  return attack;
 }
 
 export function scenarioCreationBootstrap(catalog, networkPresets = []) {
@@ -128,6 +210,10 @@ export function scenarioCreationBootstrap(catalog, networkPresets = []) {
   defaultManualConfiguration.attacks[0].evidenceAnswer =
     'メール文のリンク先と実際に遷移するリンク先が異なること';
   return {
+    attackChoices: structuredClone(AUTHOR_ATTACK_CHOICES),
+    settings: SCENARIO_SETTINGS.map(({ id, label }) => ({ id, label })),
+    selectionDefaults: { schemaVersion: '1.0', attackIds: ['phishing'], settingId: 'company' },
+    maxSelectedAttacks: 3,
     modes: [
       { id: 'MANUAL', label: '詳細設定', description: '攻撃手法、Network、発生時間、調査方法などを自分で設定します。' },
       { id: 'MAKOTOMARU', label: '真実丸', description: 'AIがScenario条件を自動的に選びます。' },
@@ -159,6 +245,11 @@ export function scenarioCreationBootstrap(catalog, networkPresets = []) {
 // 2026-09-20 修正後: テンプレートの攻撃順・時刻をカタログ位置に依存させない
         presetAttackConfiguration(definition, preset.network, 0, '2026-09-18')).filter(Boolean) })),
     defaultManualConfiguration,
+    manualAttackChoices: structuredClone(MANUAL_ATTACK_CHOICES),
+    manualAttackPresets: Array.from({ length: 7 }, (_, index) => {
+      const attackIds = MANUAL_ATTACK_CHOICES.filter((_, bit) => (index + 1) & (1 << bit)).map(item => item.id);
+      return { attackIds, configuration: createManualAttackPreset(attackIds, catalog) };
+    }),
   };
 }
 
@@ -447,7 +538,9 @@ function buildTechnicalContracts(configuration, catalog) {
 // 2026-09-20 修正後: カタログの連続選択や単一連結を要求せず、実際の因果関係と入力順を検証
   const compatible = graphResult.graphs.find(item => item.sourcePlanOrders.some(order =>
     order.every((id, index) => id === sorted[index].attackId)));
-  if (!compatible) return { errors: [issue('INVALID_ATTACK_COMBINATION', 'attacks',
+  // 2026-09-24 修正前: if (!compatible) return { errors: [issue('INVALID_ATTACK_COMBINATION', 'attacks',
+  // 2026-09-24 修正後: 組合せは成立するが指定順で成立しない場合を区別する。
+  if (!compatible) return { errors: [issue('ATTACK_DEPENDENCY_ORDER_MISMATCH', 'attacks',
     '指定した順番では攻撃の前提条件を満たせません。',
     '必要な権限や条件を生む攻撃を先に配置し、発生日時も確認してください。')] };
   // 独立した攻撃を含めて元のGraph全体を照合し、入力順を満たす案を選ぶ。
@@ -570,13 +663,13 @@ export function validateScenarioConfiguration(configuration, catalog) {
     technical: errors.length ? null : technical };
 }
 
-export function buildScenarioPreview(configuration, scenarioPackage = null, catalog = []) {
+export function buildScenarioPreview(configuration, scenarioPackage = null, catalog = [], generationInput = null) {
   const nodes = new Map(configuration.network.nodes.map(item => [item.nodeId, item]));
   const services = new Map(configuration.network.services.map(item => [item.serviceId, item]));
   const attackLabels = new Map(catalog.map(item => [item.id, item.label]));
   return { configurationId: configuration.configurationId, mode: configuration.mode,
     incidentSummary: scenarioPackage?.scenarioDraft?.summary
-      ?? `${configuration.incidentContext.organizationName}で発生したセキュリティ事件を調査します。`,
+      ?? buildIncidentOverview(configuration, generationInput),
     attacks: [...configuration.attacks].sort((a, b) => a.order - b.order).map(item => ({
       order: item.order, attackId: item.attackId, label: labels[item.attackId]
         ?? attackLabels.get(item.attackId) ?? item.attackId,
@@ -586,7 +679,8 @@ export function buildScenarioPreview(configuration, scenarioPackage = null, cata
     })),
     targetSystem: configuration.incidentContext.victimSystem,
     difficulty: configuration.difficulty,
-    difficultyLabel: `${'★'.repeat(configuration.difficulty)} / ${requestedCourtIssueCount(configuration)}争点`,
+    difficultyLabel: `${'★'.repeat(configuration.difficulty)} / ${generationInput
+      ? `${requestedCourtIssueCount(configuration, generationInput)}件の調査` : '調査対象ごとに審理'}`,
     network: structuredClone(configuration.network),
   };
 }
