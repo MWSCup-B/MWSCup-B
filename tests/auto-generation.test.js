@@ -19,8 +19,13 @@ async function generated(options = {}, selection = { networkId: 'network-c', dif
 test('Scenario Builder bootstrapは2 Mode・実装済みAttack・Difficulty 1-3を公開する', () => {
   const value = autoAuthorBootstrap();
   assert.deepEqual(value.modes.map(item => item.id), ['MANUAL', 'MAKOTOMARU']);
-  assert.deepEqual(value.attacks.map(item => item.id).sort(),
-    ['phishing', 'reflected_xss', 'sql_injection']);
+// 2026-09-20 修正前: 登録9攻撃と任意選択用メタデータを確認
+//   assert.deepEqual(value.attacks.map(item => item.id).sort(),
+//     ['phishing', 'reflected_xss', 'sql_injection']);
+// 2026-09-20 修正後: 登録9攻撃と任意選択用メタデータを確認
+  assert.equal(value.attacks.length, 9);
+  assert.equal(value.attackSelectionLimit, 6);
+  assert.ok(value.attacks.every(a => a.stages.length && a.startingConditions.length));
   assert.deepEqual(value.difficulties.map(item => item.difficulty), [1, 2, 3]);
   assert.ok(value.defaultNetwork.nodes.length > 0);
 });
@@ -34,7 +39,10 @@ test('XSS + Network C + ★3をReview修正後にGAME READYまで自動実行す
   assert.equal(session.gameCaseResult.status, 'READY');
   assert.equal(session.gameMakeResult.status, 'BUILT');
   assert.equal(session.evaluationResult.status, 'ACCEPTED');
-  assert.equal(runner.scenarioCalls, 1); assert.equal(runner.reviewCalls, 2);
+// 2026-09-20 修正前: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+//   assert.equal(runner.scenarioCalls, 1); assert.equal(runner.reviewCalls, 2);
+// 2026-09-20 修正後: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+  assert.equal(runner.scenarioCalls, 2); assert.equal(runner.reviewCalls, 2);
   assert.equal(runner.evidenceCalls, 1);
   assert.equal(session.scenarioImportResult.status, 'VALID');
   assert.equal(session.evidenceImportResult.status, 'VALID');
@@ -55,7 +63,10 @@ test('Review後のScenario修正版がSchema違反ならfeedback付きで上限�
     reviewOutcomes: ['NEEDS_REVISION'] });
   assert.equal(view.currentState, 'FAILED');
   assert.equal(view.failure.code, 'MAX_REVISION_EXCEEDED');
-  assert.equal(runner.scenarioCalls, 2);
+  // 2026-09-20 修正前: 初回Scenario設計を含む上限を検証する。
+  // assert.equal(runner.scenarioCalls, 2);
+  // 2026-09-20 修正後: 初回を含め3回で停止する。
+  assert.equal(runner.scenarioCalls, 3);
   assert.ok(runner.calls.filter(item => item.phase === 'REVISING_SCENARIO')
     .some(item => item.feedback.classification === 'REPAIRABLE_BLOCKED'));
 });
@@ -63,7 +74,10 @@ test('Review後のScenario修正版がSchema違反ならfeedback付きで上限�
 test('Review後のScenario非JSON出力をREPAIRABLE_BLOCKEDとして次Invocationで修正する', async () => {
   const { runner, view } = await generated({ malformedScenarioOutput: 1,
     reviewOutcomes: ['NEEDS_REVISION', 'VERIFIED'] });
-  assert.equal(view.currentState, 'READY'); assert.equal(runner.scenarioCalls, 2);
+// 2026-09-20 修正前: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+//   assert.equal(view.currentState, 'READY'); assert.equal(runner.scenarioCalls, 2);
+// 2026-09-20 修正後: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+  assert.equal(view.currentState, 'READY'); assert.equal(runner.scenarioCalls, 3);
   const revision = runner.calls.filter(item => item.phase === 'REVISING_SCENARIO')
     .find(item => item.feedback.classification === 'REPAIRABLE_BLOCKED');
   assert.equal(revision.feedback.classification, 'REPAIRABLE_BLOCKED');
@@ -118,7 +132,10 @@ test('output schemaエラーは専用分類と安全なDeveloper Detailを公開
   assert.equal(view.failure.code, 'CODEX_OUTPUT_SCHEMA_INVALID');
   assert.equal(view.failure.message, '生成用データ形式の内部エラーが発生しました。');
   assert.deepEqual(view.developerDetails[0], {
-    phase: 'REVIEWING_SCENARIO', attempt: 1,
+// 2026-09-20 修正前: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+//     phase: 'REVIEWING_SCENARIO', attempt: 1,
+// 2026-09-20 修正後: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+    phase: 'GENERATING_SCENARIO', attempt: 1,
     code: 'CODEX_OUTPUT_SCHEMA_INVALID', errorCode: 'CODEX_OUTPUT_SCHEMA_INVALID',
     field: 'generation', schemaName: 'scenario-import-package',
     cliErrorCode: 'invalid_json_schema', cliErrorClass: 'output_schema',
@@ -159,8 +176,14 @@ test('真実丸入力は技術成立性を保持しreference等の不要fieldを
     attackCategory: 'ANY', complexity: 'STANDARD' });
   await manager.waitForIdle();
   const data = runner.calls.find(item => item.phase === 'MAKOTOMARU_CONFIGURATION').data;
+// 2026-09-20 修正前: ローカル権限昇格にネットワーク通信を捏造しない
+//   assert.ok(data.allowedAttacks.every(item => item.requiredServices.length
+//     && item.requiredReachability.length && item.observableArtifacts.length));
+// 2026-09-20 修正後: ローカル権限昇格にネットワーク通信を捏造しない
   assert.ok(data.allowedAttacks.every(item => item.requiredServices.length
-    && item.requiredReachability.length && item.observableArtifacts.length));
+    && Array.isArray(item.requiredReachability) && item.observableArtifacts.length));
+  assert.ok(data.allowedAttacks.find(item => item.id === 'valid_account_ssh').requiredReachability.length);
+  assert.equal(data.allowedAttacks.find(item => item.id === 'sudo_misconfiguration').requiredReachability.length, 0);
   assert.ok(data.allowedAttacks.every(item => !Object.hasOwn(item, 'references')
     && !Object.hasOwn(item, 'relatedAttackPatterns')));
   assert.ok(data.networkTemplate.nodes.every(item => Array.isArray(item.roles)
@@ -178,7 +201,11 @@ test('真実丸Structured Output Schemaは要求値とcanonical ID/effectへ制�
   assert.ok(attack.sourceNodeId.enum.includes('client-host'));
   assert.ok(attack.targetServiceId.enum.includes('web-service'));
   assert.ok(attack.expectedEffect.enum.every(value => value.length > 20));
-  assert.equal(attack.expectedEffect.enum.length, 3);
+// 2026-09-20 修正前: 追加攻撃を真実丸の出力制約でも選択可能にする
+//   assert.equal(attack.expectedEffect.enum.length, 3);
+// 2026-09-20 修正後: 追加攻撃を真実丸の出力制約でも選択可能にする
+  assert.equal(attack.expectedEffect.enum.length, 9);
+  assert.equal(configuration.attacks.maxItems, 6);
 });
 
 test('Accountに依存する識別情報を状態へ保存・公開しない', async () => {

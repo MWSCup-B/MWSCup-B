@@ -20,10 +20,19 @@ export function buildEvidenceInvestigationPlan(configuration, generationInput) {
     .filter(artifact => artifact.state === 'SATISFIED'
       && artifact.evaluations.every(item => item.state === 'SATISFIED'))
     .map(artifact => {
-      const source = artifactSources[artifact.artifactId];
-      const serviceId = node.bindings.find(item => item.name === source?.binding)?.entityId;
-      const service = technical.network.services.find(item => item.id === serviceId);
-      const host = configuration.network.nodes.find(item => item.nodeId === service?.nodeId);
+// 2026-09-20 修正前: 証拠取得元を攻撃定義から解決し、固定4種類以外の記録にも対応
+//       const source = artifactSources[artifact.artifactId];
+//       const serviceId = node.bindings.find(item => item.name === source?.binding)?.entityId;
+//       const service = technical.network.services.find(item => item.id === serviceId);
+//       const host = configuration.network.nodes.find(item => item.nodeId === service?.nodeId);
+// 2026-09-20 修正後: 証拠取得元を攻撃定義から解決し、固定4種類以外の記録にも対応
+      const definition = technical.attackDefinitions.find(item => item.id === node.attackDefinitionId);
+      const acquisition = definition?.observableArtifacts.find(item => item.id === artifact.artifactId)?.acquisition;
+      const source = acquisition ? { ...acquisition, actionId: INVESTIGATION_TYPES[acquisition.logSource].actionId }
+        : artifactSources[artifact.artifactId];
+      const entityId = node.bindings.find(item => item.name === source?.binding)?.entityId;
+      const service = technical.network.services.find(item => item.id === entityId);
+      const host = configuration.network.nodes.find(item => item.nodeId === (service?.nodeId ?? entityId));
       if (!source || !host?.logSources.includes(source.logSource)) fail(
         'EVIDENCE_SOURCE_UNAVAILABLE', `attacks.${node.attackDefinitionId}.investigationTypes`,
         `${artifact.artifactId}を取得する既存Node・Log Source・調査操作が揃っていません。`,
@@ -36,20 +45,23 @@ export function buildEvidenceInvestigationPlan(configuration, generationInput) {
     }));
 }
 
-const builders = Object.freeze({
-  phishing: attack => ({ attackId: attack.attackId, investigationTypes: attack.investigationTypes,
-    syntheticDataKind: attack.investigationTypes.includes('EMAIL') ? 'SYNTHETIC_EMAIL' : 'SYNTHETIC_LOG' }),
-  reflected_xss: attack => ({ attackId: attack.attackId, investigationTypes: attack.investigationTypes,
-    syntheticDataKind: 'SYNTHETIC_WEB_LOG' }),
-  sql_injection: attack => ({ attackId: attack.attackId, investigationTypes: attack.investigationTypes,
-    syntheticDataKind: 'SYNTHETIC_APPLICATION_LOG' }),
-});
+const syntheticKinds = Object.freeze({ EMAIL: 'SYNTHETIC_EMAIL', WEB_LOG: 'SYNTHETIC_WEB_LOG',
+  APPLICATION_LOG: 'SYNTHETIC_APPLICATION_LOG', AUTH_LOG: 'SYNTHETIC_AUTH_LOG',
+  PROXY_LOG: 'SYNTHETIC_PROXY_LOG', NETWORK_LOG: 'SYNTHETIC_NETWORK_LOG',
+  BROWSER_HISTORY: 'SYNTHETIC_BROWSER_HISTORY', DEVICE: 'SYNTHETIC_DEVICE_RECORD',
+  FILE: 'SYNTHETIC_FILE_RECORD', CONFIGURATION: 'SYNTHETIC_CONFIGURATION_RECORD' });
+
+const genericBuilder = attack => ({ attackId: attack.attackId,
+  investigationTypes: attack.investigationTypes,
+  syntheticDataKind: syntheticKinds[attack.investigationTypes[0]] ?? 'SYNTHETIC_LOG' });
+
+// 旧APIとの互換用。実際の割当ては攻撃IDに依存しないgenericBuilderを使用する。
+const builders = Object.freeze({ phishing: genericBuilder, reflected_xss: genericBuilder,
+  sql_injection: genericBuilder });
 
 export function buildInvestigationAssignments(configuration) {
   return [...configuration.attacks].sort((a, b) => a.order - b.order).map(attack => {
-    const builder = builders[attack.attackId];
-    if (!builder) throw new Error(`Investigation Builder is not registered: ${attack.attackId}`);
-    const result = builder(attack);
+    const result = genericBuilder(attack);
     return { ...result, sourceNodeId: attack.investigationSourceNodeId,
       actions: attack.investigationTypes.map(type => ({ type,
         actionId: INVESTIGATION_TYPES[type].actionId })) };

@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dmz-web",
+  "label": "DMZ分離構成",
+  "description": "公開WebとメールをDMZに置き、DBを社内側へ分離した構成。",
+  "network": {
+    "subnets": [
+      {
+        "subnetId": "internet-zone",
+        "label": "インターネット",
+        "cidr": "198.51.100.0/24",
+        "trustBoundaryId": "external"
+      },
+      {
+        "subnetId": "dmz-zone",
+        "label": "DMZ",
+        "cidr": "172.20.10.0/24",
+        "trustBoundaryId": "dmz"
+      },
+      {
+        "subnetId": "office-zone",
+        "label": "社内ネットワーク",
+        "cidr": "10.20.0.0/24",
+        "trustBoundaryId": "internal"
+      }
+    ],
+    "nodes": [
+      {
+        "nodeId": "outside-sender",
+        "label": "外部送信元",
+        "nodeType": "EXTERNAL",
+        "os": "linux",
+        "ip": "198.51.100.10",
+        "subnetId": "internet-zone",
+        "trustBoundaryId": "external",
+        "roles": [
+          "sender"
+        ],
+        "logSources": [
+          "NETWORK_LOG"
+        ]
+      },
+      {
+        "nodeId": "office-client",
+        "label": "調査対象端末",
+        "nodeType": "CLIENT",
+        "os": "windows",
+        "ip": "10.20.0.20",
+        "subnetId": "office-zone",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "workstation"
+        ],
+        "logSources": [
+          "BROWSER_HISTORY",
+          "DEVICE",
+          "FILE"
+        ]
+      },
+      {
+        "nodeId": "mail-gateway",
+        "label": "メールゲートウェイ",
+        "nodeType": "MAIL_SERVER",
+        "os": "linux",
+        "ip": "172.20.10.20",
+        "subnetId": "dmz-zone",
+        "trustBoundaryId": "dmz",
+        "roles": [
+          "mail_server"
+        ],
+        "logSources": [
+          "EMAIL",
+          "AUTH_LOG"
+        ]
+      },
+      {
+        "nodeId": "public-web",
+        "label": "公開Webサーバー",
+        "nodeType": "WEB_SERVER",
+        "os": "linux",
+        "ip": "172.20.10.30",
+        "subnetId": "dmz-zone",
+        "trustBoundaryId": "dmz",
+        "roles": [
+          "web_server"
+        ],
+        "logSources": [
+          "WEB_LOG",
+          "APPLICATION_LOG",
+          "CONFIGURATION"
+        ]
+      },
+      {
+        "nodeId": "internal-db",
+        "label": "社内DBサーバー",
+        "nodeType": "DATABASE",
+        "os": "linux",
+        "ip": "10.20.0.40",
+        "subnetId": "office-zone",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "database_server"
+        ],
+        "logSources": [
+          "APPLICATION_LOG",
+          "CONFIGURATION"
+        ]
+      }
+    ],
+    "services": [
+      {
+        "serviceId": "office-browser",
+        "nodeId": "office-client",
+        "label": "Web Browser",
+        "serviceType": "web_browser",
+        "platform": "browser"
+      },
+      {
+        "serviceId": "gateway-mail",
+        "nodeId": "mail-gateway",
+        "label": "Mail Gateway",
+        "serviceType": "email",
+        "platform": "email"
+      },
+      {
+        "serviceId": "public-app",
+        "nodeId": "public-web",
+        "label": "Public Web App",
+        "serviceType": "web_application",
+        "platform": "web"
+      },
+      {
+        "serviceId": "internal-sql",
+        "nodeId": "internal-db",
+        "label": "Internal SQL",
+        "serviceType": "sql_database",
+        "platform": "sql"
+      }
+    ],
+    "connections": [
+      {
+        "fromNodeId": "outside-sender",
+        "toNodeId": "mail-gateway"
+      },
+      {
+        "fromNodeId": "outside-sender",
+        "toNodeId": "public-web"
+      },
+      {
+        "fromNodeId": "office-client",
+        "toNodeId": "mail-gateway"
+      },
+      {
+        "fromNodeId": "office-client",
+        "toNodeId": "public-web"
+      },
+      {
+        "fromNodeId": "public-web",
+        "toNodeId": "internal-db"
+      }
+    ]
+  }
+}

@@ -3,16 +3,41 @@
   "title": "Learning Objective Set v1 (Backend internal)",
   "type": "object",
   "properties": {
-    "schemaVersion": { "const": "1.0" },
-    "learningObjectiveSetId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
-    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "learningObjectiveSetId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "scenarioId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
     "attackGraphRef": {
       "type": "object",
       "properties": {
-        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
-        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+        "inputDigest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "graphId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        }
       },
-      "required": ["inputDigest", "graphId"],
+      "required": [
+        "inputDigest",
+        "graphId"
+      ],
       "additionalProperties": false
     },
     "objectives": {
@@ -20,43 +45,93 @@
       "items": {
         "type": "object",
         "properties": {
-          "objectiveId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
-          "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
-          "origin": { "enum": ["USER_PROVIDED", "DERIVED_FROM_TECHNICAL_INPUT"] },
+          "objectiveId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "origin": {
+            "enum": [
+              "USER_PROVIDED",
+              "DERIVED_FROM_TECHNICAL_INPUT"
+            ]
+          },
           "selectedAttackIds": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
             "minItems": 0,
-            "maxItems": 3
+            "maxItems": 6
           },
           "attackNodeIds": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
             "minItems": 0,
-            "maxItems": 3
+            "maxItems": 6
           },
           "definitionReferenceRefs": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "attackDefinitionId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
-                "referenceId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" }
+                "attackDefinitionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "referenceId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                }
               },
-              "required": ["attackDefinitionId", "referenceId"],
+              "required": [
+                "attackDefinitionId",
+                "referenceId"
+              ],
               "additionalProperties": false
             },
             "minItems": 0,
             "maxItems": 96
           }
         },
-        "required": ["objectiveId", "description", "origin", "selectedAttackIds", "attackNodeIds", "definitionReferenceRefs"],
+        "required": [
+          "objectiveId",
+          "description",
+          "origin",
+          "selectedAttackIds",
+          "attackNodeIds",
+          "definitionReferenceRefs"
+        ],
         "additionalProperties": false
       },
       "minItems": 0,
       "maxItems": 128
     }
   },
-  "required": ["schemaVersion", "learningObjectiveSetId", "scenarioId", "attackGraphRef", "objectives"],
+  "required": [
+    "schemaVersion",
+    "learningObjectiveSetId",
+    "scenarioId",
+    "attackGraphRef",
+    "objectives"
+  ],
   "additionalProperties": false
 }

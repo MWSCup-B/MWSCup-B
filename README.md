@@ -32,7 +32,11 @@ Author UIの入口は、タイトル画面の「Game Start!」→「ゲーム作
 
 詳細設定画面では、事件情報 → 攻撃手法 → 具体的な攻撃内容と調査方法 → Subnet → Node → Service → Connection → Network Diagram確認の順に進みます。複数のAttackやNetwork項目は1件ずつ切り替えます。最後の確認画面から従来どおり「Scenario案を作成」します。画面全体はビューポート内に収め、小さい画面や拡大表示で収まらない入力欄だけを画面内でスクロールします。
 
+<!-- 2026-09-20 修正前: 任意の段階から複数選択
 - Attack 1～3件、Attack Order、発生日時
+-->
+<!-- 2026-09-20 修正後: 任意の段階から複数選択 -->
+- Attack 1～6件、Attack Order、発生日時
 - source node、target node、target service
 - Attack Definition が対応する Investigation Type
 - Investigation の取得元 Node
@@ -42,7 +46,11 @@ Author UIの入口は、タイトル画面の「Game Start!」→「ゲーム作
 - incident context
 - subnet、node type、OS、IP、service、connection、trust boundary、log source
 
+<!-- 2026-09-20 修正前: 単一連結の制約を外し開始条件と技術的因果を明示
 利用可能な Attack は `data/attacks/` に存在し、Backend が検証できる定義だけです。複数 Attack は単なる物語上の並置ではなく、Attack Graph が単一の連結成分になる場合だけ受理します。
+-->
+<!-- 2026-09-20 修正後: 単一連結の制約を外し開始条件と技術的因果を明示 -->
+利用可能な攻撃は `data/attacks/` の9種類です。段階で絞り込めますが、1件だけでも、離れた段階の複数件でも選択できます。独立した攻撃を同じ事件で扱えます。連鎖は前段の効果が対象・権限を含め後段の条件を満たす場合だけ作成します。各攻撃の必要条件は「攻撃内容・調査」で確認できます。SSH・権限昇格・ファイル収集には、Subnet画面で「Web・SSH・権限昇格の教材構成」を適用するか、必要な実行環境を手動で設定してください。例：有効アカウント悪用（SSH）→sudo設定不備→保護ファイル収集。未選択の侵入方法は追加しません。上限6件は全実行順の検証を最大720通りに抑えるためです。
 
 詳細設定の初期値は、メール内リンクの表示と実際のリンク先を比較するフィッシングの固定プリセットです。初期ネットワーク（2 Subnets / 5 Nodes / 4 Services / 5 Connections）、フィッシング1件、★1、事件日`2026-09-18`、発生時刻`09:10 +09:00`を設定済みで表示します。Sourceは`sender-host`、Targetは`web-host` / `web-service`、調査は`mail-host`の`EMAIL`です。「証拠から導く答え」には「メール文のリンク先と実際に遷移するリンク先が異なること」を入力済みにします。表示後は編集可能で、初期値への再設定はページ初期化時だけです。生成開始・Preview承認は従来どおり利用者が操作し、真実丸の提案条件は変更しません。
 
@@ -225,7 +233,11 @@ Scenario基盤は、取得可能と確認された各artifactをEvidence Require
 AI を使用する処理:
 
 - 真実丸による Configuration 提案
+<!-- 2026-09-20 修正前: 初回設計の実行と技術境界の記載を更新する。
 - Review不合格時の Scenario 記述と既存artifactへの不足参照の修正
+-->
+<!-- 2026-09-20 修正後: 初回設計の実行と技術境界の記載を更新する。 -->
+- 初回の Scenario 設計と、Review不合格時の記述修正（人物名、学習目標・証拠要件のdescription）。ID、Ground Truth、Timeline、全参照と取得要件の件数はBackendの基盤を保持する。
 - Scenario の独立 semantic review
 - Evidence artifact と必要な文章 slot
 
@@ -240,6 +252,8 @@ Backend code が決定する処理:
 - Public projection と Ground Truth / Answer leak 検査
 
 LLM の自己評価だけで `VERIFIED`、`READY`、`ACCEPTED` にはなりません。
+
+2026-09-20: 真実丸は `data/networks/` の社内標準・DMZ・支店Proxy構成と攻撃の割当て例を受け取り、その範囲で提案します。詳細設定は引き続き独自構成を入力できます。対象割当てはSource・Target・調査取得元を固定し、Role・Platform・Service所属・到達性を同時に評価します。調査・修正・検証結果は [シナリオ柔軟性の修正記録](docs/scenario-flexibility-2026-09-20.md) を参照してください。
 
 ## 13. Scenario / Evidence / Game Contract
 
@@ -409,7 +423,11 @@ npm run smoke:codex
 ## 21. Current Limitations
 
 - Attack catalog は現在 `phishing`、`reflected_xss`、`sql_injection` の3定義です。
+<!-- 2026-09-20 修正前: 今回の対応範囲へ更新
 - Contract は Attack 1～3件を受け付けますが、現カタログで成立確認済みの複合 chain は `phishing → reflected_xss` です。3定義の単純並置は連結 Attack Graph にならないため拒否します。
+-->
+<!-- 2026-09-20 修正後: 今回の対応範囲へ更新 -->
+- 2026-09-20更新：攻撃9種類・任意の1～6件と独立成分を含むGraphに対応。原因・変更点・検証は [攻撃選択の拡張記録](docs/attack-selection-2026-09-20.md) を参照。
 - 真実丸の Authentication category に直接対応する Attack Definition はまだありません。該当定義がない category は、登録済み定義からの安全な提案に限定されます。
 - プレイ中の進行状況と制作途中のsessionはメモリ上だけに保持され、server再起動で失われます。完成したゲームは`data/saved-games/`に保持されます。
 - 同一 server で同時に実行できる Codex generation は1件です。

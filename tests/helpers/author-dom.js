@@ -5,7 +5,10 @@ import { runInNewContext } from 'node:vm';
 import { randomUUID } from 'node:crypto';
 
 const [html, source] = await Promise.all([
-  readFile(new URL('../../public/author.html', import.meta.url), 'utf8'),
+// 2026-09-20 修正前: ブラウザと同様に保存用HTMLコメントを描画対象から除外
+//   readFile(new URL('../../public/author.html', import.meta.url), 'utf8'),
+// 2026-09-20 修正後: ブラウザと同様に保存用HTMLコメントを描画対象から除外
+  readFile(new URL('../../public/author.html', import.meta.url), 'utf8').then(value => value.replace(/<!--[\s\S]*?-->/g, '')),
   readFile(new URL('../../public/author.js', import.meta.url), 'utf8'),
 ]);
 const dataKey = value => value.replace(/^data-/, '').replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());

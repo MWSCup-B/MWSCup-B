@@ -3,73 +3,169 @@
   "title": "External Scenario Generation Input v1 (Backend internal)",
   "type": "object",
   "properties": {
-    "schemaVersion": { "const": "1.0" },
-    "generationInputId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
-    "generatorMode": { "const": "EXTERNAL_USER_CODEX" },
-    "promptTemplateVersion": { "const": "1.0" },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "generationInputId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "generatorMode": {
+      "const": "EXTERNAL_USER_CODEX"
+    },
+    "promptTemplateVersion": {
+      "const": "1.0"
+    },
     "attackGraphRef": {
       "type": "object",
       "properties": {
-        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
-        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+        "inputDigest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "graphId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        }
       },
-      "required": ["inputDigest", "graphId"],
+      "required": [
+        "inputDigest",
+        "graphId"
+      ],
       "additionalProperties": false
     },
     "selectedAttackIds": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z][a-z0-9_-]*$" },
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
       "minItems": 1,
-      "maxItems": 3
+      "maxItems": 6
     },
     "technicalInput": {
       "type": "object",
       "properties": {
-        "network": { "type": "object", "additionalProperties": true },
-        "scenarioContext": { "type": "object", "additionalProperties": true },
-        "candidate": { "type": "object", "additionalProperties": true },
+        "network": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "scenarioContext": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "attackDefinitions": {
           "type": "array",
-          "items": { "type": "object", "additionalProperties": true },
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "minItems": 1,
           "maxItems": 256
         },
-        "attackGraph": { "type": "object", "additionalProperties": true }
+        "attackGraph": {
+          "type": "object",
+          "additionalProperties": true
+        }
       },
-      "required": ["network", "scenarioContext", "candidate", "attackDefinitions", "attackGraph"],
+      "required": [
+        "network",
+        "scenarioContext",
+        "candidate",
+        "attackDefinitions",
+        "attackGraph"
+      ],
       "additionalProperties": false
     },
     "outputContract": {
       "type": "object",
       "properties": {
-        "schemaVersion": { "const": "1.0" },
+        "schemaVersion": {
+          "const": "1.0"
+        },
         "requiredArtifacts": {
           "type": "array",
-          "items": { "enum": ["scenarioDraft", "groundTruth", "characters", "timeline", "learningObjectives", "evidenceRequirements"] },
+          "items": {
+            "enum": [
+              "scenarioDraft",
+              "groundTruth",
+              "characters",
+              "timeline",
+              "learningObjectives",
+              "evidenceRequirements"
+            ]
+          },
           "minItems": 6,
           "maxItems": 6
         },
-        "packageSchema": { "type": "object", "additionalProperties": true },
+        "packageSchema": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "artifactSchemas": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "artifact": { "enum": ["scenarioDraft", "groundTruth", "characters", "timeline", "learningObjectives", "evidenceRequirements"] },
-              "schemaVersion": { "const": "1.0" },
-              "jsonSchema": { "type": "object", "additionalProperties": true }
+              "artifact": {
+                "enum": [
+                  "scenarioDraft",
+                  "groundTruth",
+                  "characters",
+                  "timeline",
+                  "learningObjectives",
+                  "evidenceRequirements"
+                ]
+              },
+              "schemaVersion": {
+                "const": "1.0"
+              },
+              "jsonSchema": {
+                "type": "object",
+                "additionalProperties": true
+              }
             },
-            "required": ["artifact", "schemaVersion", "jsonSchema"],
+            "required": [
+              "artifact",
+              "schemaVersion",
+              "jsonSchema"
+            ],
             "additionalProperties": false
           },
           "minItems": 6,
           "maxItems": 6
         }
       },
-      "required": ["schemaVersion", "requiredArtifacts", "packageSchema", "artifactSchemas"],
+      "required": [
+        "schemaVersion",
+        "requiredArtifacts",
+        "packageSchema",
+        "artifactSchemas"
+      ],
       "additionalProperties": false
     }
   },
-  "required": ["schemaVersion", "generationInputId", "generatorMode", "promptTemplateVersion", "attackGraphRef", "selectedAttackIds", "technicalInput", "outputContract"],
+  "required": [
+    "schemaVersion",
+    "generationInputId",
+    "generatorMode",
+    "promptTemplateVersion",
+    "attackGraphRef",
+    "selectedAttackIds",
+    "technicalInput",
+    "outputContract"
+  ],
   "additionalProperties": false
 }

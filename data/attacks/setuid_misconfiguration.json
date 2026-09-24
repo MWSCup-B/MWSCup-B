@@ -1,0 +1,167 @@
+{
+  "schemaVersion": "1.0",
+  "id": "setuid_misconfiguration",
+  "label": "setuid設定不備による権限昇格",
+  "category": "privilege_escalation",
+  "stages": [
+    "PRIVILEGE_ESCALATION"
+  ],
+  "description": "安全でない処理を持つsetuid root実行ファイルを悪用する。setuidビットだけでは成立しない。",
+  "supportedInvestigationTypes": [
+    "FILE",
+    "DEVICE"
+  ],
+  "authoring": {
+    "preferredInvestigationType": "FILE",
+    "evidenceAnswer": "対象実行ファイルの所有者・setuidビットと計測時点を確認する。 / 実行計測の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
+    "sourceNodeBinding": "host",
+    "targetServiceBinding": "service",
+    "investigationServiceBinding": "service"
+  },
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "host",
+      "kind": "node"
+    },
+    {
+      "id": "service",
+      "kind": "service"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    }
+  ],
+  "requiredRoles": [],
+  "platforms": [
+    {
+      "binding": "host",
+      "values": [
+        "linux"
+      ]
+    },
+    {
+      "binding": "service",
+      "values": [
+        "linux"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "service",
+      "node": "host",
+      "values": [
+        "local_execution"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "vulnerabilities",
+      "predicate": "unsafe_setuid_root_program",
+      "args": [
+        "$host"
+      ],
+      "value": true,
+      "description": "root所有のsetuid実行ファイルに、権限を保持したまま攻撃者が処理を制御できる不備がある。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "setuid_execution_permitted",
+      "args": [
+        "$host"
+      ],
+      "value": true,
+      "description": "対象ファイルを実行でき、nosuid・no_new_privs等でsetuidが抑止されず、実効制御が昇格後の処理を許可する。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "local_execution",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "攻撃開始時に、このホスト上で一般ユーザー権限のプロセスを操作できる。前段の効果または明示した開始条件。"
+    }
+  ],
+  "requiredReachability": [],
+  "effects": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "privileged_execution",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "対象ホスト上のroot実効UIDのプロセスを操作できる。他ホストの権限は含まない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "setuid_metadata_record",
+      "description": "対象実行ファイルの所有者・setuidビットと計測時点を確認する。",
+      "acquisition": {
+        "binding": "host",
+        "logSource": "FILE",
+        "type": "FILE_METADATA",
+        "targetType": "SERVER"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "setuid_metadata_record_available",
+          "args": [
+            "$host"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    },
+    {
+      "id": "setuid_execution_record",
+      "description": "実行計測の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
+      "acquisition": {
+        "binding": "host",
+        "logSource": "DEVICE",
+        "type": "DEVICE_INFORMATION",
+        "targetType": "ENDPOINT"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "setuid_execution_record_available",
+          "args": [
+            "$host"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "setuid設定不備による権限昇格"
+  ],
+  "references": [
+    {
+      "id": "technical_reference",
+      "title": "setuid設定不備による権限昇格 — 技術的成立条件",
+      "url": "https://attack.mitre.org/techniques/T1548/001/",
+      "supports": "前提条件と効果の範囲。ログの取得・保持は別の教材条件として明示する。"
+    }
+  ]
+}

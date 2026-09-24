@@ -25,7 +25,18 @@
     "supportedInvestigationTypes": {
       "type": "array",
       "items": {
-        "enum": ["WEB_LOG", "PROXY_LOG", "AUTH_LOG", "APPLICATION_LOG", "NETWORK_LOG", "EMAIL", "BROWSER_HISTORY", "DEVICE", "FILE", "CONFIGURATION"]
+        "enum": [
+          "WEB_LOG",
+          "PROXY_LOG",
+          "AUTH_LOG",
+          "APPLICATION_LOG",
+          "NETWORK_LOG",
+          "EMAIL",
+          "BROWSER_HISTORY",
+          "DEVICE",
+          "FILE",
+          "CONFIGURATION"
+        ]
       },
       "minItems": 1,
       "maxItems": 10
@@ -35,6 +46,56 @@
       "minLength": 1,
       "maxLength": 80,
       "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "authoring": {
+      "type": "object",
+      "properties": {
+        "preferredInvestigationType": {
+          "enum": [
+            "WEB_LOG",
+            "PROXY_LOG",
+            "AUTH_LOG",
+            "APPLICATION_LOG",
+            "NETWORK_LOG",
+            "EMAIL",
+            "BROWSER_HISTORY",
+            "DEVICE",
+            "FILE",
+            "CONFIGURATION"
+          ]
+        },
+        "evidenceAnswer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "sourceNodeBinding": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "targetServiceBinding": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "investigationServiceBinding": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        }
+      },
+      "required": [
+        "preferredInvestigationType",
+        "evidenceAnswer",
+        "sourceNodeBinding",
+        "targetServiceBinding",
+        "investigationServiceBinding"
+      ],
+      "additionalProperties": false
     },
     "bindings": {
       "type": "array",
@@ -452,6 +513,50 @@
             },
             "minItems": 1,
             "maxItems": 32
+          },
+          "acquisition": {
+            "type": "object",
+            "properties": {
+              "binding": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "logSource": {
+                "enum": [
+                  "WEB_LOG",
+                  "AUTH_LOG",
+                  "APPLICATION_LOG",
+                  "DEVICE",
+                  "FILE",
+                  "CONFIGURATION"
+                ]
+              },
+              "type": {
+                "enum": [
+                  "WEB_ACCESS_LOG",
+                  "AUTHENTICATION_LOG",
+                  "APPLICATION_LOG",
+                  "DEVICE_INFORMATION",
+                  "FILE_METADATA",
+                  "DOCUMENT"
+                ]
+              },
+              "targetType": {
+                "enum": [
+                  "SERVER",
+                  "LOG_SOURCE",
+                  "ENDPOINT"
+                ]
+              }
+            },
+            "required": [
+              "binding",
+              "logSource",
+              "type",
+              "targetType"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -511,6 +616,20 @@
       },
       "minItems": 1,
       "maxItems": 32
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "DELIVERY",
+          "INITIAL_ACCESS",
+          "EXECUTION",
+          "PRIVILEGE_ESCALATION",
+          "COLLECTION"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 5
     }
   },
   "required": [

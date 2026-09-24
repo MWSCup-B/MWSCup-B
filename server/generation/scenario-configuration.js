@@ -49,11 +49,82 @@ const labels = Object.freeze({
   phishing: 'フィッシング', reflected_xss: '反射型XSS', sql_injection: 'SQLインジェクション',
 });
 
-export function scenarioCreationBootstrap(catalog) {
+// 2026-09-20 修正前: 対象OS・全Role・ローカル攻撃を識別し、カタログ位置から独立した初期値を作成
+// function presetAttackConfiguration(definition, network, index = 0, incidentDate = '2026-01-15') {
+//   if (!definition.authoring) return null;
+//   const serviceRequirement = binding => definition.requiredServices.find(item => item.binding === binding);
+//   const roleRequirement = binding => definition.requiredRoles.find(item => item.binding === binding);
+//   const serviceFor = binding => {
+//     const requirement = serviceRequirement(binding);
+//     if (!requirement) return null;
+//     const nodeRoles = roleRequirement(requirement.node)?.values ?? [];
+//     const candidates = network.services.filter(service => requirement.values.includes(service.serviceType)
+//       && (!nodeRoles.length || nodeRoles.some(role => network.nodes
+//         .find(node => node.nodeId === service.nodeId)?.roles.includes(role))));
+//     return candidates.length === 1 ? candidates[0] : null;
+//   };
+//   const targetService = serviceFor(definition.authoring.targetServiceBinding);
+//   const investigationService = serviceFor(definition.authoring.investigationServiceBinding);
+//   const sourceRoles = roleRequirement(definition.authoring.sourceNodeBinding)?.values ?? [];
+//   const sourceCandidates = network.nodes.filter(node => sourceRoles.length
+//     ? sourceRoles.some(role => node.roles.includes(role)) : node.nodeType === 'EXTERNAL');
+//   if (!targetService || !investigationService || sourceCandidates.length !== 1) return null;
+//   return { attackId: definition.id, order: index + 1,
+//     occurrenceTime: `${incidentDate}T09:${String(10 + index * 8).padStart(2, '0')}:00+09:00`,
+//     sourceNodeId: sourceCandidates[0].nodeId, targetNodeId: targetService.nodeId,
+//     targetServiceId: targetService.serviceId,
+//     investigationTypes: [definition.authoring.preferredInvestigationType],
+//     investigationSourceNodeId: investigationService.nodeId,
+//     evidenceAnswer: definition.authoring.evidenceAnswer,
+//     expectedEffect: definition.effects[0].description, notes: '' };
+// }
+//
+// 2026-09-20 修正後: 対象OS・全Role・ローカル攻撃を識別し、カタログ位置から独立した初期値を作成
+function presetAttackConfiguration(definition, network, index = 0, incidentDate = '2026-01-15') {
+  if (!definition.authoring) return null;
+  const serviceFor = binding => {
+    const requirement = definition.requiredServices.find(item => item.binding === binding);
+    if (!requirement) return null;
+    const roles = definition.requiredRoles.find(item => item.binding === requirement.node)?.values ?? [];
+    const candidates = network.services.filter(service => {
+      const host = network.nodes.find(node => node.nodeId === service.nodeId);
+      return requirement.values.includes(service.serviceType) && host
+        && roles.every(role => host.roles.includes(role))
+        && definition.platforms.every(rule => rule.binding === binding ? rule.values.includes(service.platform)
+          : rule.binding === requirement.node ? rule.values.includes(host.os) : true);
+    });
+    return candidates.length === 1 ? candidates[0] : null;
+  };
+  const target = serviceFor(definition.authoring.targetServiceBinding);
+  const investigation = serviceFor(definition.authoring.investigationServiceBinding);
+  const local = definition.requiredServices.some(item => item.binding === definition.authoring.targetServiceBinding
+    && item.node === definition.authoring.sourceNodeBinding);
+  const roles = definition.requiredRoles.find(item => item.binding === definition.authoring.sourceNodeBinding)?.values ?? [];
+  const sources = network.nodes.filter(node => local ? node.nodeId === target?.nodeId
+    : roles.length ? roles.every(role => node.roles.includes(role)) : node.nodeType === 'EXTERNAL');
+  if (!target || !investigation || sources.length !== 1) return null;
+  const minute = 9 * 60 + 10 + index * 8;
+  return { attackId: definition.id, order: index + 1,
+    occurrenceTime: incidentDate + 'T' + String(Math.floor(minute / 60)).padStart(2, '0') + ':'
+      + String(minute % 60).padStart(2, '0') + ':00+09:00',
+    sourceNodeId: sources[0].nodeId, targetNodeId: target.nodeId, targetServiceId: target.serviceId,
+    investigationTypes: [definition.authoring.preferredInvestigationType],
+    investigationSourceNodeId: investigation.nodeId, evidenceAnswer: definition.authoring.evidenceAnswer,
+    expectedEffect: definition.effects[0].description, notes: '' };
+}
+
+export function scenarioCreationBootstrap(catalog, networkPresets = []) {
   // Authorの初期入力だけに適用する。真実丸や受信済みConfigurationを上書きしない。
   const defaultManualConfiguration = createDefaultConfiguration({
     mode: 'MANUAL', difficulty: 1, attackIds: ['phishing'], incidentDate: '2026-09-18',
   });
+  const defaultNetworkPreset = networkPresets.find(item => item.id === 'corporate-flat');
+  const phishingDefinition = catalog.find(item => item.id === 'phishing');
+  if (defaultNetworkPreset && phishingDefinition) {
+    defaultManualConfiguration.network = structuredClone(defaultNetworkPreset.network);
+    defaultManualConfiguration.attacks = [presetAttackConfiguration(phishingDefinition,
+      defaultNetworkPreset.network, 0, '2026-09-18')];
+  }
   defaultManualConfiguration.attacks[0].evidenceAnswer =
     'メール文のリンク先と実際に遷移するリンク先が異なること';
   return {
@@ -61,14 +132,32 @@ export function scenarioCreationBootstrap(catalog) {
       { id: 'MANUAL', label: '詳細設定', description: '攻撃手法、Network、発生時間、調査方法などを自分で設定します。' },
       { id: 'MAKOTOMARU', label: '真実丸', description: 'AIがScenario条件を自動的に選びます。' },
     ],
+// 2026-09-20 修正前: 任意の段階から選び、成立に必要な開始条件を確認する
+//     attacks: catalog.map(item => ({ id: item.id, label: item.label, category: item.category,
+// 2026-09-20 修正後: 任意の段階から選び、成立に必要な開始条件を確認する
+    attackSelectionLimit: 6,
+    attackStages: [
+      { id: 'DELIVERY', label: '初動・誘導' }, { id: 'INITIAL_ACCESS', label: '侵入・外部からの悪用' },
+      { id: 'EXECUTION', label: '実行' }, { id: 'PRIVILEGE_ESCALATION', label: '権限昇格' },
+      { id: 'COLLECTION', label: '侵入後・情報収集' },
+    ],
     attacks: catalog.map(item => ({ id: item.id, label: item.label, category: item.category,
+      stages: item.stages ?? ['INITIAL_ACCESS'], description: item.description,
+      startingConditions: [...item.prerequisites, ...item.requiredPrivileges].map(condition => condition.description),
       supportedInvestigationTypes: [...item.supportedInvestigationTypes],
+      authoring: structuredClone(item.authoring),
       expectedEffects: item.effects.map(effect => ({ id: effect.predicate,
         label: effect.description })) })),
     investigationTypes: Object.entries(INVESTIGATION_TYPES).map(([id, item]) => ({ id, label: item.label })),
     difficulties: [1, 2, 3].map(difficulty => ({ difficulty, label: '★'.repeat(difficulty), requiredEvidenceCount: difficulty })),
     nodeTypes: ['CLIENT', 'SERVER', 'PROXY', 'WEB_SERVER', 'DATABASE', 'AD', 'FILE_SERVER', 'LOG_SERVER', 'MAIL_SERVER', 'EXTERNAL'],
     defaultNetwork: structuredClone(DEFAULT_DESIGN_NETWORK),
+    networkPresets: networkPresets.map(preset => ({ ...structuredClone(preset),
+      attackDefaults: catalog.map((definition, index) =>
+// 2026-09-20 修正前: テンプレートの攻撃順・時刻をカタログ位置に依存させない
+//         presetAttackConfiguration(definition, preset.network, index, '2026-09-18')).filter(Boolean) })),
+// 2026-09-20 修正後: テンプレートの攻撃順・時刻をカタログ位置に依存させない
+        presetAttackConfiguration(definition, preset.network, 0, '2026-09-18')).filter(Boolean) })),
     defaultManualConfiguration,
   };
 }
@@ -208,46 +297,115 @@ function canonicalNetwork(network) {
   };
 }
 
-function findByRole(network, role) { return network.nodes.find(item => item.roles.includes(role))?.nodeId; }
-function findService(network, type) { return network.services.find(item => item.serviceType === type); }
-
-function resolvedBindings(configuration, attack, chainRequestId) {
-  const network = configuration.network;
-  const entities = { attacker: 'actor-a', victim: 'user-a', db_principal: 'db-account', request: chainRequestId };
-  if (attack.attackId === 'phishing') {
-    const browser = findService(network, 'web_browser'); const mail = findService(network, 'email');
-    return { ...entities, sender: attack.sourceNodeId, client: browser?.nodeId,
-      browser: browser?.serviceId, mail_host: mail?.nodeId, mail: mail?.serviceId,
-      web_host: attack.targetNodeId, web: attack.targetServiceId };
-  }
-  if (attack.attackId === 'reflected_xss') {
-    const browser = network.services.find(item => item.nodeId === attack.sourceNodeId
-      && item.serviceType === 'web_browser') ?? findService(network, 'web_browser');
-    return { ...entities, client: attack.sourceNodeId, browser: browser?.serviceId,
-      web_host: attack.targetNodeId, web: attack.targetServiceId };
-  }
-  const database = findService(network, 'sql_database');
-  return { ...entities, source: attack.sourceNodeId, web_host: attack.targetNodeId,
-    web: attack.targetServiceId, db_host: database?.nodeId, database: database?.serviceId };
-}
-
+// 2026-09-20 修正前: Role単独の先決めと共有Requestを廃止し、制約を同時に評価する
+// const entityIds = Object.freeze({ actor: 'actor-a', user: 'user-a',
+//   database_principal: 'db-account', web_request: 'shared-web-request' });
+//
+// function onlyCandidate(items, field, description) {
+//   if (items.length === 1) return items[0];
+//   throw new ValidationError(items.length ? 'AMBIGUOUS_BINDING' : 'MISSING_BINDING', field,
+//     `${description}${items.length ? 'が複数あり一意に決まりません。' : 'が構成内にありません。'}`);
+// }
+//
+// // Attack Definitionの制約とAuthoring hintから割当てを解決する。攻撃IDやNode IDには依存しない。
+// function resolvedBindings(configuration, attack, definition) {
+//   const network = configuration.network;
+//   const result = {};
+//   const bindingKinds = new Map(definition.bindings.map(item => [item.id, item.kind]));
+//   for (const target of definition.targetTypes) {
+//     const candidates = target.values.map(type => entityIds[type]).filter(Boolean);
+//     result[target.binding] = onlyCandidate([...new Set(candidates)],
+//       `attacks.${attack.order}.${target.binding}`, `型 ${target.values.join('/')} のEntity`);
+//   }
+//
+//   const targetService = network.services.find(item => item.serviceId === attack.targetServiceId);
+//   result[definition.authoring.sourceNodeBinding] = attack.sourceNodeId;
+//   result[definition.authoring.targetServiceBinding] = attack.targetServiceId;
+//   const targetRequirement = definition.requiredServices.find(item =>
+//     item.binding === definition.authoring.targetServiceBinding);
+//   if (!targetRequirement || !targetService || !targetRequirement.values.includes(targetService.serviceType)) {
+//     throw new ValidationError('TARGET_SERVICE_REQUIREMENT_MISMATCH',
+//       `attacks.${attack.order}.targetServiceId`, '対象ServiceはAttack Definitionの要件を満たしません。');
+//   }
+//   result[targetRequirement.node] = attack.targetNodeId;
+//
+//   const roleRequirements = new Map(definition.requiredRoles.map(item => [item.binding, item.values]));
+//   for (const binding of definition.bindings.filter(item => item.kind === 'node')) {
+//     if (result[binding.id]) continue;
+//     const roles = roleRequirements.get(binding.id);
+//     if (!roles) continue;
+//     const candidates = network.nodes.filter(node => roles.some(role => node.roles.includes(role)));
+//     result[binding.id] = onlyCandidate(candidates,
+//       `attacks.${attack.order}.${binding.id}`, `Role ${roles.join('/')} を持つNode`).nodeId;
+//   }
+//
+//   for (const requirement of definition.requiredServices) {
+//     if (result[requirement.binding]) continue;
+//     const nodeId = result[requirement.node];
+//     const candidates = network.services.filter(service => (!nodeId || service.nodeId === nodeId)
+//       && requirement.values.includes(service.serviceType));
+//     const selected = onlyCandidate(candidates, `attacks.${attack.order}.${requirement.binding}`,
+//       `Service Type ${requirement.values.join('/')} のService`);
+//     result[requirement.binding] = selected.serviceId;
+//     if (!result[requirement.node]) result[requirement.node] = selected.nodeId;
+//   }
+//
+//   for (const binding of definition.bindings) {
+//     if (result[binding.id]) continue;
+//     if (binding.kind === 'node') {
+//       const candidates = network.nodes.filter(node => node.nodeId === attack.sourceNodeId
+//         || node.nodeId === attack.targetNodeId);
+//       result[binding.id] = onlyCandidate(candidates, `attacks.${attack.order}.${binding.id}`,
+//         'Source/Targetに対応するNode').nodeId;
+//     } else if (binding.kind === 'service') {
+//       throw new ValidationError('MISSING_BINDING', `attacks.${attack.order}.${binding.id}`,
+//         'Attack DefinitionのService割当て条件が不足しています。');
+//     } else {
+//       throw new ValidationError('MISSING_BINDING', `attacks.${attack.order}.${binding.id}`,
+//         'Attack DefinitionのEntity型条件が不足しています。');
+//     }
+//   }
+//   for (const [name, value] of Object.entries(result)) if (!value || !bindingKinds.has(name)) {
+//     throw new ValidationError('INVALID_BINDING', `attacks.${attack.order}.${name}`,
+//       'Attack Definitionの割当てを解決できません。');
+//   }
+//   return result;
+// }
+//
+// 2026-09-20 修正後: Role単独の先決めと共有Requestを廃止し、制約を同時に評価する
+import { resolveAuthoringBindings, linkRequestBindings, entityType } from './authoring-bindings.js';
 function buildTechnicalContracts(configuration, catalog) {
   const definitions = new Map(catalog.map(item => [item.id, item]));
   const sorted = [...configuration.attacks].sort((a, b) => a.order - b.order);
-  const chained = sorted.some((attack, index) => attack.attackId === 'reflected_xss'
-    && sorted[index - 1]?.attackId === 'phishing');
-  const bindings = new Map(sorted.map((attack, index) => [attack.attackId,
-    resolvedBindings(configuration, attack, chained && ['phishing', 'reflected_xss'].includes(attack.attackId)
-      ? 'chain-request' : `request-${index + 1}`)]));
+// 2026-09-20 修正前: 選択対象を固定した割当てと根拠のあるRequest共有
+//   const bindings = new Map(sorted.map(attack => [attack.attackId,
+//     resolvedBindings(configuration, attack, definitions.get(attack.attackId))]));
+// 2026-09-20 修正後: 選択対象を固定した割当てと根拠のあるRequest共有
+  const network = canonicalNetwork(configuration.network);
+  const bindings = new Map(sorted.map(attack => [attack.attackId,
+    resolveAuthoringBindings(network, attack, definitions.get(attack.attackId))]));
+  linkRequestBindings(sorted, definitions, bindings);
   const candidate = { schemaVersion: '1.0', selectedAttackIds: sorted.map(item => item.attackId),
     assignments: sorted.map(attack => ({ attackId: attack.attackId,
       bindings: definitions.get(attack.attackId).bindings.map(binding => ({ name: binding.id,
         entityId: bindings.get(attack.attackId)[binding.id] ?? 'missing-binding' })) })) };
-  const scenarioContext = { schemaVersion: '1.0', entities: [
-    { id: 'actor-a', type: 'actor' }, { id: 'user-a', type: 'user' },
-    { id: 'db-account', type: 'database_principal' },
-    ...[...new Set([...bindings.values()].map(item => item.request))].map(id => ({ id, type: 'web_request' })),
-  ], vulnerabilities: [], attackerInitialPrivileges: [], requiredUserActions: [],
+  const contextEntities = new Map();
+  for (const definition of sorted.map(item => definitions.get(item.attackId))) {
+    const map = bindings.get(definition.id);
+// 2026-09-20 修正前: EntityだけをContextへ登録し、型の誤推測を防ぐ
+//     for (const target of definition.targetTypes) {
+//       const id = map[target.binding];
+//       const type = target.values.find(value => entityIds[value] === id) ?? target.values[0];
+//       contextEntities.set(id, { id, type });
+//     }
+// 2026-09-20 修正後: EntityだけをContextへ登録し、型の誤推測を防ぐ
+    for (const binding of definition.bindings.filter(item => item.kind === 'entity')) {
+      const id = map[binding.id];
+      contextEntities.set(id, { id, type: entityType(definition, binding.id) });
+    }
+  }
+  const scenarioContext = { schemaVersion: '1.0', entities: [...contextEntities.values()],
+    vulnerabilities: [], attackerInitialPrivileges: [], requiredUserActions: [],
   loggingConfiguration: [], authenticationConditions: [], otherConditions: [] };
   const produced = new Set();
   for (const definition of sorted.map(item => definitions.get(item.attackId))) {
@@ -266,16 +424,37 @@ function buildTechnicalContracts(configuration, catalog) {
       seen.add(key); scenarioContext[condition.source].push(fact);
     }
   }
-  const network = canonicalNetwork(configuration.network);
+// 2026-09-20 修正前: 割当てとGraph評価で同じNetworkを使用する
+//   const network = canonicalNetwork(configuration.network);
+//   const graphResult = buildAttackGraphs({ definitions: catalog, network, context: scenarioContext, candidate });
+// 2026-09-20 修正後: 割当てとGraph評価で同じNetworkを使用する
   const graphResult = buildAttackGraphs({ definitions: catalog, network, context: scenarioContext, candidate });
-  const connected = graphResult.status === 'CREATED'
-    ? graphResult.graphs.find(item => item.components.length === 1) : null;
-  if (!connected) return { errors: [issue('INVALID_ATTACK_COMBINATION', 'attacks',
-    'この攻撃手法の組合せでは有効な攻撃経路を作成できません。',
-    'Attack Graph上で前段の効果が後段の前提条件を満たす組合せを選択してください。')] };
-  const selected = { ...graphResult, graphs: [connected] };
-  const inputs = buildScenarioGenerationInputs({ attackGraphResult: selected,
-    definitions: catalog, network, context: scenarioContext, candidate });
+// 2026-09-20 修正前: 技術失敗の詳細を保持し、入力時刻と矛盾する実行順を拒否する
+//   const connected = graphResult.status === 'CREATED'
+//     ? graphResult.graphs.find(item => item.components.length === 1) : null;
+// 2026-09-20 修正後: 技術失敗の詳細を保持し、入力時刻と矛盾する実行順を拒否する
+  if (graphResult.status !== 'CREATED') return { errors: graphResult.issues.map(item => issue(
+    item.code, item.field, item.reason, item.suggestion)) };
+// 2026-09-20 修正前: カタログの連続選択や単一連結を要求せず、実際の因果関係と入力順を検証
+//   const connected = graphResult.graphs.find(item => item.components.length === 1
+//     && item.sourcePlanOrders.some(order => order.every((id, index) => id === sorted[index].attackId)));
+//   if (!connected) return { errors: [issue('INVALID_ATTACK_COMBINATION', 'attacks',
+//     'この攻撃手法の組合せでは有効な攻撃経路を作成できません。',
+//     'Attack Graph上で前段の効果が後段の前提条件を満たす組合せを選択してください。')] };
+//   const selected = { ...graphResult, graphs: [connected] };
+//   const inputs = buildScenarioGenerationInputs({ attackGraphResult: selected,
+//     definitions: catalog, network, context: scenarioContext, candidate });
+// 2026-09-20 修正後: カタログの連続選択や単一連結を要求せず、実際の因果関係と入力順を検証
+  const compatible = graphResult.graphs.find(item => item.sourcePlanOrders.some(order =>
+    order.every((id, index) => id === sorted[index].attackId)));
+  if (!compatible) return { errors: [issue('INVALID_ATTACK_COMBINATION', 'attacks',
+    '指定した順番では攻撃の前提条件を満たせません。',
+    '必要な権限や条件を生む攻撃を先に配置し、発生日時も確認してください。')] };
+  // 独立した攻撃を含めて元のGraph全体を照合し、入力順を満たす案を選ぶ。
+  const selected = { ...graphResult, graphs: [compatible] };
+  const inputs = buildScenarioGenerationInputs({ attackGraphResult: graphResult,
+    definitions: catalog, network, context: scenarioContext, candidate })
+    .filter(input => input.attackGraphRef.graphId === compatible.graphId);
   if (!inputs.length) return { errors: [issue('SCENARIO_INPUT_UNAVAILABLE', 'attacks',
     'Scenario生成用の技術入力を構築できません。', 'NetworkとAttack Detailを確認してください。')] };
   return { network, scenarioContext, candidate, attackGraphResult: selected,
@@ -370,7 +549,7 @@ export function validateScenarioConfiguration(configuration, catalog) {
     for (const type of attack.investigationTypes) {
       if (!definition.supportedInvestigationTypes.includes(type)) errors.push(issue(
         'UNSUPPORTED_INVESTIGATION', `attacks.${attack.order}.investigationTypes`,
-        `${labels[attack.attackId] ?? attack.attackId}では${INVESTIGATION_TYPES[type]?.label ?? type}を選択できません。`,
+        `${definition.label}では${INVESTIGATION_TYPES[type]?.label ?? type}を選択できません。`,
         'Attack Definitionに登録された調査方法を選択してください。'));
       if (!investigationNode?.logSources.includes(type)) errors.push(issue(
         'INVESTIGATION_SOURCE_UNAVAILABLE', `attacks.${attack.order}.investigationSourceNodeId`,
@@ -391,14 +570,16 @@ export function validateScenarioConfiguration(configuration, catalog) {
     technical: errors.length ? null : technical };
 }
 
-export function buildScenarioPreview(configuration, scenarioPackage = null) {
+export function buildScenarioPreview(configuration, scenarioPackage = null, catalog = []) {
   const nodes = new Map(configuration.network.nodes.map(item => [item.nodeId, item]));
   const services = new Map(configuration.network.services.map(item => [item.serviceId, item]));
+  const attackLabels = new Map(catalog.map(item => [item.id, item.label]));
   return { configurationId: configuration.configurationId, mode: configuration.mode,
     incidentSummary: scenarioPackage?.scenarioDraft?.summary
       ?? `${configuration.incidentContext.organizationName}で発生したセキュリティ事件を調査します。`,
     attacks: [...configuration.attacks].sort((a, b) => a.order - b.order).map(item => ({
-      order: item.order, attackId: item.attackId, label: labels[item.attackId] ?? item.attackId,
+      order: item.order, attackId: item.attackId, label: labels[item.attackId]
+        ?? attackLabels.get(item.attackId) ?? item.attackId,
       occurrenceTime: item.occurrenceTime, source: nodes.get(item.sourceNodeId)?.label,
       target: nodes.get(item.targetNodeId)?.label, targetService: services.get(item.targetServiceId)?.label,
       investigations: item.investigationTypes.map(type => ({ id: type, label: INVESTIGATION_TYPES[type].label })),

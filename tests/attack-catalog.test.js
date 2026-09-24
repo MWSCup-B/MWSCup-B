@@ -25,13 +25,20 @@ function standalone(id) {
 }
 
 test('承認された3種類を外部JSONから読込み、指定の効果だけを持つ', () => {
-  assert.deepEqual(definitions.map(x => x.id).sort(), ['phishing', 'reflected_xss', 'sql_injection']);
+// 2026-09-20 修正前: 拡張カタログでも従来3攻撃の効果を検証
+//   assert.deepEqual(definitions.map(x => x.id).sort(), ['phishing', 'reflected_xss', 'sql_injection']);
+// 2026-09-20 修正後: 拡張カタログでも従来3攻撃の効果を検証
+  assert.equal(definitions.length, 9);
+  assert.ok(['phishing', 'reflected_xss', 'sql_injection'].every(id => definitions.some(d => d.id === id)));
   const expected = new Map([
     ['phishing', 'browser_request_issued'],
     ['reflected_xss', 'script_executed_in_origin'],
     ['sql_injection', 'sql_query_structure_modified'],
   ]);
-  for (const definition of definitions) {
+// 2026-09-20 修正前: 既存3攻撃の効果についての検証範囲を明示
+//   for (const definition of definitions) {
+// 2026-09-20 修正後: 既存3攻撃の効果についての検証範囲を明示
+  for (const definition of definitions.filter(d => expected.has(d.id))) {
     assert.equal(definition.schemaVersion, '1.0');
     assert.equal(definition.effects.length, 1);
     assert.equal(definition.effects[0].predicate, expected.get(definition.id));
@@ -129,7 +136,11 @@ test('未選択の攻撃を補ってSQLの不足条件を成立させない', ()
   assert.equal(result.blocked, true);
   assert.equal(result.state, 'UNKNOWN');
   assert.ok(result.issues.some(x => x.attackId === 'sql_injection' && x.field === 'otherConditions.attacker_request_submitted'));
-  assert.equal(value.definitions.length, 3);
+// 2026-09-20 修正前: カタログ増加と選択攻撃の追加を区別
+//   assert.equal(value.definitions.length, 3);
+// 2026-09-20 修正後: カタログ増加と選択攻撃の追加を区別
+  assert.equal(value.definitions.length, definitions.length);
+  assert.deepEqual(value.candidate.selectedAttackIds, ['sql_injection', 'reflected_xss', 'phishing']);
 });
 
 test('ログが未設定・無効でも攻撃成立と痕跡取得可能性を混同しない', () => {
@@ -150,7 +161,10 @@ test('ログが未設定・無効でも攻撃成立と痕跡取得可能性を�
 test('アプリコードを変えず定義IDを変更しても同じ成立性を評価する', () => {
   const value = input();
   const ids = new Map([['phishing', 'catalog_entry_a'], ['reflected_xss', 'catalog_entry_b'], ['sql_injection', 'catalog_entry_c']]);
-  value.definitions.forEach(x => { x.id = ids.get(x.id); });
+// 2026-09-20 修正前: 改名対象外の追加攻撃のIDを維持
+//   value.definitions.forEach(x => { x.id = ids.get(x.id); });
+// 2026-09-20 修正後: 改名対象外の追加攻撃のIDを維持
+  value.definitions.forEach(x => { x.id = ids.get(x.id) ?? x.id; });
   value.candidate.selectedAttackIds = value.candidate.selectedAttackIds.map(id => ids.get(id));
   value.candidate.assignments.forEach(x => { x.attackId = ids.get(x.attackId); });
   const result = evaluateCandidate(value);

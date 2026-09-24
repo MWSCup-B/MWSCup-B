@@ -1,0 +1,183 @@
+{
+  "schemaVersion": "1.0",
+  "id": "enterprise-lab",
+  "label": "Web・SSH・権限昇格の教材構成",
+  "description": "標準Web構成にLinuxのSSHとローカル実行環境、Windowsのローカル実行環境を用意。各攻撃の脆弱性・権限・記録条件はシナリオ内で明示する。",
+  "network": {
+    "subnets": [
+      {
+        "subnetId": "external-net",
+        "label": "外部ネットワーク",
+        "cidr": "203.0.113.0/24",
+        "trustBoundaryId": "external"
+      },
+      {
+        "subnetId": "internal-net",
+        "label": "社内ネットワーク",
+        "cidr": "10.10.0.0/24",
+        "trustBoundaryId": "internal"
+      }
+    ],
+    "nodes": [
+      {
+        "nodeId": "sender-host",
+        "label": "外部送信元",
+        "nodeType": "EXTERNAL",
+        "os": "linux",
+        "ip": "203.0.113.10",
+        "subnetId": "external-net",
+        "trustBoundaryId": "external",
+        "roles": [
+          "sender"
+        ],
+        "logSources": [
+          "NETWORK_LOG"
+        ]
+      },
+      {
+        "nodeId": "client-host",
+        "label": "利用者端末",
+        "nodeType": "CLIENT",
+        "os": "windows",
+        "ip": "10.10.0.20",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "workstation"
+        ],
+        "logSources": [
+          "BROWSER_HISTORY",
+          "DEVICE",
+          "FILE",
+          "AUTH_LOG",
+          "CONFIGURATION"
+        ]
+      },
+      {
+        "nodeId": "mail-host",
+        "label": "メールサーバー",
+        "nodeType": "MAIL_SERVER",
+        "os": "linux",
+        "ip": "10.10.0.30",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "mail_server"
+        ],
+        "logSources": [
+          "EMAIL",
+          "AUTH_LOG"
+        ]
+      },
+      {
+        "nodeId": "web-host",
+        "label": "Webサーバー",
+        "nodeType": "WEB_SERVER",
+        "os": "linux",
+        "ip": "10.10.0.40",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "web_server"
+        ],
+        "logSources": [
+          "WEB_LOG",
+          "APPLICATION_LOG",
+          "CONFIGURATION",
+          "AUTH_LOG",
+          "DEVICE",
+          "FILE"
+        ]
+      },
+      {
+        "nodeId": "db-host",
+        "label": "Databaseサーバー",
+        "nodeType": "DATABASE",
+        "os": "linux",
+        "ip": "10.10.0.50",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "database_server"
+        ],
+        "logSources": [
+          "APPLICATION_LOG",
+          "CONFIGURATION"
+        ]
+      }
+    ],
+    "services": [
+      {
+        "serviceId": "browser-service",
+        "nodeId": "client-host",
+        "label": "Web Browser",
+        "serviceType": "web_browser",
+        "platform": "browser"
+      },
+      {
+        "serviceId": "email-service",
+        "nodeId": "mail-host",
+        "label": "Mail",
+        "serviceType": "email",
+        "platform": "email"
+      },
+      {
+        "serviceId": "web-service",
+        "nodeId": "web-host",
+        "label": "Web Application",
+        "serviceType": "web_application",
+        "platform": "web"
+      },
+      {
+        "serviceId": "db-service",
+        "nodeId": "db-host",
+        "label": "SQL Database",
+        "serviceType": "sql_database",
+        "platform": "sql"
+      },
+      {
+        "serviceId": "ssh-service",
+        "nodeId": "web-host",
+        "label": "SSH（一般ユーザーシェル）",
+        "serviceType": "remote_access",
+        "platform": "ssh"
+      },
+      {
+        "serviceId": "linux-execution",
+        "nodeId": "web-host",
+        "label": "Linuxローカル実行環境",
+        "serviceType": "local_execution",
+        "platform": "linux"
+      },
+      {
+        "serviceId": "windows-execution",
+        "nodeId": "client-host",
+        "label": "Windowsローカル実行環境",
+        "serviceType": "local_execution",
+        "platform": "windows"
+      }
+    ],
+    "connections": [
+      {
+        "fromNodeId": "sender-host",
+        "toNodeId": "mail-host"
+      },
+      {
+        "fromNodeId": "sender-host",
+        "toNodeId": "web-host"
+      },
+      {
+        "fromNodeId": "client-host",
+        "toNodeId": "mail-host"
+      },
+      {
+        "fromNodeId": "client-host",
+        "toNodeId": "web-host"
+      },
+      {
+        "fromNodeId": "web-host",
+        "toNodeId": "db-host"
+      }
+    ]
+  }
+}

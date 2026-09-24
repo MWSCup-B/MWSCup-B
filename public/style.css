@@ -160,6 +160,10 @@ code { font-family: ui-monospace, monospace; }
 .manual-step-content > fieldset { margin: 0; padding: 0; width: 100%; min-width: 0; }
 .manual-step-content legend { padding: 0; font-size: clamp(1.05rem, 1.5vw, 1.35rem); color: #173e56; }
 .step-hint { margin: .05rem 0 .7rem; color: #526879; font-size: .86rem; line-height: 1.4; }
+.preset-picker { display: grid; grid-template-columns: minmax(13rem, 1fr) auto minmax(15rem, 2fr); gap: .7rem; align-items: end; margin: .35rem 0 .75rem; }
+.preset-picker label { display: grid; gap: .25rem; }
+.preset-picker select { width: 100%; }
+.preset-picker span { color: #526879; font-size: .82rem; align-self: center; }
 .manual-step-content .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem .8rem; }
 .manual-step-content .form-grid .wide { grid-column: span 2; }
 .manual-step-content label { min-width: 0; font-size: .82rem; font-weight: 700; }
@@ -374,6 +378,8 @@ code { font-family: ui-monospace, monospace; }
   .activity-card-grid, .author-page .choice-stage .mode-card-grid { grid-template-columns: 1fr; overflow: auto; }
   .saved-game-list { grid-template-columns: 1fr; }
   .guide-grid { grid-template-columns: 1fr; overflow: auto; }
+  .preset-picker { grid-template-columns: 1fr auto; }
+  .preset-picker span { grid-column: 1 / -1; }
 }
 @media (max-width: 540px) {
   .title-frame { grid-template-rows: auto minmax(85px, .65fr) auto; }
@@ -396,3 +402,13 @@ code { font-family: ui-monospace, monospace; }
   .gear-large, .guardian-art { animation: none; }
   .author-page .choice-stage .mode-card { transition: none; }
 }
+
+/* 2026-09-20 追加: 攻撃一覧は画面内で段階別に選択 */
+.attack-browser { display: flex; flex-direction: column; gap: .55rem; min-height: 0; }
+.attack-browser .choice-card { display: grid; grid-template-columns: auto 1fr; gap: .25rem .5rem; align-content: center; }
+.attack-browser .choice-card small { grid-column: 2; opacity: .7; }
+.attack-browser .choice-card[hidden] { display: none; }
+.attack-browser .choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.attack-browser .step-hint { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .attack-browser .choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-height: 650px) { .attack-browser .choice-card { padding: .35rem; font-size: .85rem; } }

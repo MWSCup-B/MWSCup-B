@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { GameError } from './game.js';
 import { validateDocument, ValidationError } from './generation/schema.js';
 import { loadCatalog } from './generation/catalog.js';
+import { loadNetworkPresets } from './generation/network-presets.js';
 import { buildCandidates } from './generation/candidate-builder.js';
 import { buildAttackGraphs } from './generation/attack-graph.js';
 import { buildScenarioGenerationInputs, importScenarioPackage,
@@ -27,7 +28,10 @@ import { buildEvidenceInvestigationPlan, buildInvestigationAssignments }
   from './generation/investigation-registry.js';
 import { assignDialogueTemplate } from './generation/dialogue-template.js';
 import { courtIssueGenerationProblems, requestedCourtIssueCount } from './generation/court-issues.js';
-import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
+// 2026-09-20 修正前: Scenario設計の技術境界検証を導入する
+// import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
+// 2026-09-20 修正後: Scenario設計の技術境界検証を導入する
+import { buildScenarioTemplate, validateScenarioEvidenceCoverage, validateScenarioDesignBoundary }
   from './generation/scenario-template.js';
 import { CodexCancelledError, CodexError, CodexOutputError }
   from './codex/codex-errors.js';
@@ -35,8 +39,13 @@ import { sanitizeDiagnostic } from './codex/codex-output-parser.js';
 import { AUTO_CODEX_OUTPUT_SCHEMAS } from './codex/auto-output-schemas.js';
 
 const catalog = await loadCatalog();
-const MAKOTOMARU_PROMPT = await readFile(new URL('../prompts/makotomaru-configuration-v1.md',
-  import.meta.url), 'utf8');
+const networkPresets = await loadNetworkPresets();
+// 2026-09-20 修正前: コメントで保存した旧指示を生成時に送らない
+// const MAKOTOMARU_PROMPT = await readFile(new URL('../prompts/makotomaru-configuration-v1.md',
+//   import.meta.url), 'utf8');
+// 2026-09-20 修正後: 履歴をファイルに残し、有効な指示だけを読む
+const MAKOTOMARU_PROMPT = (await readFile(new URL('../prompts/makotomaru-configuration-v1.md',
+  import.meta.url), 'utf8')).replace(/<!--[\s\S]*?-->/g, '');
 
 export const AUTO_STATES = Object.freeze([
   'MODE_SELECTION', 'MANUAL_CONFIGURATION', 'MAKOTOMARU_CONFIGURATION',
@@ -76,7 +85,7 @@ export function createAutoAuthorSession() {
 }
 
 export function autoAuthorBootstrap() {
-  return scenarioCreationBootstrap(catalog);
+  return scenarioCreationBootstrap(catalog, networkPresets);
 }
 
 function detail(issue, phase, attempt) {
@@ -339,9 +348,17 @@ function compactCondition(item) {
 function compactAttackDefinition(definition) {
   return {
     id: definition.id, label: definition.label, category: definition.category,
-    description: definition.description,
+// 2026-09-20 修正前: 真実丸にも任意選択の段階を渡す
+//     description: definition.description,
+// 2026-09-20 修正後: 真実丸にも任意選択の段階を渡す
+    description: definition.description, stages: definition.stages ?? ['INITIAL_ACCESS'],
     supportedInvestigationTypes: definition.supportedInvestigationTypes,
+// 2026-09-20 修正前: 真実丸へEntity型とAuthor割当て条件を明示する
+//     bindings: definition.bindings,
+// 2026-09-20 修正後: 真実丸へEntity型とAuthor割当て条件を明示する
     bindings: definition.bindings,
+    targetTypes: definition.targetTypes,
+    authoring: definition.authoring,
     requiredRoles: definition.requiredRoles,
     platforms: definition.platforms,
     requiredServices: definition.requiredServices,
@@ -357,7 +374,11 @@ function compactAttackDefinition(definition) {
 function makotomaruInput(request) {
   return { request,
     allowedAttacks: catalog.map(compactAttackDefinition),
+// 2026-09-20 修正前: 真実丸に全構成と割当て例を渡す
+//     networkTemplate: autoAuthorBootstrap().defaultNetwork,
+// 2026-09-20 修正後: 真実丸に全構成と割当て例を渡す
     networkTemplate: autoAuthorBootstrap().defaultNetwork,
+    networkPresets: autoAuthorBootstrap().networkPresets,
     investigationTypes: Object.entries(INVESTIGATION_TYPES).map(([id, item]) => ({
       id, label: item.label,
     })),
@@ -372,9 +393,14 @@ export function buildMakotomaruOutputSchema(request) {
   const schema = structuredClone(AUTO_CODEX_OUTPUT_SCHEMAS.makotomaru.canonicalSchema);
   const configuration = schema.properties.configuration.properties;
   const attack = configuration.attacks.items.properties;
-  const network = autoAuthorBootstrap().defaultNetwork;
-  const nodeIds = network.nodes.map(item => item.nodeId);
-  const serviceIds = network.services.map(item => item.serviceId);
+// 2026-09-20 修正前: 標準構成だけのID制限を全登録構成へ広げる
+//   const network = autoAuthorBootstrap().defaultNetwork;
+//   const nodeIds = network.nodes.map(item => item.nodeId);
+//   const serviceIds = network.services.map(item => item.serviceId);
+// 2026-09-20 修正後: 標準構成だけのID制限を全登録構成へ広げる
+  const networks = autoAuthorBootstrap().networkPresets.map(item => item.network);
+  const nodeIds = networks.flatMap(network => network.nodes.map(item => item.nodeId));
+  const serviceIds = networks.flatMap(network => network.services.map(item => item.serviceId));
   configuration.mode = { const: 'MAKOTOMARU' };
   configuration.difficulty = { const: request.difficulty };
   configuration.evidenceCount = { const: request.difficulty };
@@ -593,7 +619,12 @@ export class AutoGenerationManager {
             requestedDifficulty: session.configuration.difficulty }, feedback,
           outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.scenario.canonicalSchema,
           outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.scenario.name, phase, signal }));
+// 2026-09-20 修正前: AIの変更を記述と人物名に限定し、技術構造を保持する
+//       validateDocument('scenario-import-package', scenarioPackage);
+//       session.scenarioPackage = structuredClone(scenarioPackage);
+// 2026-09-20 修正後: AIの変更を記述と人物名に限定し、技術構造を保持する
       validateDocument('scenario-import-package', scenarioPackage);
+      validateScenarioDesignBoundary(session.scenarioPackage, scenarioPackage);
       session.scenarioPackage = structuredClone(scenarioPackage);
       complete(session, attempt === 1 ? 'scenario' : 'revision', attempt);
       if (attempt > 1) complete(session, 'scenario', attempt);
@@ -655,7 +686,7 @@ export class AutoGenerationManager {
           verificationInput: session.verificationInput, signal, session, attempt }));
       if (verification.status === 'VERIFIED') {
         complete(session, 'verification', attempt); session.auto.state = 'VERIFIED';
-        session.scenarioPreview = buildScenarioPreview(session.configuration, session.scenarioPackage);
+        session.scenarioPreview = buildScenarioPreview(session.configuration, session.scenarioPackage, catalog);
         session.scenarioPreview.verification = { status: verification.status,
           checks: verification.checks.map(check => ({ category: check.category,
             outcome: check.outcome, reason: check.reason })) };
@@ -679,7 +710,13 @@ export class AutoGenerationManager {
   async #createDraft(session, signal) {
     await this.#ensureCodex(session, signal); this.#prepare(session);
     complete(session, 'configuration');
+// 2026-09-20 修正前: 初回から事件条件に沿ったScenario設計を実行する
+//     this.#createScenarioTemplate(session);
+//     await this.#validateReviewForPreview(session, signal);
+// 2026-09-20 修正後: 初回から事件条件に沿ったScenario設計を実行する
     this.#createScenarioTemplate(session);
+    session.auto.attempt = 0;
+    await this.#generateScenario(session, signal);
     await this.#validateReviewForPreview(session, signal);
   }
 
@@ -712,7 +749,13 @@ export class AutoGenerationManager {
         session.configuration = structuredClone(result.configuration);
         session.configurationValidation = { status: 'VALID', errors: [] };
         complete(session, 'configuration', attempt); this.#prepare(session);
+// 2026-09-20 修正前: 真実丸でも初回Scenario設計を実行する
+//         this.#createScenarioTemplate(session);
+//         await this.#validateReviewForPreview(session, signal); return;
+// 2026-09-20 修正後: 真実丸でも初回Scenario設計を実行する
         this.#createScenarioTemplate(session);
+        session.auto.attempt = 0;
+        await this.#generateScenario(session, signal);
         await this.#validateReviewForPreview(session, signal); return;
       }
       session.auto.details.push(...errors.map(item => detail(item,

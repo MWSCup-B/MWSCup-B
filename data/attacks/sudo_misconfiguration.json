@@ -1,0 +1,168 @@
+{
+  "schemaVersion": "1.0",
+  "id": "sudo_misconfiguration",
+  "label": "sudo設定不備による権限昇格",
+  "category": "privilege_escalation",
+  "stages": [
+    "PRIVILEGE_ESCALATION"
+  ],
+  "description": "rootとして実行可能な危険なsudo許可を悪用する。sudoが存在するだけでは成立しない。",
+  "supportedInvestigationTypes": [
+    "CONFIGURATION",
+    "DEVICE"
+  ],
+  "authoring": {
+    "preferredInvestigationType": "CONFIGURATION",
+    "evidenceAnswer": "対象ユーザーに適用されるsudoersの許可と実効設定を確認する。 / 端末計測の親子プロセスと実効UIDからrootでの起動を確認する。",
+    "sourceNodeBinding": "host",
+    "targetServiceBinding": "service",
+    "investigationServiceBinding": "service"
+  },
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "host",
+      "kind": "node"
+    },
+    {
+      "id": "service",
+      "kind": "service"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    }
+  ],
+  "requiredRoles": [],
+  "platforms": [
+    {
+      "binding": "host",
+      "values": [
+        "linux"
+      ]
+    },
+    {
+      "binding": "service",
+      "values": [
+        "linux"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "service",
+      "node": "host",
+      "values": [
+        "local_execution"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "vulnerabilities",
+      "predicate": "sudo_root_command_escape",
+      "args": [
+        "$host"
+      ],
+      "value": true,
+      "description": "対象一般ユーザーに、root実行から任意の処理へ到達可能なコマンドがsudoersで許可されている。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "sudo_authentication_satisfied",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "必要なsudo認証を満たし、実効ポリシーが対象の起動を許可する。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "local_execution",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "攻撃開始時に、このホスト上で一般ユーザー権限のプロセスを操作できる。前段の効果または明示した開始条件。"
+    }
+  ],
+  "requiredReachability": [],
+  "effects": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "privileged_execution",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "対象ホストでrootとしてプロセスを操作できる。他ホストの権限は含まない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "sudo_policy_record",
+      "description": "対象ユーザーに適用されるsudoersの許可と実効設定を確認する。",
+      "acquisition": {
+        "binding": "host",
+        "logSource": "CONFIGURATION",
+        "type": "DOCUMENT",
+        "targetType": "SERVER"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "sudo_policy_record_available",
+          "args": [
+            "$host"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    },
+    {
+      "id": "sudo_execution_record",
+      "description": "端末計測の親子プロセスと実効UIDからrootでの起動を確認する。",
+      "acquisition": {
+        "binding": "host",
+        "logSource": "DEVICE",
+        "type": "DEVICE_INFORMATION",
+        "targetType": "ENDPOINT"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "sudo_execution_record_available",
+          "args": [
+            "$host"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "sudo設定不備による権限昇格"
+  ],
+  "references": [
+    {
+      "id": "technical_reference",
+      "title": "sudo設定不備による権限昇格 — 技術的成立条件",
+      "url": "https://attack.mitre.org/techniques/T1548/003/",
+      "supports": "前提条件と効果の範囲。ログの取得・保持は別の教材条件として明示する。"
+    }
+  ]
+}

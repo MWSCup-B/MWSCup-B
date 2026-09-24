@@ -3,6 +3,7 @@ let bootstrap = null;
 let author = null;
 let polling = null;
 let networkModel = null;
+let activeNetworkPresetId = null;
 let initializationReady = false;
 let entryView = 'SPLASH';
 let savedGameItems = null;
@@ -88,6 +89,7 @@ function readInitialConfiguration(value) {
   requireObject(preset.incidentContext, 'incidentContext');
   requireArray(preset.attacks, 'attacks');
   for (const key of ['attacks', 'investigationTypes', 'nodeTypes']) requireArray(value[key], key);
+  if (value.networkPresets !== undefined) requireArray(value.networkPresets, 'networkPresets');
   if (!preset.attacks.length || ![1, 2, 3].includes(preset.difficulty)) {
     throw new Error(`初期設定の攻撃または難易度が不正です。${initializationHelp}`);
   }
@@ -249,9 +251,15 @@ function networkRow(kind, item, index) {
     input(row, 'ID', item.serviceId, 'serviceId'); input(row, '表示名', item.label, 'label');
     select(row, 'Node', item.nodeId, 'nodeId', optionPairs(networkModel.nodes, 'nodeId', 'label'));
     select(row, 'Service Type', item.serviceType, 'serviceType', [
-      'web_browser', 'email', 'web_application', 'sql_database', 'proxy', 'authentication', 'file', 'logging'].map(id => [id, id]));
+// 2026-09-20 修正前: SSHとローカル実行環境を編集可能にする
+//       'web_browser', 'email', 'web_application', 'sql_database', 'proxy', 'authentication', 'file', 'logging'].map(id => [id, id]));
+// 2026-09-20 修正後: SSHとローカル実行環境を編集可能にする
+      'web_browser', 'email', 'web_application', 'sql_database', 'proxy', 'authentication', 'file', 'logging', 'remote_access', 'local_execution'].map(id => [id, id]));
     select(row, 'Platform', item.platform, 'platform',
-      ['browser', 'email', 'web', 'sql', 'proxy', 'auth', 'file', 'logging'].map(id => [id, id]));
+// 2026-09-20 修正前: 実行環境のOSを保持
+//       ['browser', 'email', 'web', 'sql', 'proxy', 'auth', 'file', 'logging'].map(id => [id, id]));
+// 2026-09-20 修正後: 実行環境のOSを保持
+      ['browser', 'email', 'web', 'sql', 'proxy', 'auth', 'file', 'logging', 'ssh', 'linux', 'windows'].map(id => [id, id]));
   } else {
     select(row, '接続元Node', item.fromNodeId, 'fromNodeId', optionPairs(networkModel.nodes, 'nodeId', 'label'));
     select(row, '接続先Node', item.toNodeId, 'toNodeId', optionPairs(networkModel.nodes, 'nodeId', 'label'));
@@ -266,6 +274,19 @@ function renderNetworkBuilder() {
     updateItemPager(kind.slice(0, -1));
   }
   drawNetwork('manual-network-diagram', networkModel);
+}
+
+function renderNetworkPresetPicker() {
+  const control = byId('network-preset'); control.replaceChildren();
+  for (const preset of bootstrap.networkPresets ?? []) {
+    const option = document.createElement('option'); option.value = preset.id;
+    option.textContent = preset.label; option.selected = preset.id === activeNetworkPresetId;
+    control.append(option);
+  }
+  const selected = bootstrap.networkPresets?.find(item => item.id === control.value);
+  byId('network-preset-description').textContent = selected?.description ??
+    '利用できる構成テンプレートはありません。';
+  byId('apply-network-preset').disabled = !selected;
 }
 
 function drawNetwork(id, network) {
@@ -306,13 +327,62 @@ function drawNetwork(id, network) {
     svg.insertBefore(line, svg.firstChild); }
 }
 
+// 2026-09-20 修正前: 段階を任意に絞り込み、全段階を必須にせず1～6件選択
+// function renderAttackOptions() {
+//   const target = byId('attack-options'); target.replaceChildren();
+//   for (const attack of bootstrap.attacks) { const label = document.createElement('label'); label.className = 'choice-card';
+//     const control = document.createElement('input'); control.type = 'checkbox'; control.name = 'attack'; control.value = attack.id;
+//     control.addEventListener('change', () => { const selected = [...document.querySelectorAll('input[name="attack"]:checked')];
+//       if (selected.length > 3) { control.checked = false; byId('manual-errors').textContent = '攻撃手法は最大3つです。'; }
+//       renderAttackDetails(); }); label.append(control); text(label, 'strong', attack.label); target.append(label); }
+// }
+//
+// 2026-09-20 修正後: 段階を任意に絞り込み、全段階を必須にせず1～6件選択
 function renderAttackOptions() {
-  const target = byId('attack-options'); target.replaceChildren();
-  for (const attack of bootstrap.attacks) { const label = document.createElement('label'); label.className = 'choice-card';
+  const target = byId('attack-options'); target.replaceChildren(); target.className = 'attack-browser';
+  const filter = select(target, '攻撃の段階（どの段階からでも選べます）', '', 'stageFilter',
+    [['', 'すべて'], ...(bootstrap.attackStages ?? []).map(stage => [stage.id, stage.label])]);
+  const choices = document.createElement('div'); choices.className = 'choice-grid'; target.append(choices);
+  const status = text(target, 'p', '', 'step-hint'); status.id = 'attack-selection-status';
+  const refresh = () => {
+    for (const card of choices.children) card.hidden = Boolean(filter.value)
+      && !bootstrap.attacks.find(attack => attack.id === card.dataset.choiceId)?.stages?.includes(filter.value);
+    const ids = [...document.querySelectorAll('input[name="attack"]:checked')].map(input => input.value);
+    status.textContent = ids.length + ' / ' + (bootstrap.attackSelectionLimit ?? 6)
+      + '件を選択：' + ids.map(id => bootstrap.attacks.find(a => a.id === id).label).join('、');
+  };
+  for (const attack of bootstrap.attacks) {
+    const label = document.createElement('label'); label.className = 'choice-card'; label.dataset.choiceId = attack.id;
     const control = document.createElement('input'); control.type = 'checkbox'; control.name = 'attack'; control.value = attack.id;
-    control.addEventListener('change', () => { const selected = [...document.querySelectorAll('input[name="attack"]:checked')];
-      if (selected.length > 3) { control.checked = false; byId('manual-errors').textContent = '攻撃手法は最大3つです。'; }
-      renderAttackDetails(); }); label.append(control); text(label, 'strong', attack.label); target.append(label); }
+    control.addEventListener('change', () => {
+      const count = document.querySelectorAll('input[name="attack"]:checked').length;
+      if (count > (bootstrap.attackSelectionLimit ?? 6)) {
+        control.checked = false; byId('manual-errors').textContent = '攻撃手法は最大' + (bootstrap.attackSelectionLimit ?? 6) + 'つです。';
+      } else byId('manual-errors').textContent = '';
+      renderAttackDetails(); refresh();
+    });
+    label.append(control); text(label, 'strong', attack.label);
+    text(label, 'small', (attack.stages ?? []).map(id => bootstrap.attackStages?.find(s => s.id === id)?.label ?? id).join('・'));
+    choices.append(label);
+  }
+  filter.addEventListener('change', refresh); refresh();
+}
+
+// 2026-09-20: 選択順で初期時刻を作る。カタログ位置による分の桁あふれを防ぐ。
+function initialAttackTime(index) {
+  const minute = 9 * 60 + 10 + index * 8;
+  return (byId('incident-date').value || '2026-01-15') + 'T'
+    + String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0');
+}
+
+// 2026-09-20: 途中解除後の追加でも、保存済み日時と同じ初期時刻を作らない。
+function nextAttackTime(index, existing) {
+  const latest = [...existing.values()].map(item => item.occurrenceTime?.slice(0, 16))
+    .filter(value => value && value.startsWith(byId('incident-date').value)).sort().at(-1);
+  if (!latest) return initialAttackTime(index);
+  const instant = new Date(latest + ':00Z');
+  return Number.isFinite(instant.getTime())
+    ? new Date(instant.getTime() + 8 * 60 * 1000).toISOString().slice(0, 16) : initialAttackTime(index);
 }
 
 function optionPairs(items, id, label) { return items.map(item => [item[id], item[label]]); }
@@ -327,21 +397,68 @@ function renderAttackDetails(initialAttacks = []) {
   syncNetworkModel(); const target = byId('attack-details'); const existing = new Map(
     [...defaults, ...[...target.querySelectorAll('[data-attack-id]')].map(node => [node.dataset.attackId, Object.fromEntries(
       [...node.querySelectorAll('[data-key]')].map(control => [control.dataset.key, control.type === 'checkbox' ? control.checked : control.value]))])]);
-  target.replaceChildren(); const selected = [...document.querySelectorAll('input[name="attack"]:checked')].map(item => item.value);
+// 2026-09-20 修正前: 既存の選択順を保持し、途中解除後は1から連番へ振り直す
+//   target.replaceChildren(); const selected = [...document.querySelectorAll('input[name="attack"]:checked')].map(item => item.value);
+// 2026-09-20 修正後: 既存の選択順を保持し、途中解除後は1から連番へ振り直す
+  const checked = [...document.querySelectorAll('input[name="attack"]:checked')].map(item => item.value);
+  const retained = [...existing.keys()].filter(id => checked.includes(id))
+    .sort((a, b) => Number(existing.get(a).order) - Number(existing.get(b).order));
+  const selected = [...retained, ...checked.filter(id => !retained.includes(id))];
+  target.replaceChildren();
   const nodes = optionPairs(networkModel.nodes, 'nodeId', 'label'); const services = optionPairs(networkModel.services, 'serviceId', 'label');
-  selected.forEach((attackId, index) => { const attack = bootstrap.attacks.find(item => item.id === attackId); const saved = existing.get(attackId) ?? {};
+  const activePreset = bootstrap.networkPresets?.find(item => item.id === activeNetworkPresetId);
+  selected.forEach((attackId, index) => { const attack = bootstrap.attacks.find(item => item.id === attackId);
+    const hint = activePreset?.attackDefaults?.find(item => item.attackId === attackId) ?? {};
+    const stored = existing.get(attackId);
+// 2026-09-20 修正前: 新規選択の時刻を選択順から作り、編集済みの値は維持
+//     const saved = stored ?? { ...hint, order: String(index + 1),
+//       occurrenceTime: hint.occurrenceTime
+//         ? `${byId('incident-date').value || hint.occurrenceTime.slice(0, 10)}${hint.occurrenceTime.slice(10, 16)}`
+//         : '' };
+//
+// 2026-09-20 修正後: 新規選択の時刻を選択順から作り、編集済みの値は維持
+    const saved = stored ?? { evidenceAnswer: attack.authoring?.evidenceAnswer ?? '', ...hint,
+      order: String(index + 1), occurrenceTime: nextAttackTime(index, existing) };
     const card = document.createElement('article'); card.className = 'builder-card'; card.dataset.attackId = attackId;
     text(card, 'h3', `Attack ${index + 1}: ${attack.label}`);
-    select(card, 'Attack Order', saved.order ?? String(index + 1), 'order', ['1', '2', '3'].map(value => [value, value]));
-    input(card, '発生日時', saved.occurrenceTime ?? `${byId('incident-date').value || '2026-01-15'}T09:${String(10 + index * 8).padStart(2, '0')}`, 'occurrenceTime', 'datetime-local');
-    select(card, 'Source Node', saved.sourceNodeId ?? (attackId === 'reflected_xss' ? 'client-host' : 'sender-host'), 'sourceNodeId', nodes);
-    select(card, 'Target Node', saved.targetNodeId ?? 'web-host', 'targetNodeId', nodes);
-    select(card, 'Target Service', saved.targetServiceId ?? 'web-service', 'targetServiceId', services);
-    select(card, 'Investigation Source', saved.investigationSourceNodeId ?? (attackId === 'phishing' ? 'mail-host' : 'web-host'), 'investigationSourceNodeId', nodes);
+// 2026-09-20 修正前: 選択数に応じた順番変更と開始条件・対応構成の表示
+//     select(card, 'Attack Order', saved.order ?? String(index + 1), 'order', ['1', '2', '3'].map(value => [value, value]));
+// 2026-09-20 修正後: 選択数に応じた順番変更と開始条件・対応構成の表示
+    text(card, 'p', attack.description ?? '', 'step-hint');
+    const compatiblePresets = (bootstrap.networkPresets ?? []).filter(preset => preset.attackDefaults.some(a => a.attackId === attackId));
+    text(card, 'p', '対応テンプレート：' + compatiblePresets.map(preset => preset.label).join(' / '), 'step-hint');
+    const conditions = document.createElement('details'); text(conditions, 'summary', '成立に必要な条件（前段がない場合は開始時点の設定）');
+    for (const condition of attack.startingConditions ?? []) text(conditions, 'p', condition);
+    card.append(conditions);
+    const orderControl = select(card, 'Attack Order', String(index + 1), 'order', selected.map((_, i) => [String(i + 1), String(i + 1)]));
+    orderControl.addEventListener('change', () => {
+      const cards = [...target.querySelectorAll('[data-attack-id]')];
+      cards.splice(cards.indexOf(card), 1); cards.splice(Number(orderControl.value) - 1, 0, card);
+      cards.forEach((item, i) => { item.querySelector('[data-key="order"]').value = String(i + 1); });
+      renderAttackDetails();
+      byId('manual-errors').textContent = '順番を変更しました。発生日時もこの順番になるよう確認してください。';
+    });
+    const occurrenceTime = saved.occurrenceTime?.length > 16
+      ? saved.occurrenceTime.slice(0, 16) : saved.occurrenceTime;
+    input(card, '発生日時', occurrenceTime ?? `${byId('incident-date').value || '2026-01-15'}T09:${String(10 + index * 8).padStart(2, '0')}`, 'occurrenceTime', 'datetime-local');
+// 2026-09-20 修正前: 対応しない構成では先頭Nodeを暗黙に選ばず、不足する指定を明示
+//     select(card, 'Source Node', saved.sourceNodeId ?? '', 'sourceNodeId', nodes);
+//     select(card, 'Target Node', saved.targetNodeId ?? '', 'targetNodeId', nodes);
+//     select(card, 'Target Service', saved.targetServiceId ?? '', 'targetServiceId', services);
+//     select(card, 'Investigation Source', saved.investigationSourceNodeId ?? '', 'investigationSourceNodeId', nodes);
+// 2026-09-20 修正後: 対応しない構成では先頭Nodeを暗黙に選ばず、不足する指定を明示
+    select(card, 'Source Node', saved.sourceNodeId ?? '', 'sourceNodeId', [['', '選択してください'], ...nodes]);
+    select(card, 'Target Node', saved.targetNodeId ?? '', 'targetNodeId', [['', '選択してください'], ...nodes]);
+    select(card, 'Target Service', saved.targetServiceId ?? '', 'targetServiceId', [['', '選択してください'], ...services]);
+    select(card, 'Investigation Source', saved.investigationSourceNodeId ?? '', 'investigationSourceNodeId', [['', '選択してください'], ...nodes]);
     const group = document.createElement('fieldset'); text(group, 'legend', '調査方法');
     attack.supportedInvestigationTypes.forEach((type, typeIndex) => { const label = document.createElement('label');
       const box = document.createElement('input'); box.type = 'checkbox'; box.dataset.key = `investigation:${type}`;
-      box.checked = saved[`investigation:${type}`] ?? typeIndex === 0; label.append(box);
+// 2026-09-20 修正前: カタログ先頭の調査方法ではなく攻撃定義の既定値を使う
+//       box.checked = saved[`investigation:${type}`] ?? typeIndex === 0; label.append(box);
+// 2026-09-20 修正後: カタログ先頭の調査方法ではなく攻撃定義の既定値を使う
+      box.checked = saved[`investigation:${type}`] ?? (saved.investigationTypes
+        ? saved.investigationTypes.includes(type) : type === attack.authoring?.preferredInvestigationType); label.append(box);
       label.append(document.createTextNode(bootstrap.investigationTypes.find(item => item.id === type).label)); group.append(label); }); card.append(group);
     const evidenceAnswer = input(card, '証拠から導く答え', saved.evidenceAnswer ?? '',
       'evidenceAnswer');
@@ -350,6 +467,9 @@ function renderAttackDetails(initialAttacks = []) {
     select(card, '想定効果', saved.expectedEffect ?? attack.expectedEffects[0].label,
       'expectedEffect', attack.expectedEffects.map(effect => [effect.label, effect.label]));
     input(card, 'Notes', saved.notes ?? '', 'notes'); target.append(card); });
+  const status = byId('attack-selection-status');
+  if (status) status.textContent = selected.length + ' / ' + (bootstrap.attackSelectionLimit ?? 6)
+    + '件を選択：' + selected.map(id => bootstrap.attacks.find(a => a.id === id).label).join('、');
   updateItemPager('attack-details');
 }
 
@@ -643,6 +763,34 @@ byId('add-service').addEventListener('click', () => { syncNetworkModel(); const 
   renderNetworkBuilder(); renderAttackDetails(); });
 byId('add-connection').addEventListener('click', () => { syncNetworkModel(); networkModel.connections.push({ fromNodeId: networkModel.nodes[0]?.nodeId ?? '', toNodeId: networkModel.nodes[1]?.nodeId ?? '' });
   itemIndexes.connection = networkModel.connections.length - 1; renderNetworkBuilder(); renderAttackDetails(); });
+byId('network-preset').addEventListener('change', () => {
+  const selected = bootstrap.networkPresets?.find(item => item.id === byId('network-preset').value);
+  byId('network-preset-description').textContent = selected?.description ?? '';
+});
+byId('apply-network-preset').addEventListener('click', () => {
+  const selected = bootstrap.networkPresets?.find(item => item.id === byId('network-preset').value);
+  if (!selected) return;
+  activeNetworkPresetId = selected.id; networkModel = structuredClone(selected.network);
+  for (const key of Object.keys(itemIndexes)) if (key !== 'attack-details') itemIndexes[key] = 0;
+  const incidentDate = byId('incident-date').value;
+// 2026-09-20 修正前: 構成変更後も利用者の攻撃選択順を維持
+//   const selectedIds = new Set([...document.querySelectorAll('input[name="attack"]:checked')]
+//     .map(item => item.value));
+//   const defaults = selected.attackDefaults.filter(item => selectedIds.has(item.attackId))
+//     .map((item, index) => ({ ...item, order: index + 1,
+//       occurrenceTime: `${incidentDate}${item.occurrenceTime.slice(10)}` }));
+//
+// 2026-09-20 修正後: 構成変更後も利用者の攻撃選択順を維持
+  const selectedIds = [...byId('attack-details').querySelectorAll('[data-attack-id]')].map(card => card.dataset.attackId);
+  const defaults = selectedIds.map((id, index) => {
+    const item = selected.attackDefaults.find(attack => attack.attackId === id);
+    return { ...(item ?? { attackId: id, investigationTypes: [],
+      evidenceAnswer: bootstrap.attacks.find(a => a.id === id).authoring?.evidenceAnswer ?? '' }),
+      order: index + 1, occurrenceTime: initialAttackTime(index) + ':00+09:00' };
+  });
+  byId('attack-details').replaceChildren();
+  renderNetworkBuilder(); renderAttackDetails(defaults);
+});
 byId('incident-date').addEventListener('change', () => renderAttackDetails());
 for (const id of ['subnet-rows', 'node-rows', 'service-rows', 'connection-rows']) {
   byId(id).addEventListener('input', () => { syncNetworkModel(); drawNetwork('manual-network-diagram', networkModel); });
@@ -656,6 +804,8 @@ try {
   const value = await api('/api/author/start', {}); token = value.token; bootstrap = value.bootstrap;
   const preset = readInitialConfiguration(bootstrap); author = value.author;
   networkModel = structuredClone(preset.network);
+  activeNetworkPresetId = bootstrap.networkPresets?.find(item =>
+    JSON.stringify(item.network) === JSON.stringify(preset.network))?.id ?? null;
   byId('manual-difficulty').value = String(preset.difficulty);
   for (const [id, field] of [['incident-date', 'incidentDate'], ['organization-name', 'organizationName'],
     ['victim-system', 'victimSystem'], ['accused-role', 'accusedRole'], ['suspicion-reason', 'initialSuspicionReason']]) {
@@ -665,7 +815,7 @@ try {
   for (const control of document.querySelectorAll('input[name="attack"]')) {
     control.checked = selectedAttacks.has(control.value);
   }
-  renderNetworkBuilder(); renderAttackDetails(preset.attacks); requireRenderedConfiguration();
+  renderNetworkPresetPicker(); renderNetworkBuilder(); renderAttackDetails(preset.attacks); requireRenderedConfiguration();
   setInitializationState(true); render();
 } catch (error) {
   const message = error.message.includes(initializationHelp) ? error.message : `${error.message} ${initializationHelp}`;

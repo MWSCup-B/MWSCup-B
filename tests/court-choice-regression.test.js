@@ -91,7 +91,10 @@ for (const difficulty of [1, 2, 3]) {
     const { session, runner, view, evaluationCalls } = await generate({ difficulty });
     assert.equal(view.currentState, 'READY', JSON.stringify(view.developerDetails));
     assert.equal(evaluationCalls, 1); assert.equal(runner.evidenceCalls, 2);
-    assert.equal(runner.reviewCalls, 1); assert.equal(runner.scenarioCalls, 0);
+// 2026-09-20 修正前: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+//     assert.equal(runner.reviewCalls, 1); assert.equal(runner.scenarioCalls, 0);
+// 2026-09-20 修正後: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+    assert.equal(runner.reviewCalls, 1); assert.equal(runner.scenarioCalls, 1);
     assert.equal(session.evaluationResult.status, 'ACCEPTED');
     assert.ok(session.evaluationResult.checks.every(item => item.status === 'PASS'));
     const calls = runner.calls.filter(item => item.phase === 'GENERATING_EVIDENCE');

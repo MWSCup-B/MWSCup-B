@@ -4,7 +4,19 @@
   "label": "反射型クロスサイトスクリプティング",
   "category": "web_injection",
   "description": "攻撃者の入力がWeb応答に反射され、利用者のブラウザで対象オリジンのスクリプトとして実行される範囲。Cookie窃取、認証回避、OSコマンド実行、SQL injectionを自動的な効果にしない。",
-  "supportedInvestigationTypes": ["WEB_LOG", "PROXY_LOG", "BROWSER_HISTORY", "APPLICATION_LOG"],
+  "supportedInvestigationTypes": [
+    "WEB_LOG",
+    "PROXY_LOG",
+    "BROWSER_HISTORY",
+    "APPLICATION_LOG"
+  ],
+  "authoring": {
+    "preferredInvestigationType": "WEB_LOG",
+    "evidenceAnswer": "Webアクセス記録から反射された入力を含む対象リクエストを確認し、端末の実行計測記録と対応付ける。",
+    "sourceNodeBinding": "client",
+    "targetServiceBinding": "web",
+    "investigationServiceBinding": "web"
+  },
   "bindings": [
     {
       "id": "attacker",
@@ -250,5 +262,8 @@
       "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
       "supports": "observableArtifacts: ログの取得内容・取得設定・保持を個別に確認する原則。製品固有のイベントIDや既定記録は保証しない。"
     }
+  ],
+  "stages": [
+    "EXECUTION"
   ]
 }

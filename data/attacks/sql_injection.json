@@ -4,7 +4,19 @@
   "label": "SQLインジェクション（Webアプリ経由）",
   "category": "web_injection",
   "description": "Webアプリに送られた入力がSQLの構文・意図を変え、アプリのDB接続権限内で実行される範囲。認証回避、データ窃取・改変、DB管理者権限、OS実行は自動的な効果にしない。",
-  "supportedInvestigationTypes": ["WEB_LOG", "APPLICATION_LOG", "NETWORK_LOG", "CONFIGURATION"],
+  "supportedInvestigationTypes": [
+    "WEB_LOG",
+    "APPLICATION_LOG",
+    "NETWORK_LOG",
+    "CONFIGURATION"
+  ],
+  "authoring": {
+    "preferredInvestigationType": "WEB_LOG",
+    "evidenceAnswer": "Webアクセス記録とDB監査記録から、入力に対応してSQL構造が変化した対象リクエストを確認する。",
+    "sourceNodeBinding": "source",
+    "targetServiceBinding": "web",
+    "investigationServiceBinding": "web"
+  },
   "bindings": [
     {
       "id": "attacker",
@@ -288,5 +300,8 @@
       "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
       "supports": "observableArtifacts: ログの取得内容・取得設定・保持を個別に確認する原則。製品固有のイベントIDや既定記録は保証しない。"
     }
+  ],
+  "stages": [
+    "INITIAL_ACCESS"
   ]
 }

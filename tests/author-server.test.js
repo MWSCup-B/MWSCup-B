@@ -81,7 +81,10 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
   assert.equal(result.data.author.currentState, 'READY');
   assert.equal(result.data.author.saved, true);
   assert.match(result.data.author.playUrl, /^\/\?saved=saved_[a-f0-9]{32}$/);
-  assert.equal(tools.runner.scenarioCalls, 1); assert.equal(tools.runner.reviewCalls, 2);
+// 2026-09-20 修正前: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+//   assert.equal(tools.runner.scenarioCalls, 1); assert.equal(tools.runner.reviewCalls, 2);
+// 2026-09-20 修正後: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+  assert.equal(tools.runner.scenarioCalls, 2); assert.equal(tools.runner.reviewCalls, 2);
 
   const saved = await tools.games(token);
   assert.equal(saved.response.status, 200);

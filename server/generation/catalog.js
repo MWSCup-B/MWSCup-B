@@ -25,6 +25,28 @@ export function validateDefinition(definition) {
       fail('INVALID_BINDING', field, '割当て変数の参照または種類が不正です。');
     }
   };
+  if (definition.authoring) {
+    requireBinding(definition.authoring.sourceNodeBinding, 'node', 'authoring.sourceNodeBinding');
+    requireBinding(definition.authoring.targetServiceBinding, 'service', 'authoring.targetServiceBinding');
+    requireBinding(definition.authoring.investigationServiceBinding, 'service',
+      'authoring.investigationServiceBinding');
+    if (!definition.supportedInvestigationTypes.includes(
+      definition.authoring.preferredInvestigationType)) {
+      fail('INVALID_AUTHORING_HINT', 'authoring.preferredInvestigationType',
+        '既定の調査方法はsupportedInvestigationTypesに含めてください。');
+    }
+  }
+// 2026-09-20 修正前: 追加した証拠取得元の参照と種類を検証
+//   for (const group of ['targetTypes', 'platforms', 'requiredServices', 'requiredRoles']) {
+// 2026-09-20 修正後: 追加した証拠取得元の参照と種類を検証
+  for (const artifact of definition.observableArtifacts) {
+    if (artifact.acquisition) {
+      requireBinding(artifact.acquisition.binding, null, 'observableArtifacts.acquisition.binding');
+      if (!['node', 'service'].includes(bindings.get(artifact.acquisition.binding))) {
+        fail('INVALID_BINDING', 'observableArtifacts.acquisition.binding', '証拠取得元はNodeまたはServiceです。');
+      }
+    }
+  }
   for (const group of ['targetTypes', 'platforms', 'requiredServices', 'requiredRoles']) {
     for (const item of definition[group] ?? []) {
       requireBinding(item.binding, group === 'requiredServices' ? 'service' : null, group);

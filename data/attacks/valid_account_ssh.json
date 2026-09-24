@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "1.0",
+  "id": "valid_account_ssh",
+  "label": "有効アカウントの悪用（SSH）",
+  "category": "initial_access",
+  "stages": [
+    "INITIAL_ACCESS"
+  ],
+  "description": "利用可能な認証情報でSSHへ接続し、許可された一般ユーザーのシェルを操作する。root権限は付与しない。",
+  "supportedInvestigationTypes": [
+    "AUTH_LOG",
+    "DEVICE"
+  ],
+  "authoring": {
+    "preferredInvestigationType": "AUTH_LOG",
+    "evidenceAnswer": "SSH認証記録で対象アカウントと接続元を確認する。操作者個人は断定しない。 / セッションに対応した端末計測から一般ユーザーのシェル起動を確認する。",
+    "sourceNodeBinding": "source",
+    "targetServiceBinding": "service",
+    "investigationServiceBinding": "service"
+  },
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "host",
+      "kind": "node"
+    },
+    {
+      "id": "service",
+      "kind": "service"
+    },
+    {
+      "id": "source",
+      "kind": "node"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    }
+  ],
+  "requiredRoles": [
+    {
+      "binding": "source",
+      "values": [
+        "sender"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "host",
+      "values": [
+        "linux"
+      ]
+    },
+    {
+      "binding": "service",
+      "values": [
+        "ssh"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "service",
+      "node": "host",
+      "values": [
+        "remote_access"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "authenticationConditions",
+      "predicate": "ssh_authentication_satisfied",
+      "args": [
+        "$attacker",
+        "$service"
+      ],
+      "value": true,
+      "description": "アカウントが有効で、接続元制限・鍵またはパスワード・要求される多要素認証を含む認証条件を満たす。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "interactive_shell_permitted",
+      "args": [
+        "$service",
+        "$host"
+      ],
+      "value": true,
+      "description": "対象アカウントに一般ユーザーのシェルが許可されている。転送専用・SFTP専用等の制限で拒否されない。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "possesses_valid_ssh_credentials",
+      "args": [
+        "$attacker",
+        "$service"
+      ],
+      "value": true,
+      "description": "対象の一般ユーザーアカウントに有効な認証情報を持つ。認証情報の入手方法は未選択なら開始条件とし、攻撃を追加しない。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "source",
+      "toService": "service",
+      "description": "送信元から対象サービスへの通信が許可されている。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "local_execution",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "SSHセッションの一般ユーザー権限で、このホストのプロセスを操作できる。管理者権限は含まない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "ssh_authentication_record",
+      "description": "SSH認証記録で対象アカウントと接続元を確認する。操作者個人は断定しない。",
+      "acquisition": {
+        "binding": "service",
+        "logSource": "AUTH_LOG",
+        "type": "AUTHENTICATION_LOG",
+        "targetType": "LOG_SOURCE"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "ssh_authentication_record_available",
+          "args": [
+            "$service"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    },
+    {
+      "id": "ssh_session_record",
+      "description": "セッションに対応した端末計測から一般ユーザーのシェル起動を確認する。",
+      "acquisition": {
+        "binding": "host",
+        "logSource": "DEVICE",
+        "type": "DEVICE_INFORMATION",
+        "targetType": "ENDPOINT"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "ssh_session_record_available",
+          "args": [
+            "$host"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "有効アカウントの悪用（SSH）"
+  ],
+  "references": [
+    {
+      "id": "technical_reference",
+      "title": "有効アカウントの悪用（SSH） — 技術的成立条件",
+      "url": "https://attack.mitre.org/techniques/T1078/",
+      "supports": "前提条件と効果の範囲。ログの取得・保持は別の教材条件として明示する。"
+    }
+  ]
+}

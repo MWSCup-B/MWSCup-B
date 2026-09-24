@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "1.0",
+  "id": "corporate-flat",
+  "label": "社内Web標準構成",
+  "description": "メール、利用者端末、Web、DBを含む基本構成。",
+  "network": {
+    "subnets": [
+      {
+        "subnetId": "external-net",
+        "label": "外部ネットワーク",
+        "cidr": "203.0.113.0/24",
+        "trustBoundaryId": "external"
+      },
+      {
+        "subnetId": "internal-net",
+        "label": "社内ネットワーク",
+        "cidr": "10.10.0.0/24",
+        "trustBoundaryId": "internal"
+      }
+    ],
+    "nodes": [
+      {
+        "nodeId": "sender-host",
+        "label": "外部送信元",
+        "nodeType": "EXTERNAL",
+        "os": "linux",
+        "ip": "203.0.113.10",
+        "subnetId": "external-net",
+        "trustBoundaryId": "external",
+        "roles": [
+          "sender"
+        ],
+        "logSources": [
+          "NETWORK_LOG"
+        ]
+      },
+      {
+        "nodeId": "client-host",
+        "label": "利用者端末",
+        "nodeType": "CLIENT",
+        "os": "windows",
+        "ip": "10.10.0.20",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "workstation"
+        ],
+        "logSources": [
+          "BROWSER_HISTORY",
+          "DEVICE",
+          "FILE"
+        ]
+      },
+      {
+        "nodeId": "mail-host",
+        "label": "メールサーバー",
+        "nodeType": "MAIL_SERVER",
+        "os": "linux",
+        "ip": "10.10.0.30",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "mail_server"
+        ],
+        "logSources": [
+          "EMAIL",
+          "AUTH_LOG"
+        ]
+      },
+      {
+        "nodeId": "web-host",
+        "label": "Webサーバー",
+        "nodeType": "WEB_SERVER",
+        "os": "linux",
+        "ip": "10.10.0.40",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "web_server"
+        ],
+        "logSources": [
+          "WEB_LOG",
+          "APPLICATION_LOG",
+          "CONFIGURATION"
+        ]
+      },
+      {
+        "nodeId": "db-host",
+        "label": "Databaseサーバー",
+        "nodeType": "DATABASE",
+        "os": "linux",
+        "ip": "10.10.0.50",
+        "subnetId": "internal-net",
+        "trustBoundaryId": "internal",
+        "roles": [
+          "database_server"
+        ],
+        "logSources": [
+          "APPLICATION_LOG",
+          "CONFIGURATION"
+        ]
+      }
+    ],
+    "services": [
+      {
+        "serviceId": "browser-service",
+        "nodeId": "client-host",
+        "label": "Web Browser",
+        "serviceType": "web_browser",
+        "platform": "browser"
+      },
+      {
+        "serviceId": "email-service",
+        "nodeId": "mail-host",
+        "label": "Mail",
+        "serviceType": "email",
+        "platform": "email"
+      },
+      {
+        "serviceId": "web-service",
+        "nodeId": "web-host",
+        "label": "Web Application",
+        "serviceType": "web_application",
+        "platform": "web"
+      },
+      {
+        "serviceId": "db-service",
+        "nodeId": "db-host",
+        "label": "SQL Database",
+        "serviceType": "sql_database",
+        "platform": "sql"
+      }
+    ],
+    "connections": [
+      {
+        "fromNodeId": "sender-host",
+        "toNodeId": "mail-host"
+      },
+      {
+        "fromNodeId": "sender-host",
+        "toNodeId": "web-host"
+      },
+      {
+        "fromNodeId": "client-host",
+        "toNodeId": "mail-host"
+      },
+      {
+        "fromNodeId": "client-host",
+        "toNodeId": "web-host"
+      },
+      {
+        "fromNodeId": "web-host",
+        "toNodeId": "db-host"
+      }
+    ]
+  }
+}

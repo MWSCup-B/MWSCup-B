@@ -109,7 +109,10 @@ test('RevisionがWeb記録の根拠を削除した場合はReview前に不足と
   const generationInput = validateScenarioConfiguration(configuration, catalog).technical.generationInput;
   const scenarioPackage = buildScenarioTemplate({ configuration, generationInput });
   for (const requirement of scenarioPackage.evidenceRequirements.requirements) {
-    if (requirement.requirementId.startsWith('requirement_observation_')) continue;
+// 2026-09-20 修正前: 回帰テストで全Web根拠を削除した状況を正しく作る
+//     if (requirement.requirementId.startsWith('requirement_observation_')) continue;
+// 2026-09-20 修正後: 回帰テストで全Web根拠を削除した状況を正しく作る
+    // 個別の観測要件も含めて削除し、全4目的で不足するケースを再現する。
     requirement.grounds = requirement.grounds.filter(item => item.sourceId !== 'web_access_record');
   }
   const issues = validateScenarioEvidenceCoverage({ configuration, generationInput, scenarioPackage });
@@ -183,14 +186,27 @@ test('Manualはtimezoneなしの不正なoccurrenceTimeと未知IDを拒否す�
     || item.code === 'BROKEN_REFERENCE'));
 });
 
-test('Attack 3個の無関係な並置と4個目を拒否する', () => {
+// 2026-09-20 修正前: 許可された独立攻撃と不正な重複を分けて検証
+// test('Attack 3個の無関係な並置と4個目を拒否する', () => {
+//   const three = createDefaultConfiguration({ difficulty: 3,
+//     attackIds: ['phishing', 'reflected_xss', 'sql_injection'] });
+//   let result = validateScenarioConfiguration(three, catalog);
+//   assert.equal(result.status, 'INVALID'); assert.equal(result.errors[0].code, 'INVALID_ATTACK_COMBINATION');
+//   const four = structuredClone(three); four.attacks.push({ ...four.attacks[2], attackId: 'reflected_xss', order: 3 });
+//   result = validateScenarioConfiguration(four, catalog);
+//   assert.equal(result.status, 'INVALID'); assert.ok(result.errors.some(item => item.code === 'INVALID_COUNT'));
+// });
+//
+// 2026-09-20 修正後: 許可された独立攻撃と不正な重複を分けて検証
+test('独立成分を含む3攻撃を受理し、重複した攻撃は拒否する', () => {
   const three = createDefaultConfiguration({ difficulty: 3,
     attackIds: ['phishing', 'reflected_xss', 'sql_injection'] });
   let result = validateScenarioConfiguration(three, catalog);
-  assert.equal(result.status, 'INVALID'); assert.equal(result.errors[0].code, 'INVALID_ATTACK_COMBINATION');
-  const four = structuredClone(three); four.attacks.push({ ...four.attacks[2], attackId: 'reflected_xss', order: 3 });
-  result = validateScenarioConfiguration(four, catalog);
-  assert.equal(result.status, 'INVALID'); assert.ok(result.errors.some(item => item.code === 'INVALID_COUNT'));
+  assert.equal(result.status, 'VALID');
+  assert.equal(result.technical.generationInput.technicalInput.attackGraph.components.length, 2);
+  const duplicate = structuredClone(three); duplicate.attacks.push({ ...duplicate.attacks[2], order: 4 });
+  result = validateScenarioConfiguration(duplicate, catalog);
+  assert.equal(result.status, 'INVALID'); assert.ok(result.errors.some(item => item.code === 'DUPLICATE_VALUE'));
 });
 
 test('Occurrence Time、Investigation support、Log Sourceを決定論的に検証する', () => {
@@ -284,7 +300,10 @@ test('Review不合格は承認前にScenarioを修正・再検証し、合格後
   const session = createAutoAuthorSession(); manager.submitManual(session, createDefaultConfiguration());
   await manager.waitForIdle();
   assert.equal(session.auto.state, 'SCENARIO_PREVIEW'); assert.equal(session.userApproval, null);
-  assert.equal(runner.reviewCalls, 2); assert.equal(runner.scenarioCalls, 1);
+// 2026-09-20 修正前: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+//   assert.equal(runner.reviewCalls, 2); assert.equal(runner.scenarioCalls, 1);
+// 2026-09-20 修正後: 初回Scenario設計を含む呼出回数・失敗工程を検証する
+  assert.equal(runner.reviewCalls, 2); assert.equal(runner.scenarioCalls, 2);
   assert.equal(session.verificationResult.status, 'VERIFIED');
   manager.approve(session); await manager.waitForIdle(); assert.equal(session.auto.state, 'READY');
 });

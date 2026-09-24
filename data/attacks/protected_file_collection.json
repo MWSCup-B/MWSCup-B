@@ -1,0 +1,158 @@
+{
+  "schemaVersion": "1.0",
+  "id": "protected_file_collection",
+  "label": "侵入後の保護ファイル収集（Linux）",
+  "category": "collection",
+  "stages": [
+    "COLLECTION"
+  ],
+  "description": "既に得たroot権限と対象データの可読条件に基づき、ローカルの保護ファイルを収集する。外部への送信は含まない。",
+  "supportedInvestigationTypes": [
+    "DEVICE",
+    "FILE"
+  ],
+  "authoring": {
+    "preferredInvestigationType": "DEVICE",
+    "evidenceAnswer": "事前に有効なファイルアクセス計測から、対象プロセスによる読み取りを確認する。 / 収集物のメタデータと対象ファイルとの対応を照合する。外部送信は推定しない。",
+    "sourceNodeBinding": "host",
+    "targetServiceBinding": "service",
+    "investigationServiceBinding": "service"
+  },
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "host",
+      "kind": "node"
+    },
+    {
+      "id": "service",
+      "kind": "service"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    }
+  ],
+  "requiredRoles": [],
+  "platforms": [
+    {
+      "binding": "host",
+      "values": [
+        "linux"
+      ]
+    },
+    {
+      "binding": "service",
+      "values": [
+        "linux"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "service",
+      "node": "host",
+      "values": [
+        "local_execution"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "otherConditions",
+      "predicate": "protected_files_accessible",
+      "args": [
+        "$host"
+      ],
+      "value": true,
+      "description": "対象ファイルが存在し、実効アクセス制御や暗号化の条件も満たして内容を読める。rootでも無条件に読めるとは仮定しない。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "privileged_execution",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "攻撃開始時に、このホスト上でroot権限のプロセスを操作できる。前段の効果または明示した開始条件。"
+    }
+  ],
+  "requiredReachability": [],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "protected_files_collected",
+      "args": [
+        "$attacker",
+        "$host"
+      ],
+      "value": true,
+      "description": "対象ファイル内容がこのホスト上で収集された。外部持出しや他のデータの取得は含まない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "collection_read_record",
+      "description": "事前に有効なファイルアクセス計測から、対象プロセスによる読み取りを確認する。",
+      "acquisition": {
+        "binding": "host",
+        "logSource": "DEVICE",
+        "type": "DEVICE_INFORMATION",
+        "targetType": "ENDPOINT"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "collection_read_record_available",
+          "args": [
+            "$host"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    },
+    {
+      "id": "collection_output_record",
+      "description": "収集物のメタデータと対象ファイルとの対応を照合する。外部送信は推定しない。",
+      "acquisition": {
+        "binding": "host",
+        "logSource": "FILE",
+        "type": "FILE_METADATA",
+        "targetType": "SERVER"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "collection_output_record_available",
+          "args": [
+            "$host"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "侵入後の保護ファイル収集（Linux）"
+  ],
+  "references": [
+    {
+      "id": "technical_reference",
+      "title": "侵入後の保護ファイル収集（Linux） — 技術的成立条件",
+      "url": "https://attack.mitre.org/techniques/T1005/",
+      "supports": "前提条件と効果の範囲。ログの取得・保持は別の教材条件として明示する。"
+    }
+  ]
+}

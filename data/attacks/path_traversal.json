@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "1.0",
+  "id": "path_traversal",
+  "label": "パストラバーサル",
+  "category": "initial_access",
+  "stages": [
+    "INITIAL_ACCESS"
+  ],
+  "description": "Web機能のパス制限不備により、アプリケーションが読める範囲の対象ファイルを読み出す。任意実行やroot権限を意味しない。",
+  "supportedInvestigationTypes": [
+    "WEB_LOG",
+    "APPLICATION_LOG"
+  ],
+  "authoring": {
+    "preferredInvestigationType": "WEB_LOG",
+    "evidenceAnswer": "対象リクエストのパスと時刻をWebログで確認する。リクエストだけでは成功を断定しない。 / 計測済みアプリケーション記録で実際のファイル読み取りと応答を確認する。",
+    "sourceNodeBinding": "source",
+    "targetServiceBinding": "service",
+    "investigationServiceBinding": "service"
+  },
+  "bindings": [
+    {
+      "id": "attacker",
+      "kind": "entity"
+    },
+    {
+      "id": "host",
+      "kind": "node"
+    },
+    {
+      "id": "service",
+      "kind": "service"
+    },
+    {
+      "id": "source",
+      "kind": "node"
+    }
+  ],
+  "targetTypes": [
+    {
+      "binding": "attacker",
+      "values": [
+        "actor"
+      ]
+    }
+  ],
+  "requiredRoles": [
+    {
+      "binding": "source",
+      "values": [
+        "sender"
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "binding": "host",
+      "values": [
+        "linux"
+      ]
+    },
+    {
+      "binding": "service",
+      "values": [
+        "web"
+      ]
+    }
+  ],
+  "requiredServices": [
+    {
+      "binding": "service",
+      "node": "host",
+      "values": [
+        "web_application"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "source": "vulnerabilities",
+      "predicate": "path_confinement_missing",
+      "args": [
+        "$service"
+      ],
+      "value": true,
+      "description": "利用者入力がファイルパスに使用され、正規化後の許可ディレクトリ制限が不十分。"
+    },
+    {
+      "source": "authenticationConditions",
+      "predicate": "file_endpoint_access_permitted",
+      "args": [
+        "$attacker",
+        "$service"
+      ],
+      "value": true,
+      "description": "対象のファイル参照機能に対する認証・認可条件を満たす。"
+    },
+    {
+      "source": "otherConditions",
+      "predicate": "target_file_readable_and_returned",
+      "args": [
+        "$service",
+        "$host"
+      ],
+      "value": true,
+      "description": "対象ファイルが存在し、アプリケーションの実効主体に読み取り権限があり、その内容を応答として受け取れる。"
+    }
+  ],
+  "requiredPrivileges": [
+    {
+      "source": "attackerInitialPrivileges",
+      "predicate": "controls_file_path_input",
+      "args": [
+        "$attacker",
+        "$service"
+      ],
+      "value": true,
+      "description": "攻撃者がファイル参照機能に渡す入力を構成できる。"
+    }
+  ],
+  "requiredReachability": [
+    {
+      "from": "source",
+      "toService": "service",
+      "description": "送信元から対象サービスへの通信が許可されている。"
+    }
+  ],
+  "effects": [
+    {
+      "source": "otherConditions",
+      "predicate": "application_file_disclosed",
+      "args": [
+        "$attacker",
+        "$service"
+      ],
+      "value": true,
+      "description": "アプリケーションの読み取り権限内の対象ファイル内容を受け取る。追加の権限取得や実行は含まない。"
+    }
+  ],
+  "observableArtifacts": [
+    {
+      "id": "traversal_access_record",
+      "description": "対象リクエストのパスと時刻をWebログで確認する。リクエストだけでは成功を断定しない。",
+      "acquisition": {
+        "binding": "service",
+        "logSource": "WEB_LOG",
+        "type": "WEB_ACCESS_LOG",
+        "targetType": "LOG_SOURCE"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "traversal_access_record_available",
+          "args": [
+            "$service"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    },
+    {
+      "id": "traversal_read_record",
+      "description": "計測済みアプリケーション記録で実際のファイル読み取りと応答を確認する。",
+      "acquisition": {
+        "binding": "service",
+        "logSource": "APPLICATION_LOG",
+        "type": "APPLICATION_LOG",
+        "targetType": "LOG_SOURCE"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "traversal_read_record_available",
+          "args": [
+            "$service"
+          ],
+          "value": true,
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+        }
+      ]
+    }
+  ],
+  "relatedAttackPatterns": [
+    "パストラバーサル"
+  ],
+  "references": [
+    {
+      "id": "technical_reference",
+      "title": "パストラバーサル — 技術的成立条件",
+      "url": "https://community.owasp.org/attacks/Path_Traversal",
+      "supports": "前提条件と効果の範囲。ログの取得・保持は別の教材条件として明示する。"
+    }
+  ]
+}

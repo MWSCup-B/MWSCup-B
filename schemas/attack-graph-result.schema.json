@@ -65,7 +65,7 @@
               "pattern": "^[a-z][a-z0-9_-]*$"
             },
             "minItems": 1,
-            "maxItems": 3
+            "maxItems": 6
           },
           "rootNodeIds": {
             "type": "array",
@@ -76,7 +76,7 @@
               "pattern": "^[a-z][a-z0-9_-]*$"
             },
             "minItems": 1,
-            "maxItems": 3
+            "maxItems": 6
           },
           "leafNodeIds": {
             "type": "array",
@@ -87,7 +87,7 @@
               "pattern": "^[a-z][a-z0-9_-]*$"
             },
             "minItems": 1,
-            "maxItems": 3
+            "maxItems": 6
           },
           "nodes": {
             "type": "array",
@@ -509,7 +509,7 @@
               "additionalProperties": false
             },
             "minItems": 1,
-            "maxItems": 3
+            "maxItems": 6
           },
           "edges": {
             "type": "array",
@@ -730,7 +730,7 @@
                     "pattern": "^[a-z][a-z0-9_-]*$"
                   },
                   "minItems": 1,
-                  "maxItems": 3
+                  "maxItems": 6
                 }
               },
               "required": [
@@ -741,7 +741,7 @@
               "additionalProperties": false
             },
             "minItems": 1,
-            "maxItems": 3
+            "maxItems": 6
           },
           "sourcePlanOrders": {
             "type": "array",
@@ -754,10 +754,10 @@
                 "pattern": "^[a-z][a-z0-9_-]*$"
               },
               "minItems": 1,
-              "maxItems": 3
+              "maxItems": 6
             },
             "minItems": 1,
-            "maxItems": 6
+            "maxItems": 720
           }
         },
         "required": [
@@ -777,7 +777,7 @@
         "additionalProperties": false
       },
       "minItems": 0,
-      "maxItems": 6
+      "maxItems": 720
     },
     "issues": {
       "type": "array",

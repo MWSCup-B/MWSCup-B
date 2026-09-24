@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "1.0",
+  "id": "branch-proxy",
+  "label": "支店・Proxy経由構成",
+  "description": "支店端末がProxyを経由してデータセンターのメールとWebへ接続する構成。",
+  "network": {
+    "subnets": [
+      {
+        "subnetId": "internet-segment",
+        "label": "インターネット",
+        "cidr": "203.0.113.0/24",
+        "trustBoundaryId": "external"
+      },
+      {
+        "subnetId": "branch-segment",
+        "label": "支店ネットワーク",
+        "cidr": "10.30.0.0/24",
+        "trustBoundaryId": "branch"
+      },
+      {
+        "subnetId": "dc-segment",
+        "label": "データセンター",
+        "cidr": "10.40.0.0/24",
+        "trustBoundaryId": "datacenter"
+      }
+    ],
+    "nodes": [
+      {
+        "nodeId": "remote-sender",
+        "label": "外部送信元",
+        "nodeType": "EXTERNAL",
+        "os": "linux",
+        "ip": "203.0.113.80",
+        "subnetId": "internet-segment",
+        "trustBoundaryId": "external",
+        "roles": [
+          "sender"
+        ],
+        "logSources": [
+          "NETWORK_LOG"
+        ]
+      },
+      {
+        "nodeId": "branch-client",
+        "label": "調査対象端末",
+        "nodeType": "CLIENT",
+        "os": "windows",
+        "ip": "10.30.0.20",
+        "subnetId": "branch-segment",
+        "trustBoundaryId": "branch",
+        "roles": [
+          "workstation"
+        ],
+        "logSources": [
+          "BROWSER_HISTORY",
+          "DEVICE",
+          "FILE"
+        ]
+      },
+      {
+        "nodeId": "dc-mail",
+        "label": "メールゲートウェイ",
+        "nodeType": "MAIL_SERVER",
+        "os": "linux",
+        "ip": "10.40.0.20",
+        "subnetId": "dc-segment",
+        "trustBoundaryId": "datacenter",
+        "roles": [
+          "mail_server"
+        ],
+        "logSources": [
+          "EMAIL",
+          "AUTH_LOG"
+        ]
+      },
+      {
+        "nodeId": "dc-web",
+        "label": "公開Webサーバー",
+        "nodeType": "WEB_SERVER",
+        "os": "linux",
+        "ip": "10.40.0.30",
+        "subnetId": "dc-segment",
+        "trustBoundaryId": "datacenter",
+        "roles": [
+          "web_server"
+        ],
+        "logSources": [
+          "WEB_LOG",
+          "APPLICATION_LOG",
+          "CONFIGURATION"
+        ]
+      },
+      {
+        "nodeId": "dc-db",
+        "label": "社内DBサーバー",
+        "nodeType": "DATABASE",
+        "os": "linux",
+        "ip": "10.40.0.40",
+        "subnetId": "dc-segment",
+        "trustBoundaryId": "datacenter",
+        "roles": [
+          "database_server"
+        ],
+        "logSources": [
+          "APPLICATION_LOG",
+          "CONFIGURATION"
+        ]
+      },
+      {
+        "nodeId": "branch-proxy",
+        "label": "支店Proxy",
+        "nodeType": "PROXY",
+        "os": "network",
+        "ip": "10.30.0.10",
+        "subnetId": "branch-segment",
+        "trustBoundaryId": "branch",
+        "roles": [
+          "proxy"
+        ],
+        "logSources": [
+          "PROXY_LOG",
+          "NETWORK_LOG"
+        ]
+      }
+    ],
+    "services": [
+      {
+        "serviceId": "branch-browser",
+        "nodeId": "branch-client",
+        "label": "Web Browser",
+        "serviceType": "web_browser",
+        "platform": "browser"
+      },
+      {
+        "serviceId": "dc-mail-service",
+        "nodeId": "dc-mail",
+        "label": "Mail Service",
+        "serviceType": "email",
+        "platform": "email"
+      },
+      {
+        "serviceId": "dc-web-service",
+        "nodeId": "dc-web",
+        "label": "Web Application",
+        "serviceType": "web_application",
+        "platform": "web"
+      },
+      {
+        "serviceId": "dc-db-service",
+        "nodeId": "dc-db",
+        "label": "SQL Database",
+        "serviceType": "sql_database",
+        "platform": "sql"
+      },
+      {
+        "serviceId": "branch-proxy-service",
+        "nodeId": "branch-proxy",
+        "label": "Forward Proxy",
+        "serviceType": "proxy",
+        "platform": "proxy"
+      }
+    ],
+    "connections": [
+      {
+        "fromNodeId": "remote-sender",
+        "toNodeId": "dc-mail"
+      },
+      {
+        "fromNodeId": "remote-sender",
+        "toNodeId": "dc-web"
+      },
+      {
+        "fromNodeId": "branch-client",
+        "toNodeId": "branch-proxy"
+      },
+      {
+        "fromNodeId": "branch-proxy",
+        "toNodeId": "dc-mail"
+      },
+      {
+        "fromNodeId": "branch-proxy",
+        "toNodeId": "dc-web"
+      },
+      {
+        "fromNodeId": "dc-web",
+        "toNodeId": "dc-db"
+      }
+    ]
+  }
+}

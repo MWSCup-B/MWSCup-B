@@ -3,16 +3,41 @@
   "title": "Technical Timeline v1 (Backend internal)",
   "type": "object",
   "properties": {
-    "schemaVersion": { "const": "1.0" },
-    "timelineId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
-    "scenarioId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "timelineId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "scenarioId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
     "attackGraphRef": {
       "type": "object",
       "properties": {
-        "inputDigest": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
-        "graphId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+        "inputDigest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "graphId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        }
       },
-      "required": ["inputDigest", "graphId"],
+      "required": [
+        "inputDigest",
+        "graphId"
+      ],
       "additionalProperties": false
     },
     "events": {
@@ -20,37 +45,78 @@
       "items": {
         "type": "object",
         "properties": {
-          "eventId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
-          "order": { "type": "number" },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "order": {
+            "type": "number"
+          },
           "dependsOn": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
             "minItems": 0,
-            "maxItems": 3
+            "maxItems": 6
           },
-          "attackNodeId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" }
+          "attackNodeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          }
         },
-        "required": ["eventId", "order", "dependsOn", "attackNodeId"],
+        "required": [
+          "eventId",
+          "order",
+          "dependsOn",
+          "attackNodeId"
+        ],
         "additionalProperties": false
       },
       "minItems": 1,
-      "maxItems": 3
+      "maxItems": 6
     },
     "narrativeTimestamps": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "eventId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
-          "displayTimestamp": { "type": "string", "minLength": 1, "maxLength": 200 }
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "displayTimestamp": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         },
-        "required": ["eventId", "displayTimestamp"],
+        "required": [
+          "eventId",
+          "displayTimestamp"
+        ],
         "additionalProperties": false
       },
       "minItems": 0,
-      "maxItems": 3
+      "maxItems": 6
     }
   },
-  "required": ["schemaVersion", "timelineId", "scenarioId", "attackGraphRef", "events", "narrativeTimestamps"],
+  "required": [
+    "schemaVersion",
+    "timelineId",
+    "scenarioId",
+    "attackGraphRef",
+    "events",
+    "narrativeTimestamps"
+  ],
   "additionalProperties": false
 }

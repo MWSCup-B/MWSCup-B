@@ -5,8 +5,13 @@ import { validateScenarioContract } from './scenario-validator.js';
 import { fail, validateDocument, ValidationError } from './schema.js';
 
 export const SCENARIO_PROMPT_TEMPLATE_VERSION = '1.0';
-export const SCENARIO_PROMPT_TEMPLATE = await readFile(
-  new URL('../../prompts/scenario-generation-v1.md', import.meta.url), 'utf8');
+// 2026-09-20 修正前: 保存用コメントの旧指示をAIに送らない
+// export const SCENARIO_PROMPT_TEMPLATE = await readFile(
+//   new URL('../../prompts/scenario-generation-v1.md', import.meta.url), 'utf8');
+// 2026-09-20 修正後: 有効な指示だけを生成に使用する
+export const SCENARIO_PROMPT_TEMPLATE = (await readFile(
+  new URL('../../prompts/scenario-generation-v1.md', import.meta.url), 'utf8'))
+  .replace(/<!--[\s\S]*?-->/g, '');
 
 const REQUIRED_ARTIFACTS = ['groundTruth', 'timeline', 'characters', 'learningObjectives',
   'evidenceRequirements', 'scenarioDraft'];

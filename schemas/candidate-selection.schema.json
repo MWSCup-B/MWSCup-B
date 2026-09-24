@@ -15,7 +15,7 @@
         "pattern": "^[a-z][a-z0-9_-]*$"
       },
       "minItems": 1,
-      "maxItems": 3
+      "maxItems": 6
     }
   },
   "required": [

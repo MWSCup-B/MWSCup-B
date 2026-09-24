@@ -69,7 +69,14 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
       const matching = agent.evidenceRequirements.requirements.filter(item => item.grounds
         .some(ref => ref.sourceType === ground.sourceType && ref.sourceId === ground.sourceId
           && ref.attackNodeId === ground.attackNodeId));
-      const [type, title, body] = kinds[ground.sourceId];
+// 2026-09-20 修正前: 追加攻撃の取得定義を使ってモックの生成経路を検証
+//       const [type, title, body] = kinds[ground.sourceId];
+// 2026-09-20 修正後: 追加攻撃の取得定義を使ってモックの生成経路を検証
+      const node = agent.attackGraph.nodes.find(item => item.nodeId === ground.attackNodeId);
+      const observation = agent.attackDefinitions.find(item => item.id === node.attackDefinitionId)
+        .observableArtifacts.find(item => item.id === ground.sourceId);
+      const [type, title, body] = kinds[ground.sourceId] ?? [observation.acquisition.type,
+        observation.id, '教材用合成資料: ' + observation.description];
       const event = agent.timeline.events.find(item => item.attackNodeId === ground.attackNodeId);
       const timestamp = agent.timeline.narrativeTimestamps.find(item => item.eventId === event?.eventId);
       const publicContent = body + (type === 'WEB_ACCESS_LOG' && timestamp

@@ -177,6 +177,27 @@ test('再描画で編集値を戻さず、Network欄が消えた状態では送�
     ['/api/author/start', '/api/author/select-mode']);
 });
 
+test('Network presetで複数Attackを選んでも日時をdatetime-local形式で連番送信する', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
+  await page.byId('choose-manual').dispatch('click');
+  page.byId('network-preset').value = 'dmz-web';
+  await page.byId('apply-network-preset').dispatch('click');
+  const xss = page.document.querySelectorAll('input[name="attack"]')
+    .find(item => item.value === 'reflected_xss');
+  xss.checked = true; await xss.dispatch('change');
+  const cards = page.document.querySelectorAll('[data-attack-id]');
+  assert.equal(cards.length, 2);
+  assert.deepEqual(cards.map(card => card.querySelector('[data-key="order"]').value), ['1', '2']);
+  assert.ok(cards.every(card => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+    .test(card.querySelector('[data-key="occurrenceTime"]').value)));
+  await advanceToReview(page);
+  await page.byId('manual-create').dispatch('click');
+  const submitted = page.calls.find(call => call.path === '/api/author/manual').body.configuration;
+  assert.deepEqual(submitted.attacks.map(item => item.order), [1, 2]);
+  const result = validateScenarioConfiguration(normalizeScenarioConfiguration(submitted, catalog), catalog);
+  assert.equal(result.status, 'VALID', JSON.stringify(result.errors));
+});
+
 test('詳細設定は順番に進み、Nodeなど複数件は1件ずつ表示して入力を保つ', async () => {
   const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
   await page.byId('choose-manual').dispatch('click');
