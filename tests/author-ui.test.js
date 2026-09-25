@@ -108,7 +108,8 @@ test('入力は8種の攻撃と舞台だけで、自動設定項目を送信し�
   assert.equal(page.byId('create-scenario').disabled, false);
   await page.byId('create-scenario').dispatch('click');
   const submitted = page.calls.find(call => call.path === '/api/author/selection').body;
-  assert.deepEqual(submitted, { request: { schemaVersion: '1.0', attackIds: ['phishing'], settingId: 'company' } });
+  assert.deepEqual(submitted, { request: { schemaVersion: '1.0', attackIds: ['phishing'], settingId: 'company' },
+    generationSettings: { schemaVersion: '1.0', model: '', reasoningEffort: '' } });
   assert.ok(!page.calls.some(call => /manual|makotomaru|approve/.test(call.path)));
 });
 

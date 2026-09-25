@@ -10,7 +10,7 @@ import { generatedSceneDialogue } from '../server/generation/dialogue-template.j
 import { AutoGenerationManager, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { actGenerated, createGeneratedGame, generatedPlayerView } from '../server/generated-game.js';
-import { currentCorrectPair } from './helpers/court-issues.js';
+import { collectCurrentTarget, currentCorrectPair } from './helpers/court-issues.js';
 
 const catalog = await loadCatalog();
 function selected(attackIds) {
@@ -114,7 +114,8 @@ test('generation gives question background only to the evidence writer and relea
     assert.notEqual(view.investigationTargets[0].description, runner.backgrounds[round].description);
     assert.equal(JSON.stringify(view).includes(runner.backgrounds[round].description), false);
     const pair = currentCorrectPair(runtime, session.currentRound);
-    actGenerated(session, runtime, { action: 'retrial', interpretationChoiceId: pair.interpretationChoiceId });
+    collectCurrentTarget(session, runtime);
+    actGenerated(session, runtime, { action: 'retrial', evidenceId: pair.evidenceId, interpretationChoiceId: pair.interpretationChoiceId });
     assertPrivate(generatedPlayerView(session, runtime));
     actGenerated(session, runtime, { action: 'objection', ...pair });
   }

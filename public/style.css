@@ -421,6 +421,25 @@ code { font-family: ui-monospace, monospace; }
 .author-page #operation-error { margin: 0; }
 .author-page #operation-error:empty { display: none; }
 .author-page #selection-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: clamp(.4rem, 1.5vh, 1rem); overflow: hidden; }
+
+/* Creation screens share the title's gold, navy and pale paper palette. */
+.author-page { --creation-gold: #cf9800; --creation-ink: #173e56; color: var(--creation-ink); background: #edf2f5; }
+.author-page > header { color: var(--creation-ink); background: #fbfcfd; border-color: #f2ca59; }
+.author-page .author-main > section:not(.title-stage), .author-page .selection-shell { background: radial-gradient(circle at 50% 25%, #fff, #f7f9fa 70%, #edf2f5); border-color: var(--creation-gold); }
+.author-page .activity-card, .author-page .activity-card.court-card, .author-page .saved-game-card,
+.author-page .settings-card, .author-page .setting-card, .author-page .preview-card { background: #fffdf7; border-color: #cf9800; }
+.author-page .activity-icon, .author-page .court-symbol, .author-page .court-entry-mark { background: #173e56; box-shadow: inset 0 0 0 .45rem #f2ca59; }
+.author-page button, .author-page .button-link, .author-page .court-card button,
+.author-page .saved-game-actions .button-link { background-color: #173e56; color: #fff4cf; border-color: #cf9800; }
+.author-page button:hover:not(:disabled), .author-page .button-link:hover { background-color: #285b76; }
+.author-page .stage-back, .author-page .secondary, .author-page .app-menu-popover button { background: #fbfcfd; color: #173e56; }
+.author-page select, .author-page input { color: #173e56; background-color: #fffdf7; border-color: #c9b36f; }
+.author-page .saved-game-card .mode-label, .author-page .saved-game-clear { color: #846000; }
+.author-page .saved-game-study { max-height: 55dvh; overflow: auto; padding: .6rem; border-top: 1px solid #cf9800; }
+.saved-game-actions { flex-wrap: wrap; }
+.saved-game-study .case-study { line-height: 1.8; overflow-wrap: anywhere; }
+.saved-game-study .case-study p { white-space: pre-wrap; }
+.saved-game-study pre { max-height: 25dvh; overflow: auto; padding: .7rem; background: #173e56; color: #f7f9fa; }
 .selection-fields { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: clamp(.5rem, 2vw, 1.5rem); min-height: 0; overflow: auto; }
 .selection-fields fieldset { min-width: 0; margin: 0; align-self: start; }
 .selection-fields select { width: 100%; font: inherit; }
@@ -432,3 +451,7 @@ code { font-family: ui-monospace, monospace; }
 @media (max-height: 650px) { .selection-fields fieldset { padding: .5rem; } .selection-fields select { padding: .35rem; } }
 @media (max-width: 700px) { .attack-browser .choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-height: 650px) { .attack-browser .choice-card { padding: .35rem; font-size: .85rem; } }
+.generation-settings { margin-top: .8rem; }
+.generation-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.generation-settings-fields label { display: grid; gap: .3rem; }
+@media (max-width: 600px) { .generation-settings-fields { grid-template-columns: minmax(0, 1fr); } }

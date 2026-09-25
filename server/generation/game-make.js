@@ -7,13 +7,14 @@ export const UI_API_CONTRACT = Object.freeze({ schemaVersion: '1.0',
   states: ['TITLE', 'INITIAL_COURT', 'INVESTIGATION', 'RETRIAL_COURT',
     'OBJECTION', 'ACQUITTED', 'GUILTY_RETRY', 'BLOCKED'],
   actions: {
-    TITLE: ['begin'], INITIAL_COURT: ['continue'], INVESTIGATION: ['investigate', 'collect', 'retrial'],
+    TITLE: ['begin'], INITIAL_COURT: ['continue'], INVESTIGATION: ['investigate', 'inspect-material', 'collect', 'retrial'],
     RETRIAL_COURT: ['objection', 'investigation'], GUILTY_RETRY: ['retry'],
     OBJECTION: [], ACQUITTED: [], BLOCKED: [],
   },
   objectionInputs: ['statementId', 'evidenceId'],
   interpretationInputs: ['statementId', 'evidenceId', 'interpretationChoiceId'],
   sequentialRetrialInputs: ['interpretationChoiceId'],
+  materialRetrialInputs: ['evidenceId', 'interpretationChoiceId'],
   rendering: 'TEXT_CONTENT_ONLY' });
 
 function validateGameMakeResult(result) {

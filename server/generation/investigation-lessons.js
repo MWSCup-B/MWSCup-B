@@ -1,5 +1,5 @@
 import { EXTENDED_ATTACK_LEARNING } from './extended-attack-learning.js';
-import { investigationSourceLabel } from './attack-learning.js';
+import { investigationSourceLabel, stageQuestionTasks } from './attack-learning.js';
 
 // General terminology for composing questions, separate from case observations and answer keys.
 // Never fill in event values, people, execution results or future evidence here.
@@ -19,7 +19,7 @@ const BASICS = Object.freeze({
 });
 
 const READINGS = Object.freeze({
-  email_record: '表示URLは本文に見える住所、hrefはリンクが指定する行き先です。',
+  email_record: '保存メールは案内やリンクの内容を示す資料です。リンクの記載と実際のアクセス記録は別です。HTML資料を比較する場合、hrefはリンクが指定する行き先です。',
   web_access_record: '要求は、ブラウザなどがページを取り寄せるために送る連絡です。',
   stored_content_record: '投稿IDは保存された投稿を見分ける番号、保存内容は投稿の元の文字列です。',
   browser_execution_record: 'ブラウザ計測は、ページ表示に伴う処理を別途観測した資料です。',
@@ -41,7 +41,8 @@ const READINGS = Object.freeze({
 
 // Source vocabulary for writing a self-contained question, never a player-facing guide.
 export function buildQuestionBackground(stages, index, generationInput) {
-  const current = stages[index];
+  const questionNodes = new Set(stageQuestionTasks(stages, index, generationInput).map(task => task.attackNodeId));
+  const current = { ...stages[index], routes: stages[index].routes.filter(route => questionNodes.has(route.ground.attackNodeId)) };
   const introductions = [...new Set(current.routes.map(route => route.ground.attackNodeId))].map(nodeId => {
     const attackId = generationInput.technicalInput.attackGraph.nodes.find(node => node.nodeId === nodeId)?.attackDefinitionId;
     if (!BASICS[attackId]) throw new Error(`Missing question background: ${attackId}`);

@@ -28,6 +28,21 @@ test('WindowsはPowerShell shimを介さずCodexのJS entry pointを起動する
   assert.match(windows.prefixArgs[0], /[\\/]@openai[\\/]codex[\\/]bin[\\/]codex\.js$/);
 });
 
+test('モデルとエフォートはshellを使わず、呼出しごとのCLI引数として渡す', async () => {
+  const fake = fakeSpawn(({ child }) => { child.stdout.end('{}'); child.stderr.end(); child.emit('close', 0); });
+  const runner = new CodexRunner({ command: 'codex', spawnImpl: fake.spawnImpl });
+  await runner.run({ prompt: '合成入力', generationSettings: { schemaVersion: '1.0', model: 'gpt-5.5', reasoningEffort: 'high' } });
+  const { args, options } = fake.calls[0];
+  assert.equal(args[args.indexOf('--model') + 1], 'gpt-5.5');
+  assert.equal(args[args.indexOf('--config') + 1], 'model_reasoning_effort="high"');
+  assert.equal(options.shell, false);
+  await runner.run({ prompt: '別の入力' });
+  assert.equal(fake.calls[1].args.includes('--model'), false);
+  assert.equal(fake.calls[1].args.includes('--config'), false);
+  await assert.rejects(() => runner.run({ prompt: '入力', generationSettings: { schemaVersion: '1.0', model: '--config=unsafe', reasoningEffort: 'high' } }), { code: 'INVALID_GENERATION_SETTINGS' });
+  assert.equal(fake.calls.length, 2);
+});
+
 test('CodexRunnerはshell:falseでcommand/argsを分離しstdinを渡す', async () => {
   let cliSchema;
   const fake = fakeSpawn(({ args, child }) => {

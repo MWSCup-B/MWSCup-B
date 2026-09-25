@@ -7,7 +7,7 @@ import { actGenerated, createGeneratedGame, generatedPlayerView } from '../serve
 import { courtIssueGenerationProblems } from '../server/generation/court-issues.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { observationAnchors } from '../server/generation/court-questions.js';
-import { currentCorrectPair, syncQuestionQuotes, collectCurrentTarget, enterCurrentCourt } from './helpers/court-issues.js';
+import { currentCorrectPair, syncQuestionQuotes, collectCurrentTarget, enterCurrentCourt, inspectMaterial } from './helpers/court-issues.js';
 
 test('Scenario revision and independent review prompts preserve the new distinct-issue count', async () => {
   for (const name of ['scenario-generation-v1', 'scenario-verification-v1']) {
@@ -44,12 +44,11 @@ function begin(runtime) {
 function acquire(session, runtime, ids = runtime.gameCase.detective.evidence.map(item => item.evidenceId)) {
   for (const rule of runtime.gameCase.detective.evidenceDiscoveryRules) {
     if (!session.availableInvestigationTargets.includes(rule.targetId)) continue;
-    actGenerated(session, runtime, { action: 'investigate', targetId: rule.targetId, investigationActionId: rule.actionId });
-    if (ids.includes(rule.evidenceId)) actGenerated(session, runtime, { action: 'collect', evidenceId: rule.evidenceId });
+    if (ids.includes(rule.evidenceId)) inspectMaterial(session, runtime, rule.evidenceId);
   }
 }
 
-for (const difficulty of [1, 2, 3]) test(`★${difficulty}: one target per round, no premature access or replay of solved answers`, async () => {
+for (const difficulty of [1, 2, 3]) test(`★${difficulty}: all materials initially selectable, explicit investigation and no replay of solved claims`, async () => {
   const { author } = await generate({ difficulty });
   assert.equal(author.auto.state, 'READY', JSON.stringify(author.auto.details));
   const { runtime } = author; const session = begin(runtime);
@@ -58,15 +57,12 @@ for (const difficulty of [1, 2, 3]) test(`★${difficulty}: one target per round
   const solved = new Set();
   for (let round = 1; round <= count; round += 1) {
     const initial = generatedPlayerView(session, runtime);
-    assert.equal(initial.investigationTargets.length, 1);
-    assert.equal(initial.courtQuestion.choices.length, 4);
-    assert.ok(initial.currentEvidenceIds.length > 0);
-    assert.ok(initial.currentEvidenceIds.every(id => session.collectedEvidenceIds.includes(id)));
-    const future = runtime.gameCase.detective.investigationTargets[round];
-    if (future) assert.throws(() => actGenerated(session, runtime, { action: 'investigate',
-      targetId: future.targetId, investigationActionId: future.availableActionIds[0] }), { code: 'UNKNOWN_INVESTIGATION_TARGET' });
-    assert.throws(() => actGenerated(session, runtime, { action: 'retrial' }), { code: 'INTERPRETATION_CHOICE_REQUIRED' });
-    assert.equal(generatedPlayerView(session, runtime).courtQuestion.choices.length, 4);
+    assert.equal(initial.investigationTargets.length, count);
+    collectCurrentTarget(session, runtime);
+    assert.equal(generatedPlayerView(session, runtime).workbench.materials.find(item => item.materialId === currentCorrectPair(runtime, round).evidenceId).question.choices.length, 4);
+    assert.ok(generatedPlayerView(session, runtime).currentEvidenceIds.length > 0);
+    assert.ok(generatedPlayerView(session, runtime).currentEvidenceIds.every(id => session.collectedEvidenceIds.includes(id)));
+    assert.throws(() => actGenerated(session, runtime, { action: 'retrial', evidenceId: currentCorrectPair(runtime, round).evidenceId }), { code: 'INTERPRETATION_CHOICE_REQUIRED' });
     const view = enterCurrentCourt(session, runtime);
     const pair = currentCorrectPair(runtime, round);
     assert.equal(solved.has(pair.statementId), false);
@@ -112,17 +108,18 @@ test('final acquittal requires multiple verified support records, not just the s
   enterCurrentCourt(session, runtime);
   actGenerated(session, runtime, { action: 'objection', ...currentCorrectPair(runtime, 1) });
   assert.equal(session.currentRound, 2);
+  collectCurrentTarget(session, runtime);
   const owned = [...session.collectedEvidenceIds];
   // Even with automatic collection, a corrupted/incomplete session cannot skip the gate.
   session.collectedEvidenceIds = ['evidence_technical_a'];
-  assert.throws(() => enterCurrentCourt(session, runtime), { code: 'COURT_RETURN_CONDITION_NOT_MET' });
+  assert.throws(() => enterCurrentCourt(session, runtime), { code: 'MATERIAL_NOT_EXAMINED' });
   session.collectedEvidenceIds = owned;
   enterCurrentCourt(session, runtime);
   actGenerated(session, runtime, { action: 'objection', ...currentCorrectPair(runtime, 2) });
   assert.equal(generatedPlayerView(session, runtime).currentState, 'ACQUITTED');
 });
 
-test('automatic stage discovery refuses unmet dependencies without partially advancing the session', async () => {
+test('explicit material investigation refuses unmet dependencies atomically', async () => {
   const { author } = await generate();
   const runtime = author.runtime;
   const session = createGeneratedGame(runtime);
@@ -131,8 +128,9 @@ test('automatic stage discovery refuses unmet dependencies without partially adv
   const rules = runtime.gameCase.detective.evidenceDiscoveryRules;
   const future = rules.find(rule => rule.targetId !== firstTarget).evidenceId;
   rules.find(rule => rule.targetId === firstTarget).prerequisites.requiredEvidenceIds = [future];
+  actGenerated(session, runtime, { action: 'continue' });
   const before = structuredClone(session);
-  assert.throws(() => actGenerated(session, runtime, { action: 'continue' }), { code: 'STAGE_EVIDENCE_UNAVAILABLE' });
+  assert.throws(() => inspectMaterial(session, runtime, rules.find(rule => rule.targetId === firstTarget).evidenceId), { code: 'MATERIAL_PREREQUISITES_REQUIRED' });
   assert.deepEqual(session, before);
 });
 

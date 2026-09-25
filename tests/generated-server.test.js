@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { procedureMethods } from '../server/generation/investigation-procedures.js';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createAppServer } from '../server/server.js';
@@ -120,14 +121,16 @@ test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解�
   for (let round = 1; round <= author.runtime.gameCase.progression.courtRoundCount; round += 1) {
     const issue = author.runtime.gameCase.progression.courtIssues[round - 1];
     for (const rule of author.runtime.gameCase.detective.evidenceDiscoveryRules.filter(item => item.targetId === issue.investigationTargetId)) {
-      await action({ action: 'investigate', targetId: rule.targetId, investigationActionId: rule.actionId });
-      game = await action({ action: 'collect', evidenceId: rule.evidenceId });
+      const plan = author.runtime.gameCase.progression.materialInvestigations.find(item => item.evidenceId === rule.evidenceId);
+      for (const [index, step] of plan.steps.entries()) game = await action({ action: 'inspect-material', materialId: rule.evidenceId,
+        methodId: procedureMethods(plan, index).find(item => item.index === step.correctOptionIndex).methodId });
     }
-    assert.equal(game.courtQuestion.choices.length, 4);
-    const rejected = await post('/api/action', { action: 'retrial' }, token);
+    const evidenceId = currentCorrectPair(author.runtime, round).evidenceId;
+    assert.equal(game.workbench.materials.find(item => item.materialId === evidenceId).question.choices.length, 4);
+    const rejected = await post('/api/action', { action: 'retrial', evidenceId }, token);
     assert.equal(rejected.status, 400);
     assert.equal((await rejected.json()).error.code, 'INTERPRETATION_CHOICE_REQUIRED');
-    game = await action({ action: 'retrial', interpretationChoiceId: currentCorrectPair(author.runtime, round).interpretationChoiceId });
+    game = await action({ action: 'retrial', evidenceId, interpretationChoiceId: currentCorrectPair(author.runtime, round).interpretationChoiceId });
     const injected = await post('/api/action', { action: 'objection', ...currentCorrectPair(author.runtime, round),
       correctOptionIndex: 0 }, token);
     assert.equal(injected.status, 400);

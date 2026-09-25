@@ -7,7 +7,8 @@ import { digest, sameValues, validateEvidenceSet } from './evidence-validator.js
 import { validateScenarioVerificationResult } from './scenario-verifier.js';
 import { ValidationError, fail, validateDocument } from './schema.js';
 import { correctCourtChoiceId, publicCourtQuestion } from './court-questions.js';
-import { isSequential, stageEvidenceIds } from './sequential-investigation.js';
+import { isSequential, isOpenMaterials, stageEvidenceIds } from './sequential-investigation.js';
+import { procedureMethods } from './investigation-procedures.js';
 
 const CATEGORIES = ['UPSTREAM_INTEGRITY', 'NORMAL_PLAYTHROUGH', 'RETRY_PLAYTHROUGH',
   'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY', 'INVESTIGATION_DISCLOSURE',
@@ -102,7 +103,9 @@ function allStatements(publicCase) {
 function correctPair(gameCase, round = 1) {
   const issue = gameCase.progression.courtIssues?.[round - 1];
   const rule = gameCase.judgment.judgmentRules.find(item => !issue || issue.judgmentRuleIds.includes(item.ruleId));
-  return rule && { statementId: rule.targetStatementId, evidenceId: rule.acceptedEvidenceIds[0],
+  const evidenceId = isOpenMaterials(gameCase) ? rule?.acceptedEvidenceIds.find(id =>
+    gameCase.detective.evidenceDiscoveryRules.some(item => item.evidenceId === id && item.targetId === issue.investigationTargetId)) : rule?.acceptedEvidenceIds[0];
+  return rule && { statementId: rule.targetStatementId, evidenceId,
     ...(issue?.question ? { interpretationChoiceId: correctCourtChoiceId(issue.question) } : {}) };
 }
 
@@ -122,6 +125,17 @@ function enterInvestigation(session, runtime) {
 }
 
 function discoverEvidence(session, runtime, evidenceIds) {
+  if (isOpenMaterials(runtime.gameCase)) {
+    for (const materialId of evidenceIds) {
+      const plan = runtime.gameCase.progression.materialInvestigations?.find(item => item.evidenceId === materialId);
+      if (!plan) actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId: 'full' });
+      else for (let index = session.materialProgress?.[materialId] ?? 0; index < plan.steps.length; index++) {
+        const methodId = procedureMethods(plan, index).find(item => item.index === plan.steps[index].correctOptionIndex).methodId;
+        actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId });
+      }
+    }
+    return evidenceIds.every(id => session.discoveredEvidenceIds.includes(id));
+  }
   const wanted = new Set(evidenceIds);
   const maximum = runtime.gameCase.detective.investigationTargets.length
     * runtime.gameCase.detective.investigationActions.length * 3;
@@ -145,6 +159,7 @@ function discoverEvidence(session, runtime, evidenceIds) {
 
 function returnToCourt(session, runtime, pair = correctPair(runtime.gameCase, session.currentRound)) {
   return actGenerated(session, runtime, { action: 'retrial',
+    ...(isOpenMaterials(runtime.gameCase) ? { evidenceId: pair.evidenceId } : {}),
     ...(isSequential(runtime.gameCase) ? { interpretationChoiceId: pair.interpretationChoiceId } : {}) });
 }
 
@@ -292,9 +307,10 @@ export function evaluateGame(input) {
     if (isSequential(runtime.gameCase)) {
       for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round += 1) {
         const view = generatedPlayerView(session, runtime);
-        if (view.investigationTargets.length !== 1) throw new Error('Multiple targets exposed');
+        if (view.investigationTargets.length !== (isOpenMaterials(runtime.gameCase)
+          ? runtime.gameCase.detective.investigationTargets.length : 1)) throw new Error('Incorrect target list');
         const future = runtime.gameCase.detective.investigationTargets[round];
-        if (future) {
+        if (future && !isOpenMaterials(runtime.gameCase)) {
           let rejected = false;
           try { actGenerated(session, runtime, { action: 'investigate', targetId: future.targetId,
             investigationActionId: future.availableActionIds[0] }); }
@@ -321,15 +337,15 @@ export function evaluateGame(input) {
   try {
     const session = createGeneratedGame(runtime); enterInvestigation(session, runtime);
     const initial = generatedPlayerView(session, runtime);
-    const automatic = isSequential(runtime.gameCase);
+    const automatic = isSequential(runtime.gameCase) && !isOpenMaterials(runtime.gameCase);
     const opened = automatic ? stageEvidenceIds(runtime.gameCase, 1) : [];
     const hidden = runtime.gameCase.detective.evidence.filter(item => !opened.includes(item.evidenceId));
     const firstEvidence = hidden[0]?.evidenceId ?? 'unavailable_evidence';
     let rejected = false;
     try { actGenerated(session, runtime, { action: 'collect', evidenceId: firstEvidence }); }
     catch (error) { rejected = error.code === 'EVIDENCE_NOT_DISCOVERED'; }
-    const hiddenValues = hidden.flatMap(item =>
-      [item.evidenceId, item.title, item.publicContent]);
+    const hiddenValues = hidden.flatMap(item => isOpenMaterials(runtime.gameCase)
+      ? [item.publicContent] : [item.evidenceId, item.title, item.publicContent]);
     const initialText = JSON.stringify(initial);
     investigationDisclosureSafe = rejected
       && sameValues(initial.discoveredEvidence.map(item => item.evidenceId), opened)
@@ -341,7 +357,7 @@ export function evaluateGame(input) {
     issue('INVESTIGATION_DISCLOSURE_FAILED', 'INVESTIGATION_DISCLOSURE',
       'generated-game.investigation-view',
       '現在の対象外の未取得資料が公開されたか、今回の資料を取得できません。',
-      '順次調査では現在の対象の資料だけを自動取得し、将来の資料へのアクセスを拒否してください。旧形式ではDiscovery後だけCollectionを許可してください。',
+      '全資料選択方式では一覧だけを公開し、未調査の本文・正解を公開しないでください。資料取得前のCollectionは拒否してください。',
       ['phase9:session-response']));
 
   const publicStatements = new Set(allStatements(runtime.publicGameCase));

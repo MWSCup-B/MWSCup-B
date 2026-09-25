@@ -23,13 +23,14 @@ export function buildGameProgressionPlan({ scenarioId, evidenceSetId, attackGrap
   initialCourtEvidenceIds, initialCourtStatementIds, investigationEvidenceIds,
   investigationActions, investigationTargets, evidenceDiscoveryRules, initialAvailableTargetIds,
   retrialStatementIds, returnToCourtCondition, courtRoundCount = 1, courtIssueMode,
-  courtQuestions, investigationMode, objectionRules, retryPolicy, publicMessages }) {
+  courtQuestions, materialInvestigations, investigationMode, objectionRules, retryPolicy, publicMessages }) {
   const core = structuredClone({ scenarioId, evidenceSetId, attackGraphRef,
     initialCourtEvidenceIds, initialCourtStatementIds, investigationEvidenceIds,
     investigationActions, investigationTargets, evidenceDiscoveryRules, initialAvailableTargetIds,
     retrialStatementIds, returnToCourtCondition, courtRoundCount,
     ...(courtIssueMode ? { courtIssueMode } : {}),
     ...(courtQuestions ? { courtQuestions } : {}),
+    ...(materialInvestigations ? { materialInvestigations } : {}),
     ...(investigationMode ? { investigationMode } : {}),
     objectionRules, retryPolicy, publicMessages });
   const fingerprint = digest(core);

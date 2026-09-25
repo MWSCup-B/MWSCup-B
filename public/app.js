@@ -73,6 +73,7 @@ function renderEntry(failed = false) {
   const title = element('h1', failed ? '事件ファイルを開けませんでした' : '事件ファイルを開いています…');
   title.id = 'screen-title'; title.tabIndex = -1;
   screen.append(title);
+  const exit = element('a', 'ゲーム制作へ戻る', 'case-return-link'); exit.href = '/author#mode'; screen.append(exit);
   // 2026-09-24 修正前: if (failed) screen.append(button('もう一度開く', () => request('/api/start', { playId })));
   if (failed) screen.append(button('もう一度開く', () => request('/api/start', entryRequest)));
 }

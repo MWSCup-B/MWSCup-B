@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { normalizeGenerationSettings } from './generation-settings.js';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -228,12 +229,13 @@ export class CodexRunner {
     return { path, schemaName, cleanup: () => rm(directory, { recursive: true, force: true }) };
   }
 
-  async run({ prompt, outputSchemaPath, outputSchema, outputSchemaName, phase, signal,
+  async run({ prompt, outputSchemaPath, outputSchema, outputSchemaName, phase, signal, generationSettings,
     timeoutMs = phase === 'GENERATING_EVIDENCE' ? this.evidenceTimeoutMs
       : phase === 'REVISING_SCENARIO' ? this.scenarioRevisionTimeoutMs : this.timeoutMs }) {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMER_MS) {
       throw new RangeError('timeoutMs must be a positive integer within the Node.js timer range.');
     }
+    const settings = normalizeGenerationSettings(generationSettings);
     // --ask-for-approval is a root option in current Codex CLI releases and must precede `exec`.
     // Ignoring user config/rules keeps the invocation contract stable while preserving CODEX_HOME
     // authentication, as documented by the CLI itself.
@@ -242,6 +244,8 @@ export class CodexRunner {
     try {
       const args = ['--ask-for-approval', 'never', 'exec', '--ephemeral',
         '--ignore-user-config', '--ignore-rules', '--sandbox', 'read-only', '--color', 'never'];
+      if (settings.model) args.push('--model', settings.model);
+      if (settings.reasoningEffort) args.push('--config', `model_reasoning_effort="${settings.reasoningEffort}"`);
       if (materialized) args.push('--output-schema', materialized.path);
       args.push('-');
       const result = await this.#spawn(args, { input: prompt, signal, timeoutMs, phase });

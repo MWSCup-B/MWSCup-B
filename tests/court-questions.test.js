@@ -102,20 +102,19 @@ test('冒頭説明と調査の準備状態を公開し、未発見の資料本�
   assert.match(opening.initialCourt.prosecutionOpening, /具体的な裏付け/);
   assert.equal(opening.initialCourt.attributionStatus, 'ALLEGATION_ONLY');
   const investigation = actGenerated(player, runtime, { action: 'continue' });
-  assert.ok(investigation.discoveredEvidence.length > 0);
-  assert.deepEqual(investigation.collectedEvidence.map(item => item.evidenceId), investigation.currentEvidenceIds);
+  assert.equal(investigation.discoveredEvidence.length, 0);
+  assert.deepEqual(investigation.collectedEvidence, []);
   assert.ok(investigation.investigationTargets.some(target => target.targetType === 'MAILBOX'
-    && target.availableActions.some(action => action.actionId === 'action_check_email' && action.status === 'COMPLETE')));
-  assert.equal(investigation.investigationTargets.length, 1);
+    && target.availableActions.some(action => action.actionId === 'action_check_email' && action.status === 'READY')));
+  assert.equal(investigation.investigationTargets.length, runtime.gameCase.detective.investigationTargets.length);
   assert.doesNotMatch(JSON.stringify(investigation), /correctOptionIndex|supportingQuotes|requiredEvidenceIds/);
   for (const item of runtime.gameCase.detective.evidence.filter(item => !investigation.currentEvidenceIds.includes(item.evidenceId))) {
     assert.ok(!JSON.stringify(investigation).includes(item.publicContent));
   }
   const first = runtime.gameCase.detective.evidenceDiscoveryRules[0];
-  const updated = actGenerated(player, runtime, { action: 'investigate', targetId: first.targetId, investigationActionId: first.actionId });
-  assert.ok(updated.investigationTargets.some(target => target.availableActions.some(action => action.status === 'COMPLETE')));
-  assert.equal(updated.courtQuestion.choices.length, 4);
-  assert.deepEqual(updated.lastInvestigationResult.unlockedTargetIds, []);
+  collectCurrentTarget(player, runtime);
+  const updated = generatedPlayerView(player, runtime);
+  assert.equal(updated.workbench.materials.find(item => item.materialId === first.evidenceId).question.choices.length, 4);
 });
 
 test('解釈の省略・別争点・未知IDは拒否し、誤解釈でも回数を消費して再調査・上限へ進む', async () => {
@@ -126,15 +125,15 @@ test('解釈の省略・別争点・未知IDは拒否し、誤解釈でも回数
   collectAll(session, runtime);
   const view = generatedPlayerView(session, runtime);
   const pair = currentCorrectPair(runtime);
-  assert.equal(view.courtQuestion.choices.length, 4);
+  assert.equal(view.workbench.materials.find(item => item.materialId === pair.evidenceId).question.choices.length, 4);
   assert.equal(Object.hasOwn(view.result ?? {}, 'publicExplanation'), false);
   const otherChoice = correctCourtChoiceId(runtime.gameCase.progression.courtIssues[1].question);
   for (const interpretationChoiceId of [undefined, 'choice_unknown', otherChoice]) {
-    assert.throws(() => actGenerated(session, runtime, { action: 'retrial', interpretationChoiceId }),
+    assert.throws(() => actGenerated(session, runtime, { action: 'retrial', evidenceId: pair.evidenceId, interpretationChoiceId }),
       { code: 'INTERPRETATION_CHOICE_REQUIRED' });
     assert.equal(session.currentState, 'INVESTIGATION'); assert.equal(session.attemptCount, 0);
   }
-  const wrong = view.courtQuestion.choices.find(choice => choice.choiceId !== pair.interpretationChoiceId).choiceId;
+  const wrong = view.workbench.materials.find(item => item.materialId === pair.evidenceId).question.choices.find(choice => choice.choiceId !== pair.interpretationChoiceId).choiceId;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const court = enterCurrentCourt(session, runtime, wrong);
     assert.equal(court.pendingInterpretation.choiceId, wrong);
@@ -170,7 +169,11 @@ test('正しい解釈と誤った証拠では通過せず、両方が対応し�
   const rule = runtime.gameCase.judgment.judgmentRules.find(item => item.targetStatementId === correct.statementId);
   const wrongEvidence = session.collectedEvidenceIds.find(id => !rule.acceptedEvidenceIds.includes(id));
   assert.ok(wrongEvidence);
-  const failed = actGenerated(session, runtime, { action: 'objection', ...correct, evidenceId: wrongEvidence });
+  assert.throws(() => actGenerated(session, runtime, { action: 'objection', ...correct, evidenceId: wrongEvidence }), { code: 'MATERIAL_CHANGED_IN_COURT' });
+  actGenerated(session, runtime, { action: 'investigation' });
+  const wrongQuestion = generatedPlayerView(session, runtime).workbench.materials.find(item => item.materialId === wrongEvidence).question;
+  actGenerated(session, runtime, { action: 'retrial', evidenceId: wrongEvidence, interpretationChoiceId: wrongQuestion.choices[0].choiceId });
+  const failed = actGenerated(session, runtime, { action: 'objection', statementId: correct.statementId, evidenceId: wrongEvidence });
   assert.equal(failed.currentState, 'INVESTIGATION'); assert.equal(failed.result.publicExplanation, undefined);
   enterCurrentCourt(session, runtime);
   const passed = actGenerated(session, runtime, { action: 'objection', ...correct });

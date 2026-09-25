@@ -3,6 +3,7 @@ import { fail, validateDocument } from './schema.js';
 import { validateScenarioGenerationInput } from './scenario-interface.js';
 import { validateScenarioEvidenceCoverage } from './scenario-template.js';
 import { buildInvestigationStages } from './investigation-registry.js';
+import { buildStageRequirements } from './scenario-stage-plan.js';
 
 export const SCENARIO_REVISION_PROMPT = await readFile(
   new URL('../../prompts/scenario-revision-v1.md', import.meta.url), 'utf8');
@@ -18,7 +19,9 @@ export function buildScenarioRevisionInput({ generationInput, configuration, sce
     scenarioTemplate: structuredClone(scenarioPackage),
     authorIntent: { difficulty: configuration.difficulty, evidenceCount: configuration.evidenceCount,
       incidentContext: structuredClone(configuration.incidentContext), attacks: structuredClone(configuration.attacks) },
-    investigationStages: buildInvestigationStages(configuration, generationInput) };
+    investigationStages: buildInvestigationStages(configuration, generationInput),
+    // Required sources for the question, distinct from all records on its host.
+    stageRequirements: buildStageRequirements(configuration, generationInput) };
 }
 
 export function applyScenarioRevision({ revision, scenarioPackage, configuration, generationInput }) {

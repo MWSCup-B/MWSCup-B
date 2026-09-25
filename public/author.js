@@ -2,7 +2,7 @@
 // 修正前の全文: docs/history/author-creation-before-2026-09-24.js
 let token = null, bootstrap = null, author = null, polling = null;
 let initialized = false, submitting = false, pollingRequest = false;
-let selectedAttacks = [], entryView = 'SPLASH';
+let selectedAttacks = [], entryView = globalThis.location?.hash === '#mode' ? 'ACTIVITY' : 'SPLASH';
 let savedGameItems = null, savedGamesError = '';
 const byId = id => document.getElementById(id);
 const panels = ['splash-panel', 'activity-panel', 'court-entry-panel', 'help-panel', 'settings-panel',
@@ -80,6 +80,8 @@ function syncControls() {
     byId(`attack-${index + 1}`).disabled = !initialized || busy || byId(`attack-step-${index + 1}`).hidden;
   }
   byId('setting').disabled = !initialized || busy;
+  byId('generation-model').disabled = !initialized || busy;
+  byId('generation-effort').disabled = !initialized || busy;
   byId('create-scenario').disabled = !initialized || busy || !validSelectedPath()
     || !bootstrap.settings.some(item => item.id === byId('setting').value);
   byId('preview-approve').disabled = submitting || !author?.canApprove;
@@ -161,6 +163,16 @@ function renderChoices() {
     const option = document.createElement('option'); option.value = item.id;
     option.textContent = item.label; option.selected = item.id === bootstrap.selectionDefaults.settingId;
     setting.append(option);
+  }
+  const generation = bootstrap.generationOptions ?? { models: [''], reasoningEfforts: [''], defaults: { model: '', reasoningEffort: '' } };
+  const selected = author?.generationSettings ?? generation.defaults;
+  for (const [id, values, current] of [['generation-model', generation.models, selected.model],
+    ['generation-effort', generation.reasoningEfforts, selected.reasoningEffort]]) {
+    const control = byId(id); control.replaceChildren();
+    for (const value of values) {
+      const option = document.createElement('option'); option.value = value;
+      option.textContent = value || '既定（Codex）'; option.selected = value === current; control.append(option);
+    }
   }
 }
 function drawNetwork(id, network) {
@@ -260,6 +272,7 @@ function renderSavedGames() {
     heading.insertBefore(headingCopy, difficulty);
     card.append(heading);
     text(card, 'p', game.summary, 'saved-game-summary');
+    text(card, 'p', game.cleared ? `クリア済み · ${savedDate(game.clearedAt)}` : '未クリア · 解説はクリア後に公開', 'saved-game-clear');
     const facts = document.createElement('p'); facts.className = 'saved-game-facts';
     facts.textContent = `対象：${game.targetSystem}　攻撃：${game.attacks.join('、')}`; card.append(facts);
     const actions = document.createElement('div'); actions.className = 'saved-game-actions';
@@ -276,7 +289,26 @@ function renderSavedGames() {
         savedGamesError = ''; renderSavedGames();
       } catch (error) { remove.disabled = false; status.textContent = error.message; }
     });
-    actions.append(play, remove); card.append(actions); list.append(card);
+    actions.append(play);
+    if (game.cleared) {
+      const studyButton = document.createElement('button'); studyButton.type = 'button'; studyButton.textContent = '解説資料';
+      const studyRegion = document.createElement('div'); studyRegion.className = 'saved-game-study'; studyRegion.hidden = true;
+      studyButton.setAttribute('aria-expanded', 'false');
+      studyButton.addEventListener('click', async () => {
+        studyButton.disabled = true;
+        try {
+          if (!studyRegion.childElementCount) {
+            const { study } = await api(`/api/author/games/${encodeURIComponent(game.gameId)}/study`);
+            const { caseStudyView } = await import('./generated-view.js'); studyRegion.append(caseStudyView(study));
+          }
+          studyRegion.hidden = !studyRegion.hidden;
+          studyButton.setAttribute('aria-expanded', String(!studyRegion.hidden));
+        } catch (error) { status.textContent = error.message; }
+        finally { studyButton.disabled = false; }
+      });
+      actions.append(studyButton); card.append(studyRegion);
+    }
+    actions.append(remove); card.append(actions); list.append(card);
   }
 }
 
@@ -410,7 +442,14 @@ for (const [id, saveData] of [['exit-save', true], ['exit-without-save', false]]
     if (!initialized || submitting || author?.canCancel || !validSelectedPath()) return;
     const settingId = byId('setting').value;
     if (!bootstrap.settings.some(item => item.id === settingId)) { showError('登録された舞台を選択してください。'); return; }
-    await postAuthor('/api/author/selection', { request: { schemaVersion: '1.0', attackIds: selectedIds(), settingId } });
+    const model = byId('generation-model').value;
+    const reasoningEffort = byId('generation-effort').value;
+    const options = bootstrap.generationOptions;
+    if (options && (!options.models.includes(model) || !options.reasoningEfforts.includes(reasoningEffort))) {
+      showError('一覧からモデルとエフォートを選択してください。'); return;
+    }
+    await postAuthor('/api/author/selection', { request: { schemaVersion: '1.0', attackIds: selectedIds(), settingId },
+      generationSettings: { schemaVersion: '1.0', model, reasoningEffort } });
   });
   byId('preview-approve').addEventListener('click', () => author?.canApprove && postAuthor('/api/author/approve'));
   byId('preview-reject').addEventListener('click', () => author?.canApprove && postAuthor('/api/author/reject'));

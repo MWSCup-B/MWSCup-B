@@ -191,7 +191,8 @@ test('全組合せ正解のGameは最終Evaluationも拒否し、retryPolicy不�
   const evidenceSet = session.evidenceImportResult.evidenceSet;
   const progressionPlan = buildGameProgressionPlan({ ...session.progressionPlan,
     // Backward-compatible legacy contract: the final evaluator must still reject it.
-    courtIssueMode: undefined, courtQuestions: undefined, investigationMode: undefined, courtRoundCount: 1,
+    courtIssueMode: undefined, courtQuestions: undefined, investigationMode: undefined,
+    materialInvestigations: undefined, courtRoundCount: 1,
     returnToCourtCondition: 'ALL_REQUIRED_EVIDENCE_COLLECTED',
     objectionRules: session.progressionPlan.objectionRules.filter(item => item.targetStatementId === 'statement_seen_operation'),
     retrialStatementIds: ['statement_seen_operation'] });

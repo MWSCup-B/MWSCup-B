@@ -6,7 +6,8 @@
     "schemaVersion": { "const": "1.0" },
     "initialState": { "const": "TITLE" },
     "courtRoundCount": { "type": "number" },
-    "investigationMode": { "const": "SEQUENTIAL_TARGETS" },
+    "materialInvestigations": {"type": "array", "minItems": 1, "maxItems": 512, "items": {"type": "object", "properties": {"schemaVersion": {"const": "1.0"}, "evidenceId": {"type": "string", "minLength": 1, "maxLength": 160}, "steps": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "properties": {"prompt": {"type": "string", "minLength": 1, "maxLength": 1000}, "choices": {"type": "array", "minItems": 2, "maxItems": 4, "items": {"type": "object", "properties": {"description": {"type": "string", "minLength": 1, "maxLength": 1000}, "operation": {"type": "object", "properties": {"kind": {"enum": ["LINES", "MATCH", "COUNT"]}, "firstLine": {"type": "number"}, "lastLine": {"type": "number"}, "needle": {"type": "string", "maxLength": 500}}, "required": ["kind", "firstLine", "lastLine", "needle"], "additionalProperties": false}}, "required": ["description", "operation"], "additionalProperties": false}}, "correctOptionIndex": {"type": "number"}, "explanation": {"type": "string", "minLength": 1, "maxLength": 2000}}, "required": ["prompt", "choices", "correctOptionIndex", "explanation"], "additionalProperties": false}}}, "required": ["schemaVersion", "evidenceId", "steps"], "additionalProperties": false}},
+    "investigationMode": { "enum": ["SEQUENTIAL_TARGETS", "OPEN_MATERIALS"] },
     "courtIssues": {
       "type": "array", "minItems": 1, "maxItems": 128,
       "items": {

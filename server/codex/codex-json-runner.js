@@ -6,7 +6,7 @@ export class CodexJsonRunner {
   checkAvailability(options) { return this.runner.checkAvailability(options); }
 
   async runJson({ instruction, data, feedback = null, outputSchemaPath, outputSchema,
-    outputSchemaName, phase, signal, timeoutMs }) {
+    outputSchemaName, phase, signal, timeoutMs, generationSettings }) {
     const prompt = [instruction,
       '',
       '## 実行制約',
@@ -18,7 +18,7 @@ export class CodexJsonRunner {
       ...(feedback ? ['', '<VALIDATION_FEEDBACK>', JSON.stringify(feedback),
         '</VALIDATION_FEEDBACK>'] : []), ''].join('\n');
     const stdout = await this.runner.run({ prompt, outputSchemaPath, outputSchema,
-      outputSchemaName, phase, signal, timeoutMs });
+      outputSchemaName, phase, signal, timeoutMs, generationSettings });
     return parseCodexJson(stdout, phase);
   }
 }

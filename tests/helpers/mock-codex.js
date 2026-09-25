@@ -28,9 +28,9 @@ export class MockCodexRunner {
     return { available: true, version: 'codex-cli test' };
   }
 
-  async runJson({ data, feedback, phase, signal, outputSchema, outputSchemaName }) {
+  async runJson({ data, feedback, phase, signal, outputSchema, outputSchemaName, generationSettings }) {
     this.calls.push({ kind: 'invocation', phase, data: structuredClone(data),
-      feedback: structuredClone(feedback), outputSchemaName,
+      feedback: structuredClone(feedback), outputSchemaName, generationSettings: structuredClone(generationSettings),
       hasOutputSchema: Boolean(outputSchema) });
     if (this.waitForCancel) return await new Promise((resolve, reject) => {
       if (signal.aborted) { reject(new CodexCancelledError(phase)); return; }
@@ -89,6 +89,24 @@ export class MockCodexRunner {
         verificationResult: agent.verificationResult,
         scenarioPackage: agent.scenarioVerificationInput.scenarioPackage }).evidencePackage;
       for (const artifact of draft.evidenceArtifacts) delete artifact.integrity;
+      for (const artifact of draft.evidenceArtifacts.filter(item => item.type.endsWith('_LOG'))) {
+        const example = JSON.parse(artifact.publicContent.split('\n')[0]);
+        const background = [1, 2].map(index => {
+          const row = structuredClone(example);
+          for (const [key, value] of Object.entries(row)) {
+            if (typeof value !== 'string') continue;
+            if (key === 'timestamp') row[key] = `2026-09-18T08:0${index}:00+09:00`;
+            else if (key === 'request_target') row[key] = `/help?document=guide-${index}`;
+            else if (key === 'statement') row[key] = `SELECT title FROM training_records WHERE category = 'guide-${index}'`;
+            else if (key === 'stored_content') row[key] = `通常の案内 ${index}`;
+            else if (key === 'source_ip') row[key] = `192.0.2.${index}`;
+            else if (key === 'destination') row[key] = `https://portal.example.invalid/forms/help-${index}`;
+            else if (/account|user|_id$|_ref$/.test(key)) row[key] = `routine-${index}`;
+          }
+          return JSON.stringify(row);
+        });
+        artifact.publicContent += '\n' + background.join('\n');
+      }
       if (data.requestedCourtIssueCount) addDistinctClaims(draft, data.requestedCourtIssueCount);
       const stageRequirements = agent.scenarioVerificationInput.scenarioPackage.evidenceRequirements.requirements
         .filter(item => item.investigationStage);
@@ -106,6 +124,21 @@ export class MockCodexRunner {
           question.explanation = `${plan.expectedInference}\n照合する記録値：${values.join('、')}。`;
         }
       }
+      draft.materialInvestigations = draft.evidenceArtifacts.filter(item => item.type !== 'TESTIMONY').map(item => {
+        const lineCount = item.publicContent.replace(/\n$/, '').split('\n').length;
+        return { schemaVersion: '1.0', evidenceId: item.evidenceId, steps: [
+          { prompt: '対象の記録に含まれる項目と値を確認する', correctOptionIndex: 0,
+            explanation: '原文の項目と値を読み、記録範囲を確認する。', choices: [
+              { description: '記録の全文を確認する', operation: { kind: 'LINES', firstLine: 1, lastLine: lineCount, needle: '' } },
+              { description: 'ファイルの改行数だけを数える', operation: { kind: 'COUNT', firstLine: 1, lastLine: 1, needle: '' } },
+            ] },
+          { prompt: '照合に使う対象記録の原文を確認する', correctOptionIndex: 0,
+            explanation: '対象記録と、関連資料の時刻・識別子を比較する。人物の断定はできない。', choices: [
+              { description: '先頭の対象記録を表示する', operation: { kind: 'LINES', firstLine: 1, lastLine: 1, needle: '' } },
+              { description: '改行数だけを確認する', operation: { kind: 'COUNT', firstLine: 1, lastLine: 1, needle: '' } },
+            ] },
+        ] };
+      });
       return draft;
     }
     throw new Error(`unexpected phase: ${phase}`);

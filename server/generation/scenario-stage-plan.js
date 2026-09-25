@@ -1,5 +1,5 @@
 import { buildInvestigationStages } from './investigation-registry.js';
-import { stageLearningTasks } from './attack-learning.js';
+import { stageQuestionTasks, phishingMaterialPolicy } from './attack-learning.js';
 import { buildQuestionBackground } from './investigation-lessons.js';
 
 const key = ground => `${ground.attackNodeId}/${ground.sourceId}`;
@@ -8,16 +8,18 @@ const key = ground => `${ground.attackNodeId}/${ground.sourceId}`;
 export function buildStageRequirements(configuration, generationInput) {
   const stages = buildInvestigationStages(configuration, generationInput);
   return stages.map((stage, index) => {
-    const current = stage.routes.map(route => route.ground);
+    const tasks = stageQuestionTasks(stages, index, generationInput);
+    const questionNodes = new Set(tasks.map(task => task.attackNodeId));
+    const current = stage.routes.map(route => route.ground).filter(ground => questionNodes.has(ground.attackNodeId));
     const available = stages.slice(0, index + 1).flatMap(item => item.routes.map(route => route.ground));
     const has = id => current.some(ground => ground.sourceId === id);
     let grounds = current;
     let claim, questionFocus, expectedInference, limitedRefutation;
     if (has('email_record')) {
-      claim = 'メールに表示されたURLを見れば、リンクの本当の行き先も分かりますよ。';
-      questionFocus = '保存メールの表示文字列とHTMLソースのhrefを読み比べ、リンク先として確認すべき情報を選ぶ4択。';
-      expectedInference = '表示された文字列とリンク先を指定するhrefは別の情報。保存メールで確認できるのはこの二つで、実際のアクセスやフォームへの送信ではない。';
-      limitedRefutation = '表示URLだけでリンク先を確定する解釈だけを反駁する。送信・受信、認証、人物・意図の特定はまだ結論に含めない。';
+      claim = 'このメールにリンクが残っているので、そのリンクへアクセスしたことも分かります。';
+      questionFocus = '保存メールの誘導内容・リンクを読み、本文に書かれた案内と実際のアクセスの記録を区別する4択。';
+      expectedInference = '保存メールから確認できるのは案内やリンクの内容であり、保存されているだけでは実際のアクセスやフォームへの送信は確認できない。';
+      limitedRefutation = '保存メールのリンクの存在を実際のアクセスと同一視する部分だけを反駁する。未取得のWeb記録やURLの不一致を必要条件にしない。';
     } else if (has('clickfix_page_record')) {
       claim = 'この修復案内が表示されたなら、端末の処理も動いたはずです。';
       questionFocus = '偽案内の保存内容と応答の記録から、案内表示と端末側の実行を区別する4択。';
@@ -91,7 +93,6 @@ export function buildStageRequirements(configuration, generationInput) {
       expectedInference = '要求の到達やセッションの状態は、その記録範囲で確認する。後続の実行成功は対応する処理側の記録がなければ断定できない。';
       limitedRefutation = '要求の記録だけで後続処理の成功まで断定する部分を反駁する。まだ取得していない端末・DB・認証の資料を要求しない。';
     }
-    const tasks = stageLearningTasks(stages, index, generationInput);
     const completed = tasks.filter(task => task.complete);
     // Reuse only acquired observations of the same selected attack. Never borrow a
     // similarly named record from a different attack node to fill a missing source.
@@ -99,7 +100,7 @@ export function buildStageRequirements(configuration, generationInput) {
       .map(ground => [key(ground), ground])).values()];
     if (completed.length) {
       const claims = {
-        phishing: 'メールに表示されたURLが、そのままアクセス先だったはずです。',
+        phishing: 'メールとWeb要求の記録がそろえば、ページの表示完了やその後の処理成功も分かります。',
         credential_phishing: 'ページを閲覧しただけで、偽フォームへ送信した資料はありません。',
         stored_xss: 'ブラウザはページを開いただけで、保存された投稿の実行を示す記録はありません。',
         reflected_xss: '要求がサーバーに届いただけで、ブラウザで動いたことを示す記録はありません。',
@@ -114,7 +115,7 @@ export function buildStageRequirements(configuration, generationInput) {
       const attackId = generationInput.technicalInput.attackGraph.nodes
         .find(node => node.nodeId === focus.attackNodeId).attackDefinitionId;
       claim = claims[attackId] ?? focus.claim;
-      questionFocus = `${completed.map(task => task.name).join('・')}の取得済み資料を比較し、対象・値の対応と攻撃の特徴、記録から判断できる範囲を問う4択。資料の具体的な値を問題文に含める。`;
+      questionFocus = `${completed.map(task => task.name).join('・')}の取得済み資料を比較し、対象・値の対応と攻撃の特徴、記録から判断できる範囲を問う4択。対象が分かる読みやすい問題文にする。`;
       expectedInference = completed.map(task => task.comparison + task.limit).join('\n');
       limitedRefutation = 'この主張を資料の比較で反駁する。各資料が観測する段階を分け、単一資料に攻撃全体の結論を書かない。' + focus.limit;
       if (attackId === 'clickfix') {
@@ -131,9 +132,15 @@ export function buildStageRequirements(configuration, generationInput) {
       expectedInference += '取得済み資料が示す処理と、被告人本人が行ったという主張は別である。アカウント・端末の記録から本人の操作や意図を証明したとは言えない。';
       limitedRefutation += 'このclaimの被告人本人への帰属も、既存の最終法廷内で裏付け不足として限定的に反駁する。別の法廷を追加しない。被告人の非関与や別人の実行は補完しない。';
     }
-    const learningDesign = tasks.map(task => `${task.name}: ${task.comparison} ${task.limit}`
-      + (task.complete ? '必要資料をすべて取得済み。複数資料の照合を正答の必須条件にする。'
-        : '未取得の資料は今回の解答に使わない。今回の観測を読み取り、後の照合で検証する仮説と未確認点を区別する。')).join('\n');
+    const learningDesign = tasks.map(task => task.complete
+      ? `${task.name}: ${task.comparison} ${task.limit} この攻撃の必要資料をすべて取得済み。複数資料の照合を正答の必須条件にする。`
+      : `${task.name}: 今回はgrounds内の資料の観測項目と記録範囲を読む。${task.limit} 未取得の資料は今回の解答に使わない。攻撃全体の比較は必要な資料がそろう後の段階で行う。`).join('\n');
+    const materialPolicy = tasks.map(task => phishingMaterialPolicy(generationInput.technicalInput.attackGraph.nodes
+      .find(node => node.nodeId === task.attackNodeId).attackDefinitionId)).filter(Boolean).join('\n');
+    if (materialPolicy) {
+      expectedInference += materialPolicy;
+      limitedRefutation += 'URL不一致は必須ではない。扱う場合は公開本文内の比較結果に限定し、Ground Truthに事件事実を追加しない。';
+    }
     return { requirementId: `requirement_stage_${index + 1}`, purpose: 'CONTRADICTION_PROOF',
       description: `第${index + 1}段階: ${stage.displayName}。investigationStageの主張は架空の証言であり技術的事実ではない。groundsの観測資料だけをこの段階の4択・反駁に使う。今回の資料は観測資料ごとの取得要件に示された既存の取得元・操作で取得し、以前の資料は収集済みのものを使う。\n${learningDesign}\n問題文に必要な攻撃の仕組み・用語の背景：${buildQuestionBackground(stages, index, generationInput)} この背景は制作資料であり、問題の前には表示しない。必要な定義だけを問題文に組み込み、実際の事件の経緯は取得済み資料の値と確認できる時系列から説明する。答えや将来の資料を先に示さない。`,
       investigationStage: { targetId: stage.targetId, order: index + 1, sourceNodeId: stage.sourceNodeId,
@@ -162,7 +169,7 @@ export function validateStageRequirements(configuration, generationInput, scenar
       if (!scenarioPackage.characters.characters.some(person => person.characterId === plan[field]
         && person.roles.includes(role))) problem(`${stage.targetId}の${field}が該当する人物を参照していません。`);
     }
-    for (const task of stageLearningTasks(stages, index, generationInput)) {
+    for (const task of stageQuestionTasks(stages, index, generationInput)) {
       if (task.grounds.some(expected => !requirement.grounds.some(ground => key(ground) === key(expected)))) {
         problem(`${stage.targetId}で${task.name}を学ぶための取得済み比較資料が不足しています。`);
       }

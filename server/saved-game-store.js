@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:
 import { join, resolve } from 'node:path';
 import { GameError } from './game.js';
 import { buildGeneratedGame } from './generation/game-make.js';
+import { buildCaseStudy } from './generation/material-investigation.js';
 
 const GAME_ID = /^saved_[a-f0-9]{32}$/;
 const MAX_GAME_BYTES = 10 * 1024 * 1024;
@@ -35,7 +36,8 @@ function validateMetadata(metadata) {
 }
 
 function publicRecord(record) {
-  return { gameId: record.gameId, savedAt: record.savedAt, ...structuredClone(record.metadata) };
+  return { gameId: record.gameId, savedAt: record.savedAt, ...structuredClone(record.metadata),
+    cleared: Boolean(record.clearedAt), clearedAt: record.clearedAt ?? null };
 }
 
 export class SavedGameStore {
@@ -70,6 +72,9 @@ export class SavedGameStore {
       throw new GameError('INVALID_SAVED_GAME', 'game', '保存されたゲームデータが不正です。', 500);
     }
     record.metadata = validateMetadata(record.metadata);
+    if (record.clearedAt !== undefined && (typeof record.clearedAt !== 'string' || !Number.isFinite(Date.parse(record.clearedAt)))) {
+      throw new GameError('INVALID_SAVED_GAME', 'clearedAt', 'クリア日時が不正です。', 500);
+    }
     const built = buildGeneratedGame(record.gameCaseResult);
     if (built.gameMakeResult.status !== 'BUILT' || !built.runtime) {
       throw new GameError('INVALID_SAVED_GAME', 'gameCaseResult',
@@ -118,6 +123,27 @@ export class SavedGameStore {
   async load(gameId) {
     const { record, runtime } = await this.#read(gameId);
     return { game: publicRecord(record), runtime };
+  }
+
+  async markCleared(gameId) {
+    const { record } = await this.#read(gameId);
+    if (record.clearedAt) return publicRecord(record);
+    record.clearedAt = new Date().toISOString();
+    const temporary = join(this.directory, `.${gameId}.${randomBytes(8).toString('hex')}.tmp`);
+    try {
+      await writeFile(temporary, `${JSON.stringify(record)}\n`, { encoding: 'utf8', flag: 'wx' });
+      await rename(temporary, join(this.directory, `${gameId}.json`));
+    } catch (error) {
+      await unlink(temporary).catch(() => {});
+      throw new GameError('CLEAR_SAVE_FAILED', 'clearedAt', 'クリア記録を保存できませんでした。もう一度操作してください。', 500);
+    }
+    return publicRecord(record);
+  }
+
+  async study(gameId) {
+    const { record, runtime } = await this.#read(gameId);
+    if (!record.clearedAt) throw new GameError('GAME_NOT_CLEARED', 'gameId', '解説資料はゲームをクリアすると開きます。', 403);
+    return buildCaseStudy(runtime);
   }
 
   async delete(gameId) {

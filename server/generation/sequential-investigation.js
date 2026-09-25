@@ -2,7 +2,11 @@ import { fail } from './schema.js';
 import { investigationCompletionId } from './investigation-validator.js';
 
 export function isSequential(gameCase) {
-  return gameCase.progression.investigationMode === 'SEQUENTIAL_TARGETS';
+  return ['SEQUENTIAL_TARGETS', 'OPEN_MATERIALS'].includes(gameCase.progression.investigationMode);
+}
+
+export function isOpenMaterials(gameCase) {
+  return gameCase.progression.investigationMode === 'OPEN_MATERIALS';
 }
 
 export function stageEvidenceIds(gameCase, round) {
@@ -11,11 +15,14 @@ export function stageEvidenceIds(gameCase, round) {
     .filter(rule => rule.targetId === targetId).map(rule => rule.evidenceId))];
 }
 
-function validateDesign(targets, rules, issues, initialTargets, openingEvidence) {
+function validateDesign(targets, rules, issues, initialTargets, openingEvidence, open = false) {
   const reject = reason => fail('SEQUENTIAL_INVESTIGATION_UNSOLVABLE',
     'game-progression-plan.investigationTargets', reason);
-  if (issues.length !== targets.length || initialTargets.length !== 1
-    || initialTargets[0] !== targets[0].targetId) reject('最初の調査対象だけを開き、各対象に一つずつ争点を対応付けてください。');
+  if (issues.length !== targets.length || (open
+    ? initialTargets.length !== targets.length || targets.some(target => !initialTargets.includes(target.targetId))
+    : initialTargets.length !== 1 || initialTargets[0] !== targets[0].targetId)) {
+    reject('調査方式に対応する初期資料一覧と、各対象の争点を対応付けてください。');
+  }
   const evidenceStage = new Map();
   const actionStage = new Map();
   targets.forEach((target, index) => {
@@ -60,12 +67,12 @@ export function validateSequentialPlan(plan, evidenceSet) {
         .filter(item => plan.objectionRules.some(rule => rule.exonerationRef === item.exonerationId))
         .flatMap(item => item.supportingEvidenceIds) : [])] }));
   validateDesign(plan.investigationTargets, plan.evidenceDiscoveryRules, issues,
-    plan.initialAvailableTargetIds, plan.initialCourtEvidenceIds);
+    plan.initialAvailableTargetIds, plan.initialCourtEvidenceIds, plan.investigationMode === 'OPEN_MATERIALS');
 }
 
 export function validateSequentialGame(gameCase) {
   if (!isSequential(gameCase)) return;
   validateDesign(gameCase.detective.investigationTargets, gameCase.detective.evidenceDiscoveryRules,
     gameCase.progression.courtIssues ?? [], gameCase.progression.investigation.initialAvailableTargetIds,
-    gameCase.progression.initialCourt.presentedEvidenceIds);
+    gameCase.progression.initialCourt.presentedEvidenceIds, isOpenMaterials(gameCase));
 }

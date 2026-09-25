@@ -32,7 +32,9 @@ for (const { attackIds, configuration } of presets) {
     const scenario = buildScenarioTemplate({ configuration, generationInput: input });
     for (const attack of configuration.attacks) {
       assert.ok(scenario.evidenceRequirements.requirements.some(requirement =>
-        requirement.description.includes(attack.evidenceAnswer)));
+        requirement.description.includes(attack.attackId === 'phishing'
+          ? '保存メールに記載された誘導内容・リンク' : attack.attackId === 'credential_phishing'
+            ? '保存メールの誘導リンクとWeb要求、偽フォームへの送信記録' : attack.evidenceAnswer)));
     }
     const runner = new MockCodexRunner();
     const manager = new AutoGenerationManager({ jsonRunner: runner });

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { ValidationError, validateDocument } from './schema.js';
 import { COURT_QUESTION_SCHEMA, validateCourtQuestion } from './court-questions.js';
+import { MATERIAL_PLAN_SCHEMA } from './investigation-procedures.js';
 import {
   canonical,
   contentDigest,
@@ -41,6 +42,10 @@ EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.courtQuestions = {
   type: 'array', minItems: 1, maxItems: 128, items: structuredClone(COURT_QUESTION_SCHEMA),
 };
 EVIDENCE_GENERATION_DRAFT_SCHEMA.required.push('courtQuestions');
+EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.materialInvestigations = {
+  type: 'array', minItems: 1, maxItems: 512, items: structuredClone(MATERIAL_PLAN_SCHEMA),
+};
+EVIDENCE_GENERATION_DRAFT_SCHEMA.required.push('materialInvestigations');
 
 function generationRef(input) {
   return input.evidenceAgentInput ? {
@@ -175,7 +180,7 @@ export function materializeEvidenceGenerationDraft(draft) {
   if (!draft || typeof draft !== 'object' || Array.isArray(draft)) {
     throw new ValidationError('INVALID_TYPE', 'evidence-generation-draft', '証拠draftはJSONオブジェクトで指定してください。');
   }
-  const { courtQuestions, ...packageDraft } = draft;
+  const { courtQuestions, materialInvestigations, ...packageDraft } = draft;
   if (courtQuestions !== undefined) {
     if (!Array.isArray(courtQuestions) || courtQuestions.length < 1 || courtQuestions.length > 128) {
       throw new ValidationError('EVIDENCE_COURT_QUESTIONS_REQUIRED', 'courtQuestions', '各調査対象に対応する4択問題を用意してください（1～128件）。');

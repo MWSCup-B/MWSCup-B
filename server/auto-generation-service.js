@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto';
+import { GENERATION_OPTIONS, normalizeGenerationSettings } from './codex/generation-settings.js';
+import { INVESTIGATION_HOMEWORK } from './generation/investigation-procedures.js';
 import { readFile } from 'node:fs/promises';
 import { GameError } from './game.js';
 import { validateDocument, ValidationError } from './generation/schema.js';
@@ -30,15 +32,14 @@ import { buildInvestigationStages, buildInvestigationAssignments }
   from './generation/investigation-registry.js';
 import { assignDialogueTemplate } from './generation/dialogue-template.js';
 import { buildIncidentOverview, buildProsecutionOpening } from './generation/incident-report.js';
-import { validateGeneratedLogFormats } from './generation/evidence-log-format.js';
+import { evidenceDraftProblems } from './generation/evidence-draft-validation.js';
 import { createSelectionConfiguration, buildAttackSelectionPaths } from './generation/scenario-selection.js';
 import { courtIssueGenerationProblems, requestedCourtIssueCount } from './generation/court-issues.js';
-import { validateCourtQuestionSources } from './generation/court-questions.js';
 import { validateSequentialPlan } from './generation/sequential-investigation.js';
 import { stageEvidenceProblems } from './generation/scenario-stage-plan.js';
 import { buildQuestionBackground } from './generation/investigation-lessons.js';
 import { buildIncidentConclusion } from './generation/incident-conclusion.js';
-import { LEARNING_OBSERVATION_FIELDS, validateLearningObservations } from './generation/learning-observations.js';
+import { LEARNING_OBSERVATION_FIELDS } from './generation/learning-observations.js';
 // 2026-09-20 修正前: Scenario設計の技術境界検証を導入する
 // import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
 // 2026-09-20 修正後: Scenario設計の技術境界検証を導入する
@@ -86,6 +87,7 @@ function newAutoState() {
 
 export function createAutoAuthorSession() {
   return { auto: newAutoState(), technicalSelection: null, generationInput: null,
+    generationSettings: normalizeGenerationSettings(),
     configuration: null, configurationValidation: null, scenarioPreview: null,
     userApproval: null, revisionFeedback: null, makotomaruRequest: null,
     scenarioPackage: null, scenarioImportResult: null, verificationInput: null,
@@ -99,6 +101,7 @@ let attackSelectionPaths = null;
 export function autoAuthorBootstrap() {
   attackSelectionPaths ??= buildAttackSelectionPaths(catalog);
   return { ...scenarioCreationBootstrap(catalog, networkPresets),
+    generationOptions: structuredClone(GENERATION_OPTIONS),
     attackSelectionPaths: structuredClone(attackSelectionPaths) };
 }
 
@@ -170,6 +173,7 @@ function publicFailure(code) {
 export function autoAuthorView(session) {
   const auto = session.auto ?? newAutoState();
   return { generationId: auto.generationId, currentState: auto.state,
+    generationSettings: structuredClone(session.generationSettings),
     selection: auto.selection ? structuredClone(auto.selection) : null,
     attempt: auto.attempt, maxAttempts: auto.maxAttempts,
     progress: PHASES.map(([id]) => structuredClone(auto.progress[id])),
@@ -225,6 +229,7 @@ export function classifyBlocked(issues) {
 
 function resetForGeneration(session, selection) {
   const fresh = createAutoAuthorSession();
+  fresh.generationSettings = normalizeGenerationSettings(session.generationSettings);
   for (const key of Object.keys(session)) delete session[key];
   Object.assign(session, fresh);
   session.auto = newAutoState();
@@ -243,7 +248,7 @@ function prepareGenerationInput(configuration) {
   generationInput: validation.technical.generationInput };
 }
 
-function buildAutomaticProgression(session, courtQuestions) {
+function buildAutomaticProgression(session, courtQuestions, materialInvestigations) {
   const set = session.evidenceImportResult.evidenceSet;
   const artifacts = set.evidenceArtifacts.filter(item => item.type !== 'TESTIMONY');
   const testimony = set.evidenceArtifacts.filter(item => item.type === 'TESTIMONY');
@@ -258,7 +263,7 @@ function buildAutomaticProgression(session, courtQuestions) {
     targetType: stage.targetType, displayName: stage.displayName,
     description: `${stage.displayName}に保管された事件資料。`,
     sourceNodeRef: { sourceType: 'NETWORK_NODE', sourceId: stage.sourceNodeId },
-    availableActionIds: [...new Set(stage.routes.map(route => route.actionId))], initiallyAvailable: index === 0 }));
+    availableActionIds: [...new Set(stage.routes.map(route => route.actionId))], initiallyAvailable: true }));
   const artifactRoutes = artifacts.map(artifact => {
     const sources = stages.flatMap(stage => stage.routes.map(route => ({ ...route, targetId: stage.targetId })))
       .filter(item => artifact.sourceRefs.some(ref =>
@@ -302,11 +307,11 @@ function buildAutomaticProgression(session, courtQuestions) {
     investigationEvidenceIds: artifacts.map(item => item.evidenceId),
     investigationActions: structuredClone(DEFAULT_INVESTIGATION_ACTIONS),
     investigationTargets: targets, evidenceDiscoveryRules,
-    initialAvailableTargetIds: [targets[0].targetId],
+    initialAvailableTargetIds: targets.map(target => target.targetId),
     retrialStatementIds: statements.map(item => item.statementId),
     returnToCourtCondition: 'CURRENT_TARGET_EVIDENCE_COLLECTED',
-    courtRoundCount: stages.length, investigationMode: 'SEQUENTIAL_TARGETS',
-    courtIssueMode: 'DISTINCT_CLAIMS', courtQuestions, objectionRules,
+    courtRoundCount: stages.length, investigationMode: 'OPEN_MATERIALS',
+    courtIssueMode: 'DISTINCT_CLAIMS', courtQuestions, materialInvestigations, objectionRules,
     retryPolicy: { maxCourtAttempts: 3, onFailure: 'RETURN_TO_INVESTIGATION',
       onLimitReached: 'BLOCKED' },
     publicMessages: {
@@ -484,6 +489,7 @@ export function buildMakotomaruOutputSchema(request) {
 
 async function reviewWithRepair({ jsonRunner, verificationInput, signal, session, attempt }) {
   const run = feedback => jsonRunner.runJson({ instruction: SCENARIO_VERIFICATION_PROMPT,
+    generationSettings: session.generationSettings,
     data: verificationInput, feedback,
     outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.review.canonicalSchema,
     outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.review.name,
@@ -553,10 +559,12 @@ export class AutoGenerationManager {
     return autoAuthorView(session);
   }
 
-  submitManual(session, configuration) {
+  submitManual(session, configuration, generationSettings = session.generationSettings) {
     if (this.active) throw new GameError('GENERATION_LOCKED', 'generation',
       '現在ゲームを生成中です。', 409);
+    const settings = normalizeGenerationSettings(generationSettings);
     resetForGeneration(session, { mode: 'MANUAL', difficulty: configuration?.difficulty });
+    session.generationSettings = settings;
     session.auto.maxAttempts = this.maxAttempts;
     const normalized = normalizeScenarioConfiguration(configuration, catalog);
     session.configuration = structuredClone(normalized);
@@ -575,13 +583,15 @@ export class AutoGenerationManager {
     return this.#begin(session, signal => this.#createDraft(session, signal));
   }
 
-  startMakotomaru(session, request) {
+  startMakotomaru(session, request, generationSettings = session.generationSettings) {
     if (this.active) throw new GameError('GENERATION_LOCKED', 'generation',
       '現在ゲームを生成中です。', 409);
     try { validateDocument('makotomaru-request', request); }
     catch (error) { throw new GameError(error.code ?? 'INVALID_MAKOTOMARU_REQUEST',
       error.field ?? 'request', error.message); }
+    const settings = normalizeGenerationSettings(generationSettings);
     resetForGeneration(session, { mode: 'MAKOTOMARU', difficulty: request.difficulty });
+    session.generationSettings = settings;
     session.auto.maxAttempts = this.maxAttempts;
     session.makotomaruRequest = structuredClone(request);
     // #begin starts an async operation; publish the busy state before its first await.
@@ -589,7 +599,7 @@ export class AutoGenerationManager {
     return this.#begin(session, signal => this.#createMakotomaruDraft(session, signal));
   }
 
-  submitSelection(session, request) {
+  submitSelection(session, request, generationSettings = session.generationSettings) {
     if (this.active) throw new GameError('GENERATION_LOCKED', 'generation',
       '現在ゲームを生成中です。', 409);
     let configuration;
@@ -598,7 +608,7 @@ export class AutoGenerationManager {
       if (!(error instanceof ValidationError)) throw error;
       throw new GameError(error.code, error.field, error.message);
     }
-    this.submitManual(session, configuration);
+    this.submitManual(session, configuration, generationSettings);
     session.auto.selection = { mode: 'MANUAL', inputMode: 'ATTACK_SETTING',
       request: structuredClone(request) };
     return autoAuthorView(session);
@@ -704,6 +714,7 @@ export class AutoGenerationManager {
           configuration: session.configuration, scenarioPackage: session.scenarioPackage });
         const revision = await measured(session, phase, attempt,
           () => this.jsonRunner.runJson({ instruction: SCENARIO_REVISION_PROMPT,
+            generationSettings: session.generationSettings,
             data: revisionInput, feedback,
             outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.scenarioRevision.canonicalSchema,
             outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.scenarioRevision.name, phase, signal }));
@@ -713,6 +724,7 @@ export class AutoGenerationManager {
       } else {
         const scenarioPackage = await measured(session, phase, attempt,
           () => this.jsonRunner.runJson({ instruction: SCENARIO_PROMPT_TEMPLATE,
+            generationSettings: session.generationSettings,
             data: { scenarioGenerationInput: session.generationInput,
               scenarioConfiguration: session.configuration,
               scenarioTemplate: session.scenarioPackage,
@@ -842,6 +854,7 @@ export class AutoGenerationManager {
       mark(session, 'configuration', 'RUNNING', attempt);
       const result = await measured(session, 'MAKOTOMARU_CONFIGURATION', attempt,
         () => this.jsonRunner.runJson({ instruction: MAKOTOMARU_PROMPT,
+          generationSettings: session.generationSettings,
           data: makotomaruInput(session.makotomaruRequest), feedback,
           outputSchema,
           outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.makotomaru.name,
@@ -907,6 +920,7 @@ export class AutoGenerationManager {
     let evidenceProgressionPlan = null;
     let courtChoiceRevisionBase = null;
     let evidenceGroundRevision = null;
+    let evidenceRepairBase = null;
     const evidenceDraftInput = buildEvidenceGenerationDraftInput(session.evidenceGenerationInput);
     const investigationStages = buildInvestigationStages(session.configuration, session.generationInput);
     const questionBackgrounds = investigationStages.map((stage, index) => ({ targetId: stage.targetId,
@@ -918,26 +932,27 @@ export class AutoGenerationManager {
       try {
         draft = await measured(session, 'GENERATING_EVIDENCE', evidenceAttempt,
           () => this.jsonRunner.runJson({ instruction: EVIDENCE_PROMPT_TEMPLATE,
+            generationSettings: session.generationSettings,
             data: { evidenceDraftInput,
               learningObservationFields: Object.fromEntries(buildInvestigationStages(session.configuration, session.generationInput)
                 .flatMap(stage => stage.routes).filter(route => LEARNING_OBSERVATION_FIELDS[route.ground.sourceId])
                 .map(route => [route.ground.sourceId, LEARNING_OBSERVATION_FIELDS[route.ground.sourceId]])),
               ...(courtChoiceRevisionBase ? { courtChoiceRevisionBase } : {}),
               ...(evidenceGroundRevision ? { evidenceGroundRevision } : {}),
-              investigationStages, questionBackgrounds,
+              ...(evidenceRepairBase ? { evidenceRepairBase } : {}),
+              investigationStages, questionBackgrounds, investigationHomework: INVESTIGATION_HOMEWORK,
               requestedCourtIssueCount: requestedCourtIssueCount(session.configuration, session.generationInput),
               requestedEvidenceChainLength: session.configuration.difficulty }, feedback: evidenceFeedback,
             outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceDraft.canonicalSchema,
             outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceDraft.name,
             phase: 'GENERATING_EVIDENCE', signal }));
         evidencePackage = materializeEvidenceGenerationDraft(draft);
-        validateGeneratedLogFormats(evidencePackage.evidenceArtifacts);
-        validateLearningObservations(evidencePackage.evidenceArtifacts);
+        evidenceRepairBase = structuredClone(draft);
       } catch (error) {
         if (!(error instanceof CodexOutputError) && !(error instanceof ValidationError)) throw error;
         const issue = { code: error.code, field: error.field ?? 'evidence-generation-draft',
           reason: error.message,
-          correctionHint: '指定draft Schemaに適合する単一JSONオブジェクトを返し、integrityは出力しないでください。既存のRequirement・ground・証言・複数資料の参照を維持してください。' };
+          correctionHint: error.correctionHint ?? '指定draft Schemaに適合する単一JSONオブジェクトを返し、integrityは出力しないでください。既存のRequirement・ground・証言・複数資料の参照を維持してください。' };
         session.auto.details.push(detail(issue, 'GENERATING_EVIDENCE', evidenceAttempt));
         evidenceFeedback = feedbackFromIssues([issue], 'REPAIRABLE_BLOCKED');
         continue;
@@ -961,17 +976,11 @@ export class AutoGenerationManager {
       session.evidenceImportResult = importEvidencePackage({
         generationInput: session.evidenceGenerationInput, evidencePackage });
       const evidenceImported = session.evidenceImportResult;
-      let issues = [...evidenceImported.errors];
+      let issues = [...evidenceImported.errors, ...evidenceDraftProblems(draft, evidencePackage,
+        session.evidenceGenerationInput.evidenceAgentInput)];
       // The draft's artifact/contradiction schemas have already been checked.
       // Collect question defects even when provenance failed, so the same bounded
       // repair can address both. No invalid import can proceed to game creation.
-      try { validateCourtQuestionSources(draft.courtQuestions, evidencePackage,
-        session.evidenceGenerationInput.evidenceAgentInput); }
-      catch (error) {
-        if (!(error instanceof ValidationError)) throw error;
-        issues.push({ code: error.code, field: error.field, reason: error.message,
-          correctionHint: '該当の4択の問題文で、選択された攻撃の仕組みと必要な用語を簡潔に示し、supportingQuotesに引用した公開原文の対象・値を使って事件の段階を問うてください。解説では各資料の値を比較してください。引用と技術資料は維持し、参照のエラーも同じ修正で解消してください。' });
-      }
       if (evidenceImported.status === 'VALID') {
         issues.push(...courtIssueGenerationProblems(evidenceImported.evidenceSet,
           requestedCourtIssueCount(session.configuration, session.generationInput)));
@@ -983,7 +992,7 @@ export class AutoGenerationManager {
         }
         let plan;
         try {
-          plan = buildAutomaticProgression(session, draft.courtQuestions);
+          plan = buildAutomaticProgression(session, draft.courtQuestions, draft.materialInvestigations);
           validateSequentialPlan(plan, evidenceImported.evidenceSet);
         } catch (error) {
           if (!(error instanceof ValidationError)) throw error;

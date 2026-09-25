@@ -5,6 +5,7 @@ import { buildStageRequirements, validateStageRequirements } from './scenario-st
 import { fail } from './schema.js';
 import { requestedCourtIssueCount } from './court-issues.js';
 import { isDeepStrictEqual } from 'node:util';
+import { phishingMaterialPolicy, scenarioInvestigationGoal, phishingObservationRequirement } from './attack-learning.js';
 
 // 2026-09-20 修正後: 記述の自由度と技術的な参照構造を分離する。
 export function validateScenarioDesignBoundary(template, proposed) {
@@ -92,7 +93,7 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
   const firstAttack = [...configuration.attacks].sort((a, b) => a.order - b.order)[0];
   const investigationIntents = [...configuration.attacks].sort((a, b) => a.order - b.order)
     .map(attack => attack.attackId + ' / 主調査 ' + attack.investigationTypes.join('・')
-      + ': ' + (configuration.attacks.length === 1 ? attack.evidenceAnswer
+      + ': ' + (configuration.attacks.length === 1 ? scenarioInvestigationGoal(attack)
         : '答えの全文はこの攻撃の個別取得要件で照合する')).join(' / ');
   const hasEmailAndWeb = investigationPlan.some(item => item.ground.sourceId === 'email_record')
     && investigationPlan.some(item => item.ground.sourceId === 'web_access_record');
@@ -100,23 +101,21 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
   const hasLogin = selectedIds.has('unauthorized_login');
   const hasStored = selectedIds.has('stored_xss');
   const comparison = (hasEmailAndWeb
-    ? '保存メールの表示URLとHTMLソースのhrefを区別して提示し、hrefとWebアクセス記録の対象リクエストを照合する。各資料に記録された時刻・対象・その記録範囲を比較する。表示URLとhrefの相違を扱う場合は、既存の欺瞞的メールの合成本文として比較可能にし、新しい接続先やHTTPリダイレクトを技術事実として追加しない。メール保存はクリックの証明ではなく、アクセス記録もクリック原因・操作人物・意図を示さない。'
+    ? '保存メールの誘導内容・リンクとWebアクセス記録の要求先・時刻を確認し、各資料が示す範囲を比較する。宿題の表示URLとhrefの不一致や特定の調査手順は必須にしない。公開本文で確認できる対応だけを説明し、不明な対応は未確認とする。メール保存はクリックの証明ではなく、要求記録もページ遷移の完了・クリック原因・操作人物・意図を示さない。'
     : '各資料の対象と記録時刻・記録範囲を照合する。')
     + (hasLogin ? ' 認証サービスの認証記録とWeb側のセッション監査をアカウントの合成識別子・時刻・記録範囲で照合する。認証成功、投稿権限、実際の投稿は別の事実で、認証記録は人物同定ではない。' : '')
     + (hasStored ? ' 保存投稿の識別子と非実行ソース抜粋、後の閲覧要求、ブラウザ実行計測を照合する。保存が閲覧に先行する関係を維持し、反射型XSSとは区別する。アクセス成功だけでスクリプト実行を証明しない。' : '')
     + (selectedIds.has('credential_phishing') ? ' 偽フォームと正規ポータルは別サービスである。偽フォームへの送信・受信は取得可能な専用計測資料で照合する。秘密値を記録せず、リンク誘導だけから資格情報取得を推定しない。' : '')
     + (selectedIds.has('reflected_xss') || selectedIds.has('sql_injection')
       ? ' アクセス記録だけでスクリプト実行やSQL実行を証明せず、確認済みの実行計測・DB記録と区別する。' : '');
-  const allegation = hasEmailAndWeb
-    ? 'メールの誘導先とWebアクセスの対象が一致するので、この二つの記録だけで被告人が自分の意思でリクエストを送ったと特定できる。'
-    : 'これらの技術記録だけで被告人が自分の意思で対象の操作を行ったと特定できる。';
+  const allegation = 'これらの技術記録だけで被告人が自分の意思で対象の操作を行ったと特定できる。';
   const issueDesign = ' 段階ごとの具体的な主張・対象人物・4択の論点・使用資料・反駁範囲はrequirement_stage_*のinvestigationStageとgroundsで定義する。そのorder順に各調査先一争点とし、これ以外の法廷を追加しない。各段階のgroundsはその段階の必要資料であり、全体要件の全資料を最初から要求するものではない。最後だけ取得済み全資料を統合する。';
   const evidenceRequirements = {
     schemaVersion: '1.0', evidenceRequirementSetId: `requirements_${suffix}`, scenarioId,
     attackGraphRef, requirements: [
       { requirementId: 'requirement_attack', purpose: 'ATTACK_TRACE',
         description: `制作者の調査目的: ${investigationIntents}。これは全調査後の到達目標であり、各段階の正解ではない。 `
-          + comparison + ` 難易度${configuration.difficulty}・evidenceCount=${configuration.evidenceCount}は調査チェーンの基準で、法廷は調査対象に対応する${requestedCourtIssueCount(configuration, generationInput)}争点。取得資料総数の上限ではない。補助資料も個別の取得要件に従い通常プレイで取得する。`,
+          + comparison + phishingMaterialPolicy(firstAttack.attackId) + ` 難易度${configuration.difficulty}・evidenceCount=${configuration.evidenceCount}は調査チェーンの基準で、法廷は調査対象に対応する${requestedCourtIssueCount(configuration, generationInput)}争点。取得資料総数の上限ではない。補助資料も個別の取得要件に従い通常プレイで取得する。`,
         grounds: structuredClone(artifactGrounds), learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_timeline', purpose: 'TIMELINE_PROOF',
         description: comparison + ' Timeline eventは照合対象の文脈である。narrativeTimestampsは架空の表示時刻で、観測記録による裏付けではない。教材の合成時刻は合成値と明記し、実測値・時計同期・因果関係を捏造しない。時刻・識別情報が不足する比較は未確認とする。',
@@ -136,7 +135,7 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
       // 2026-09-24 修正後: 全攻撃の調査目的を個別要件に保持し、文字数上限と段階別の取得範囲を守る。
       ...configuration.attacks.map((attack, index) => ({
         requirementId: `requirement_goal_${index + 1}`, purpose: 'ATTACK_TRACE',
-        description: `制作者の主調査 ${attack.investigationTypes.join('・')}: ${attack.evidenceAnswer}。全調査後の到達目標として保持し、段階ごとの回答はinvestigationStageで分割する。未取得資料を早い段階の回答に含めない。`,
+        description: `制作者の主調査 ${attack.investigationTypes.join('・')}: ${scenarioInvestigationGoal(attack)}。これは制作者の想定回答であり、Ground Truthで確認済みの事実ではない。原入力は制作設定に保持し、資料で確認する到達目標をここに定義する。段階ごとの回答はinvestigationStageで分割する。未取得資料を早い段階の回答に含めない。${phishingMaterialPolicy(attack.attackId)}`,
         grounds: investigationPlan.filter(item => graph.nodes.some(node => node.nodeId === item.ground.attackNodeId
           && node.attackDefinitionId === attack.attackId)).map(item => structuredClone(item.ground)),
         learningObjectiveIds: ['objective_trace'],
@@ -145,7 +144,8 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
         return { requirementId: `requirement_observation_${index + 1}`, purpose: 'ATTACK_TRACE',
           description: `${item.ground.sourceId}: ${item.description} `
             + `取得経路: ${item.sourceLabel} (${item.sourceNodeId}) / ${item.logSource} / ${item.actionId}。`
-            + `種類${item.evidenceType}の別個の合成資料として取得する。この資料で観測できる範囲だけを記載し、全調査後の到達目標や他の取得元の記録を本文へ転記しない。`,
+            + `種類${item.evidenceType}の別個の合成資料として取得する。この資料で観測できる範囲だけを記載し、全調査後の到達目標や他の取得元の記録を本文へ転記しない。`
+            + phishingObservationRequirement(graph.nodes.find(node => node.nodeId === item.ground.attackNodeId).attackDefinitionId, item.ground.sourceId),
           grounds: [structuredClone(item.ground)], learningObjectiveIds: ['objective_trace'] };
       }),
       ...buildStageRequirements(configuration, generationInput),

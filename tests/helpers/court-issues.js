@@ -1,16 +1,31 @@
 import { correctCourtChoiceId } from '../../server/generation/court-questions.js';
 import { actGenerated } from '../../server/generated-game.js';
+import { procedureMethods } from '../../server/generation/investigation-procedures.js';
+
+export function inspectMaterial(session, runtime, materialId) {
+  const plan = runtime.gameCase.progression.materialInvestigations?.find(item => item.evidenceId === materialId);
+  if (!plan) return actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId: 'full' });
+  let result;
+  for (let index = session.materialProgress?.[materialId] ?? 0; index < plan.steps.length; index++) {
+    const methodId = procedureMethods(plan, index).find(item => item.index === plan.steps[index].correctOptionIndex).methodId;
+    result = actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId });
+  }
+  return result;
+}
 
 export function collectCurrentTarget(session, runtime) {
   const targetId = runtime.gameCase.progression.courtIssues[session.currentRound - 1].investigationTargetId;
   for (const rule of runtime.gameCase.detective.evidenceDiscoveryRules.filter(item => item.targetId === targetId)) {
+    if (runtime.gameCase.progression.materialInvestigations) { inspectMaterial(session, runtime, rule.evidenceId); continue; }
     actGenerated(session, runtime, { action: 'investigate', targetId, investigationActionId: rule.actionId });
     actGenerated(session, runtime, { action: 'collect', evidenceId: rule.evidenceId });
   }
 }
 
 export function enterCurrentCourt(session, runtime, choiceId = currentCorrectPair(runtime, session.currentRound).interpretationChoiceId) {
-  return actGenerated(session, runtime, { action: 'retrial', interpretationChoiceId: choiceId });
+  return actGenerated(session, runtime, { action: 'retrial', interpretationChoiceId: choiceId,
+    ...(runtime.gameCase.progression.investigationMode === 'OPEN_MATERIALS'
+      ? { evidenceId: currentCorrectPair(runtime, session.currentRound).evidenceId } : {}) });
 }
 
 export function addDistinctClaims(draft, count) {
@@ -65,7 +80,9 @@ export function assignStageSupports(draft, stages, requirements = []) {
 export function currentCorrectPair(runtime, round = 1) {
   const issue = runtime.gameCase.progression.courtIssues?.[round - 1];
   const rule = runtime.gameCase.judgment.judgmentRules.find(item => !issue || issue.judgmentRuleIds.includes(item.ruleId));
-  return { statementId: rule.targetStatementId, evidenceId: rule.acceptedEvidenceIds[0],
+  const evidenceId = runtime.gameCase.progression.investigationMode === 'OPEN_MATERIALS' ? rule.acceptedEvidenceIds.find(id =>
+    runtime.gameCase.detective.evidenceDiscoveryRules.some(item => item.evidenceId === id && item.targetId === issue.investigationTargetId)) : rule.acceptedEvidenceIds[0];
+  return { statementId: rule.targetStatementId, evidenceId,
     ...(issue?.question ? { interpretationChoiceId: correctCourtChoiceId(issue.question) } : {}) };
 }
 

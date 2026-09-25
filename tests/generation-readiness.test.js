@@ -78,7 +78,7 @@ test('a process observation never supplies an unrecorded privilege level', () =>
   assert.match(first.investigationStage.expectedInference, /実行ユーザー識別子は権限や実際の操作者を示すものではなく/);
 });
 
-test('one repair receives both the missing testimony provenance and the non-specific question', async () => {
+test('one repair receives both the missing testimony provenance and the invalid question quote', async () => {
   class ReportedFailureRunner extends MockCodexRunner {
     async runJson(args) {
       const draft = await super.runJson(args);
@@ -90,15 +90,13 @@ test('one repair receives both the missing testimony provenance and the non-spec
         testimony.requirementIds = requirements.map(item => item.requirementId);
         testimony.purpose = ['CONTRADICTION_PROOF'];
         testimony.sourceRefs = [{ sourceType: 'CHARACTER', sourceId: 'character_witness', attackNodeId: null }];
-        draft.courtQuestions[0].prompt = 'この資料から何が分かりますか。';
-        draft.courtQuestions[0].choices[draft.courtQuestions[0].correctOptionIndex] = '案内の表示だけでは端末の実行を証明できません。';
+        draft.courtQuestions[0].supportingQuotes[0].quote = '公開原文に存在しない引用です。';
       } else {
         this.feedback = structuredClone(args.feedback);
         // Return the valid fixture only after the repair contains both diagnoses.
         assert.ok(this.feedback.errors.some(item => item.code === 'EVIDENCE_GROUND_MISMATCH'
           && item.requirementId === 'requirement_stage_1' && item.evidenceId));
-        assert.ok(this.feedback.errors.some(item => item.code === 'EVIDENCE_LEARNING_OBSERVATION_REQUIRED'
-          && item.field.includes(draft.courtQuestions[0].statementId) && item.reason.includes('引用内の値の例')));
+        assert.ok(this.feedback.errors.some(item => item.code === 'EVIDENCE_QUESTION_QUOTE_MISMATCH'));
       }
       return draft;
     }

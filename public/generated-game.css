@@ -409,3 +409,52 @@ body.playing-generated { background: #09141d; color: #f0f2ec; }
   .case-final-verdict .case-dialogue .case-ruling { min-height: 1.6rem; line-height: 1.6; margin: 0 0 .2rem; }
   .case-final-verdict .case-conclusion-paragraph { clear: both; }
 }
+
+/* Every game scene occupies the viewport. Documents and work panels own scrolling. */
+html:has(body.game-shell), body.game-shell { height: 100%; overflow: hidden; }
+.game-shell:not(.playing-generated) { display: flex; flex-direction: column; }
+.game-shell:not(.playing-generated) > header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.game-shell:not(.playing-generated) > main { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; width: 100%; }
+.legacy-return-link { color: inherit; border: 1px solid currentColor; padding: .5rem; border-radius: .4rem; }
+html:has(body.playing-generated), body.playing-generated { height: 100%; overflow: hidden; }
+.playing-generated > main { width: 100%; max-width: none; height: 100dvh; overflow: hidden; }
+.playing-generated .case-game { height: 100dvh; min-height: 0; padding-bottom: 0; display: flex; flex-direction: column; }
+.case-game .case-topbar { flex: none; padding: .5rem 1rem; gap: .65rem; }
+.case-game .case-return-link { flex: none; margin-left: auto; max-width: 11rem; }
+.case-game .case-topbar > div:first-child { min-width: 0; }
+.case-game .case-issue-track { flex: none; max-height: 3rem; overflow: auto; }
+.case-game .case-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 0 1rem .7rem; }
+.case-game .case-body:has(.case-material-desk) { display: flex; flex-direction: column; overflow: hidden; }
+.case-material-desk { display: grid; grid-template-columns: minmax(180px, .35fr) minmax(0, 1fr); gap: 1rem; min-height: 0; flex: 1; }
+.case-material-desk .case-panel { margin: .5rem 0 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.case-material-list > button { display: block; width: 100%; text-align: left; margin: .5rem 0; overflow-wrap: anywhere; }
+.case-material-work { position: relative; }
+.case-material-work > .case-assistant-guide { position: static; float: right; width: 90px; padding: 0; }
+.case-material-work .case-assistant-guide .case-person { height: 90px; }
+.case-material-work .case-methods { clear: both; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: .7rem; }
+.case-material-work .case-methods button { text-align: left; padding: .7rem; overflow-wrap: anywhere; }
+.case-material-work .case-methods strong, .case-material-work .case-methods small { display: block; }
+.case-material-work .case-methods small { margin-top: .4rem; line-height: 1.5; }
+.case-material-result { clear: both; }
+.case-material-result pre, .case-study pre { max-height: 32dvh; overflow: auto; white-space: pre; padding: .8rem; background: #0b1825; color: #e6f0f5; font: .85rem/1.65 ui-monospace, monospace; overscroll-behavior: contain; }
+.case-game .case-incident-report { max-height: 100%; overflow: auto; }
+.case-game .case-court-source { overflow: auto; }
+.case-game .case-result { justify-content: flex-start; flex: 0 0 auto; }
+.case-verdict-scene > .case-person { width: 130px; height: 130px; flex: none; align-self: center; }
+.case-study { line-height: 1.8; text-align: left; overflow-wrap: anywhere; }
+.case-study p { white-space: pre-wrap; }
+.case-study details { margin: .8rem 0; }
+.case-study summary { cursor: pointer; }
+.playing-generated #error:not(:empty) { position: fixed; z-index: 30; left: 1rem; right: 1rem; bottom: .5rem; max-height: 25dvh; overflow: auto; margin: 0; }
+@media (max-width: 720px) {
+  .case-game .case-title, .case-game .case-player-role, .case-game .case-topbar .case-eyebrow { display: none; }
+  .case-game .case-topbar h1 { font-size: 1rem; }
+  .case-game .case-status { font-size: .7rem; }
+  .case-game .case-return-link { font-size: .7rem; padding: .4rem; max-width: 8rem; }
+  .case-material-desk { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(90px, .28fr) minmax(0, 1fr); gap: .4rem; }
+  .case-material-desk .case-panel { padding: .6rem; margin-top: .2rem; }
+  .case-material-list > h2 { font-size: .9rem; }
+  .case-material-list > button { padding: .45rem; font-size: .8rem; }
+  .case-material-work .case-methods, .case-material-work .case-interpretations { grid-template-columns: minmax(0, 1fr); }
+  .case-material-work .case-interpretation { min-height: 0; }
+}

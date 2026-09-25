@@ -2,8 +2,10 @@ import { evaluateObjection } from './generation/game-case-validator.js';
 import { investigationCompletionId, publicInvestigationTarget, validateInvestigationResult }
   from './generation/investigation-validator.js';
 import { GameError } from './game.js';
-import { isSequential, stageEvidenceIds } from './generation/sequential-investigation.js';
+import { isSequential, isOpenMaterials, stageEvidenceIds } from './generation/sequential-investigation.js';
+import { materialEntries, materialMethods, materialOutput, materialQuestion, materialWorkbench, buildCaseStudy } from './generation/material-investigation.js';
 import { publicCourtQuestion } from './generation/court-questions.js';
+import { procedureMethods, procedureOutput } from './generation/investigation-procedures.js';
 import { generatedSceneDialogue } from './generation/dialogue-template.js';
 
 export function createGeneratedGame(runtime) {
@@ -37,6 +39,7 @@ function prerequisitesMet(rule, discovered, completed) {
 }
 
 function canReturnToCourt(session, internal) {
+  if (isOpenMaterials(internal)) return session.collectedEvidenceIds.length > 0;
   if (isSequential(internal)) return stageEvidenceIds(internal, session.currentRound)
     .every(id => session.collectedEvidenceIds.includes(id));
   const investigation = internal.progression.investigation;
@@ -81,7 +84,7 @@ function playerView(session, runtime) {
   const totalRounds = runtime.gameCase.progression.courtRoundCount;
   const issue = runtime.gameCase.progression.courtIssues?.[session.currentRound - 1];
   const base = { mode: 'GENERATED', gameCaseId: publicCase.gameCaseId,
-    ...(isSequential(runtime.gameCase) ? { investigationMode: 'SEQUENTIAL_TARGETS' } : {}),
+    ...(isSequential(runtime.gameCase) ? { investigationMode: runtime.gameCase.progression.investigationMode } : {}),
     currentState: session.currentState, title: publicCase.title, synopsis: publicCase.synopsis,
     answerMode: publicCase.progression.courtQuestions ? 'INTERPRETATION_AND_EVIDENCE' : 'STATEMENT_AND_EVIDENCE',
     participants: publicCase.characters.filter(item => ['DEFENDANT', 'WITNESS'].includes(item.publicRole)),
@@ -94,13 +97,15 @@ function playerView(session, runtime) {
     return { ...base, initialCourt: {
       prosecutionStatements: court.prosecutionStatements.map(item => ({ ...item,
         speaker: characters.get(item.speakerCharacterId) })),
-      presentedEvidence: court.presentedEvidenceIds.map(id => publicEvidence(evidence.get(id))),
+      presentedEvidence: isOpenMaterials(runtime.gameCase) ? [] : court.presentedEvidenceIds.map(id => publicEvidence(evidence.get(id))),
+      ...(isOpenMaterials(runtime.gameCase) ? { presentedMaterials: materialEntries(runtime.gameCase)
+        .filter(item => court.presentedEvidenceIds.includes(item.materialId)).map(item => ({ label: item.label, type: item.type })) } : {}),
       ...(court.incidentOverview ? { incidentOverview: court.incidentOverview } : {}),
       ...(court.prosecutionOpening ? { prosecutionOpening: court.prosecutionOpening } : {}),
       publicRuling: court.publicRuling, attributionStatus: court.attributionStatus } };
   }
   if (session.currentState === 'INVESTIGATION') {
-    const availableTargets = new Set(isSequential(runtime.gameCase)
+    const availableTargets = new Set(isSequential(runtime.gameCase) && !isOpenMaterials(runtime.gameCase)
       ? [issue.investigationTargetId] : session.availableInvestigationTargets);
     const completedActions = new Set(session.completedInvestigationActions);
     const discovered = new Set(session.discoveredEvidenceIds);
@@ -111,7 +116,8 @@ function playerView(session, runtime) {
       .find(item => item.statements.some(statement => statement.statementId === issue.question.statementId)) : null;
     return { ...base,
       canReturnToCourt: canReturnToCourt(session, runtime.gameCase),
-      ...(isSequential(runtime.gameCase) && canReturnToCourt(session, runtime.gameCase)
+      ...(isOpenMaterials(runtime.gameCase) ? { workbench: materialWorkbench(session, runtime.gameCase) } : {}),
+      ...(isSequential(runtime.gameCase) && !isOpenMaterials(runtime.gameCase) && canReturnToCourt(session, runtime.gameCase)
         ? { courtQuestion: publicCourtQuestion(issue.question), investigationClaim: {
           spokenContent: testimony.statements.find(item => item.statementId === issue.question.statementId).spokenContent,
           speaker: characters.get(testimony.speakerCharacterId),
@@ -149,7 +155,10 @@ function playerView(session, runtime) {
     return { ...base, canInvestigate: Boolean(issue),
     ...(isSequential(runtime.gameCase) ? { pendingInterpretation: {
       statementId: courtQuestion.statementId,
-      ...courtQuestion.choices.find(choice => choice.choiceId === session.selectedInterpretationChoiceId),
+      ...(isOpenMaterials(runtime.gameCase)
+        ? publicCourtQuestion(materialQuestion(runtime.gameCase, session.selectedMaterialId))
+        : courtQuestion).choices.find(choice => choice.choiceId === session.selectedInterpretationChoiceId),
+      ...(isOpenMaterials(runtime.gameCase) ? { evidenceId: session.selectedMaterialId } : {}),
     } } : courtQuestion ? { courtQuestion: structuredClone(courtQuestion) } : {}),
     testimonies: publicCase.progression.retrialCourt.testimonies.map(testimony => ({
       ...testimony, statements: testimony.statements.filter(item => !issue || issue.statementIds.includes(item.statementId)),
@@ -161,7 +170,7 @@ function playerView(session, runtime) {
   if (session.currentState === 'GUILTY_RETRY') return { ...base,
     publicFailureFeedback: publicCase.progression.retry.publicFailureFeedback };
   if (session.currentState === 'ACQUITTED') return { ...base,
-    acquittal: { ...publicCase.progression.outcomes.acquitted } };
+    acquittal: { ...publicCase.progression.outcomes.acquitted }, caseStudy: buildCaseStudy(runtime) };
   if (session.currentState === 'BLOCKED') return { ...base,
     blockedMessage: 'これ以上の提示はできません。今回の審理は、ここで終了です。' };
   throw new GameError('INVALID_STATE', 'state', '公開できないゲーム状態です。', 500);
@@ -180,19 +189,52 @@ export function actGenerated(session, runtime, fields) {
 }
 
 function applyGeneratedAction(session, runtime, { action, evidenceId, statementId, interpretationChoiceId,
-  targetId, investigationActionId }) {
+  targetId, investigationActionId, materialId, methodId }) {
   const publicCase = runtime.publicGameCase;
   const internal = runtime.gameCase;
   if (action === 'begin') {
     requireState(session, 'TITLE'); session.currentState = 'INITIAL_COURT';
   } else if (action === 'continue') {
     requireState(session, 'INITIAL_COURT'); session.currentState = 'INVESTIGATION';
+  } else if (action === 'inspect-material') {
+    requireState(session, 'INVESTIGATION');
+    const material = isOpenMaterials(internal) && materialEntries(internal).find(item => item.materialId === materialId);
+    if (!material) throw new GameError('UNKNOWN_MATERIAL', 'materialId', '一覧から調査する資料を選んでください。');
+    const item = internal.detective.evidence.find(item => item.evidenceId === materialId);
+    const plan = internal.progression.materialInvestigations?.find(item => item.evidenceId === materialId);
+    const stepIndex = session.materialProgress?.[materialId] ?? 0;
+    const method = (plan ? procedureMethods(plan, stepIndex) : materialMethods(item)).find(item => item.methodId === methodId);
+    if (!method) throw new GameError('UNKNOWN_INVESTIGATION_METHOD', 'methodId', '表示された調査方法から選んでください。');
+    const rule = internal.detective.evidenceDiscoveryRules.find(rule => rule.evidenceId === materialId
+      && prerequisitesMet(rule, new Set(session.discoveredEvidenceIds), new Set(session.completedInvestigationActions)));
+    if (!rule) throw new GameError('MATERIAL_PREREQUISITES_REQUIRED', 'materialId', '先に関連する資料の調査を完了してください。');
+    const advances = plan ? method.index === plan.steps[stepIndex].correctOptionIndex : ['full', 'numbered'].includes(methodId);
+    if (plan && advances) {
+      session.materialProgress ??= {};
+      session.materialProgress[materialId] = stepIndex + 1;
+    }
+    const complete = plan ? advances && stepIndex + 1 === plan.steps.length : advances;
+    if (complete) {
+      if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
+      if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
+      const completionId = investigationCompletionId(rule.targetId, rule.actionId);
+      if (!session.completedInvestigationActions.includes(completionId)) session.completedInvestigationActions.push(completionId);
+    }
+    session.lastMaterialResult = { materialId, methodId, label: method.label,
+      output: plan ? procedureOutput(item.publicContent, method.operation) : materialOutput(item.publicContent, methodId), complete,
+      next: complete ? '調査した資料を証拠ファイルに登録しました。別の資料と照合するか、提出する証拠を決めましょう。'
+        : advances ? '結果を確認して、次の調査手順へ進みましょう。'
+          : 'この操作だけでは調査目的を確認できません。結果と調査目的を比較し、別の操作を選んでください。' };
+    session.materialResults ??= {};
+    session.materialResults[materialId] = session.lastMaterialResult;
   } else if (action === 'investigate') {
     requireState(session, 'INVESTIGATION');
+    if (internal.progression.materialInvestigations) throw new GameError('MATERIAL_METHOD_REQUIRED',
+      'action', '資料ごとの調査方法を選択してください。');
     const target = internal.detective.investigationTargets.find(item => item.targetId === targetId);
     if (typeof targetId !== 'string' || !target
       || !session.availableInvestigationTargets.includes(targetId)
-      || (isSequential(internal) && targetId !== internal.progression.courtIssues[session.currentRound - 1].investigationTargetId)) {
+      || (isSequential(internal) && !isOpenMaterials(internal) && targetId !== internal.progression.courtIssues[session.currentRound - 1].investigationTargetId)) {
       throw new GameError('UNKNOWN_INVESTIGATION_TARGET', 'targetId',
         '現在調査可能な対象を選んでください。');
     }
@@ -248,12 +290,18 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     if (!allowed) throw new GameError('COURT_RETURN_CONDITION_NOT_MET', 'evidence',
       '証拠の調査が不足しています。', 409);
     if (isSequential(internal)) {
-      const question = internal.progression.courtIssues[session.currentRound - 1].question;
+      const question = isOpenMaterials(internal) ? materialQuestion(internal, evidenceId)
+        : internal.progression.courtIssues[session.currentRound - 1].question;
+      if (isOpenMaterials(internal) && (!session.collectedEvidenceIds.includes(evidenceId)
+        || !question?.supportingQuotes.every(quote => session.collectedEvidenceIds.includes(quote.evidenceId)))) {
+        throw new GameError('MATERIAL_NOT_EXAMINED', 'evidenceId', '選択した資料と、主張の照合に使う資料を先に調査してください。');
+      }
       if (!publicCourtQuestion(question).choices.some(choice => choice.choiceId === interpretationChoiceId)) {
         throw new GameError('INTERPRETATION_CHOICE_REQUIRED', 'interpretationChoiceId',
           '調べた資料から分かることを、4択から選んでください。');
       }
       session.selectedInterpretationChoiceId = interpretationChoiceId;
+      if (isOpenMaterials(internal)) session.selectedMaterialId = evidenceId;
     }
     session.currentState = 'RETRIAL_COURT';
     session.result = null;
@@ -282,6 +330,9 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
           '推理を変えるときは、調査へ戻って選び直してください。');
       }
       interpretationChoiceId = session.selectedInterpretationChoiceId;
+      if (isOpenMaterials(internal) && evidenceId !== session.selectedMaterialId) {
+        throw new GameError('MATERIAL_CHANGED_IN_COURT', 'evidenceId', '提出資料を変える場合は調査へ戻って選び直してください。');
+      }
     }
     session.selectedStatementId = statementId;
     session.currentState = 'OBJECTION';
@@ -310,7 +361,7 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
       session.currentState = 'INVESTIGATION';
       session.selectedStatementId = null;
       session.selectedInterpretationChoiceId = null;
-      if (isSequential(internal)) {
+      if (isSequential(internal) && !isOpenMaterials(internal)) {
         session.availableInvestigationTargets = [internal.progression.courtIssues[session.currentRound - 1].investigationTargetId];
         session.lastInvestigationResult = null;
       } }
@@ -323,7 +374,7 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
   } else {
     throw new GameError('UNKNOWN_ACTION', 'action', '未登録の操作です。');
   }
-  if (isSequential(internal) && session.currentState === 'INVESTIGATION'
+  if (isSequential(internal) && !isOpenMaterials(internal) && session.currentState === 'INVESTIGATION'
     && ['continue', 'objection', 'investigation', 'retry'].includes(action)) prepareStageEvidence(session, runtime);
   return generatedPlayerView(session, runtime);
 }

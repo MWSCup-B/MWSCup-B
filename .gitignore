@@ -1,4 +1,5 @@
 node_modules/
+.tools/
 
 data/saved-games/*.json
 data/saved-games/.*.tmp

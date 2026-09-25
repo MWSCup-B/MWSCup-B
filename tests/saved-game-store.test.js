@@ -26,6 +26,15 @@ test('完成したゲームを専用フォルダへ保存し、別Storeから再
   const loaded = await restarted.load(saved.gameId);
   assert.equal(loaded.runtime.mode, 'GENERATED');
   assert.equal(loaded.runtime.gameCase.gameCaseId, gameCaseResult.gameCase.gameCaseId);
+  assert.equal(saved.cleared, false);
+  await assert.rejects(() => restarted.study(saved.gameId), { code: 'GAME_NOT_CLEARED' });
+  await restarted.markCleared(saved.gameId);
+  const persisted = new SavedGameStore(directory);
+  assert.equal((await persisted.list())[0].cleared, true);
+  const firstClear = (await persisted.list())[0].clearedAt;
+  await persisted.markCleared(saved.gameId);
+  assert.equal((await persisted.list())[0].clearedAt, firstClear);
+  assert.ok((await persisted.study(saved.gameId)).materials.length > 0);
 
   await restarted.delete(saved.gameId);
   assert.deepEqual(await restarted.list(), []);

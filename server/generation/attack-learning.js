@@ -1,4 +1,26 @@
 import { EXTENDED_ATTACK_LEARNING } from './extended-attack-learning.js';
+
+// A configured teaching answer is not an additional fact in the attack graph.
+export function phishingMaterialPolicy(attackId) {
+  return ['phishing', 'credential_phishing'].includes(attackId)
+    ? '宿題のURL比較は参考例であり、表示URLとhrefの不一致を必須にしない。email_recordのgroundが裏付ける保存メールの誘導内容・リンクと、Web記録の要求先を調べ、各資料で確認できる範囲を比較する。メールだけの段階では保存内容を問い、Web資料取得後に要求記録と比較する。専用の送受信計測がある攻撃ではその取得後に送受信を扱う。URL等の具体値は合成資料内の設定値であり、不一致を確認済みの技術的事実としては裏付けない。相違や対応を結論に使う場合は公開本文の値で示し、確認できない対応は未確認とする。既存の接続先・攻撃結果を変えず、クリック原因、ページ遷移の完了、HTTPリダイレクト、人物の操作を推定しない。'
+    : '';
+}
+
+export function scenarioInvestigationGoal(attack) {
+  if (attack.attackId === 'credential_phishing' && attack.evidenceAnswer.includes('表示URLと実際のhrefが異なり'))
+    return '保存メールの誘導リンクとWeb要求、偽フォームへの送信記録を確認する。送信記録と正規サービスでの認証成功を区別する。';
+  return attack.attackId === 'phishing' && attack.evidenceAnswer.includes('実際に遷移するリンク先')
+    ? '保存メールに記載された誘導内容・リンクとWeb記録の要求先を確認し、記録が示す範囲を比較する。ページ遷移の完了は到達目標にしない。'
+    : attack.evidenceAnswer;
+}
+
+export function phishingObservationRequirement(attackId, sourceId) {
+  if (!['phishing', 'credential_phishing'].includes(attackId)) return '';
+  if (sourceId === 'email_record') return '保存された誘導内容とリンクをpublicContentへ非実行の文字列で示す。表示URLとhrefの不一致や差出人比較を必須にしない。第1段階はこのメールだけで保存内容と実際のアクセスの違いを説明できるようにする。';
+  if (sourceId === 'web_access_record') return '取得定義の記録時刻と要求先をJSON Linesの対象行に示す（例：timestampとrequest_target）。取得後にメールと要求記録の観測範囲を比較する。メールとの対応は記録された範囲で判断し、要求記録をページ遷移完了の証拠にしない。';
+  return '';
+}
 // Teaching contracts describe how to read existing observations, never new incident facts.
 // Source IDs below are the catalog's observableArtifacts. Availability is checked by the graph.
 export const ATTACK_LEARNING = Object.freeze({
@@ -6,12 +28,12 @@ export const ATTACK_LEARNING = Object.freeze({
   ...EXTENDED_ATTACK_LEARNING,
   phishing: {
     name: 'フィッシング', sources: ['email_record', 'web_access_record'],
-    comparison: '保存メールの表示URL・hrefと、Web記録の要求対象・時刻を照合する。表示された行き先と要求された行き先を区別し、リンクによる誘導の特徴を説明する。',
+    comparison: '保存メールの誘導内容・リンクと、Web記録の要求対象・時刻を読む。メールに保存された案内と記録された要求を比較し、リンクによる誘導の特徴と各記録の観測範囲を説明する。確認できない対応は未確認とする。',
     limit: 'URLの一致だけでは、そのメールを原因とするクリック、操作者、認証情報の送信は証明できない。',
   },
   credential_phishing: {
     name: '認証情報フィッシング', sources: ['email_record', 'web_access_record', 'credential_submission_record'],
-    comparison: 'メールの表示URL・href、Webの要求対象、専用計測の送信先・時刻・相関IDを照合する。リンクへのアクセスと偽フォームの送信・受信を別の段階として説明する。',
+    comparison: 'メールの誘導リンク、Webの要求対象、専用計測の送信先・時刻・相関IDを照合する。リンクへのアクセスと偽フォームの送信・受信を別の段階として説明し、資料で確認できない対応は未確認とする。',
     limit: '秘密値を記録しない。偽フォームへの送受信は正規サービスでの認証成功や操作者の特定を意味しない。',
   },
   stored_xss: {
@@ -93,4 +115,12 @@ export function stageLearningTasks(stages, index, generationInput) {
     const complete = profile.sources.every(id => grounds.some(ground => ground.sourceId === id));
     return { attackNodeId, ...profile, grounds, complete };
   });
+}
+
+// A shared host can contain early records of another attack. Its full comparison
+// belongs to the stage where its own sources are all available, not this question.
+export function stageQuestionTasks(stages, index, generationInput) {
+  const tasks = stageLearningTasks(stages, index, generationInput);
+  const completed = tasks.filter(task => task.complete);
+  return completed.length ? completed : tasks;
 }

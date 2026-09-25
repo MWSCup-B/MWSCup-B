@@ -89,6 +89,10 @@
         </fieldset>
         <fieldset><legend>舞台</legend><label for="setting">事件が起きる場所</label><select id="setting" disabled></select><p class="step-hint">選んだ攻撃と舞台から事件の条件を組み立てます。作成したScenario案を確認してからゲームを生成します。</p></fieldset>
       </div>
+      <fieldset class="generation-settings"><legend>生成モデル</legend>
+        <div class="generation-settings-fields"><label for="generation-model">モデル<select id="generation-model" disabled></select></label><label for="generation-effort">エフォート（推論の強さ）<select id="generation-effort" disabled></select></label></div>
+        <p class="step-hint">シナリオ作成・検証・証拠生成に適用します。既定を選ぶと現在のCodexの既定値を使用します。利用できる組合せはモデルと利用環境によって異なります。</p>
+      </fieldset>
       <div class="button-row manual-actions"><button id="selection-back" class="secondary" type="button">モード選択へ戻る</button><span class="action-spacer"></span><button id="create-scenario" type="button" disabled>Scenario案を作成</button></div>
     </section>
     <section id="preview-panel" hidden aria-labelledby="preview-title"><h1 id="preview-title">Scenario Preview</h1><p class="gate-notice">この時点ではゲーム生成へ進みません。内容を確認して承認してください。</p>

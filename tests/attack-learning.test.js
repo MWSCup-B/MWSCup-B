@@ -87,7 +87,7 @@ test('password spray requires observable account distribution, not a one-line co
   assert.ok(!JSON.stringify(rows).includes('password'));
 });
 
-test('a multi-source question must explain actual observations from both sources', () => {
+test('a grounded multi-source explanation may paraphrase observations without repeating every literal value', () => {
   const artifacts = uploadRecords();
   const set = { evidenceArtifacts: artifacts, contradictions: [{ statementRef: 'claim_upload',
     conflictingEvidenceIds: artifacts.map(item => item.evidenceId) }] };
@@ -103,16 +103,15 @@ test('a multi-source question must explain actual observations from both sources
     supportingQuotes: artifacts.map(item => ({ evidenceId: item.evidenceId, quote: item.publicContent })),
     explanation: '保存ID saved-42で照合すると、受付のimage/pngと内容検査のtext/plainが異なる。申告値だけでは内容を検証できない。非実行領域への保存はコード実行を示さない。' };
   assert.doesNotThrow(() => validateCourtQuestionSources([question], set, agent));
-  const generic = structuredClone(question);
-  generic.explanation = '複数の記録を合わせても本人の操作とは断定できない。';
-  assert.throws(() => validateCourtQuestionSources([generic], set, agent), { code: 'EVIDENCE_LEARNING_COMPARISON_REQUIRED' });
-  const genericQuestion = structuredClone(question);
-  genericQuestion.prompt = '資料から何が言えますか。';
-  genericQuestion.choices[0] = '人物の特定はできません。';
-  assert.throws(() => validateCourtQuestionSources([genericQuestion], set, agent), { code: 'EVIDENCE_LEARNING_OBSERVATION_REQUIRED' });
+  const paraphrased = structuredClone(question);
+  paraphrased.prompt = '受付時の申告と保存後の内容検査を比べると、どの解釈が資料に一致しますか。';
+  paraphrased.explanation = '同じ保存対象について、受付では画像と申告されていますが、検査は許可外のテキストを示します。申告と実際の内容は別です。非実行領域への保存はコード実行を示しません。';
+  assert.doesNotThrow(() => validateCourtQuestionSources([paraphrased], set, agent));
+  paraphrased.supportingQuotes[0].quote = '原文にはない内容';
+  assert.throws(() => validateCourtQuestionSources([paraphrased], set, agent), { code: 'EVIDENCE_QUESTION_QUOTE_MISMATCH' });
 });
 
-for (const defect of ['missing_observations', 'generic_answer', 'generic_explanation', 'single_source']) {
+for (const defect of ['missing_observations', 'fabricated_quote', 'duplicate_choices', 'single_source']) {
   test(`automatic generation blocks ${defect} after the bounded repair attempts`, async () => {
     class IncompleteRunner extends MockCodexRunner {
       async runJson(args) {
@@ -120,11 +119,10 @@ for (const defect of ['missing_observations', 'generic_answer', 'generic_explana
         if (args.phase !== 'GENERATING_EVIDENCE') return draft;
         if (defect === 'missing_observations') {
           draft.evidenceArtifacts.find(item => item.type === 'WEB_ACCESS_LOG').publicContent = '{"event":"attack-detected"}';
-        } else if (defect === 'generic_answer') {
-          draft.courtQuestions[0].prompt = 'この資料から何が分かりますか。';
-          draft.courtQuestions[0].choices[0] = '本人が操作したかどうかは断定できない。';
-        } else if (defect === 'generic_explanation') {
-          draft.courtQuestions.at(-1).explanation = '資料を比較すると、その攻撃の特徴が分かります。';
+        } else if (defect === 'fabricated_quote') {
+          draft.courtQuestions[0].supportingQuotes[0].quote = '資料に存在しない引用';
+        } else if (defect === 'duplicate_choices') {
+          draft.courtQuestions[0].choices[1] = draft.courtQuestions[0].choices[0];
         } else {
           const lastClaim = draft.evidenceArtifacts.filter(item => item.type === 'TESTIMONY')
             .flatMap(item => item.testimony.statements).filter(item => item.technicalAssessment === 'CONTRADICTED').at(-1).statementId;
@@ -142,7 +140,7 @@ for (const defect of ['missing_observations', 'generic_answer', 'generic_explana
     assert.equal(session.runtime, null);
     assert.equal(runner.evidenceCalls, 2);
     const code = { missing_observations: 'EVIDENCE_LEARNING_OBSERVATION_INCOMPLETE',
-      generic_answer: 'EVIDENCE_LEARNING_OBSERVATION_REQUIRED', generic_explanation: 'EVIDENCE_LEARNING_COMPARISON_REQUIRED',
+      fabricated_quote: 'EVIDENCE_QUESTION_QUOTE_MISMATCH', duplicate_choices: 'EVIDENCE_QUESTION_DUPLICATE_CHOICE',
       single_source: 'INVESTIGATION_LEARNING_COMPARISON_MISSING' }[defect];
     assert.ok(session.auto.details.some(item => item.code === code), JSON.stringify(session.auto.details));
   });

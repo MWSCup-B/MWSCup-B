@@ -70,6 +70,7 @@ export function progressionPlanCore(plan) {
     courtRoundCount: plan.courtRoundCount,
     ...(plan.courtIssueMode ? { courtIssueMode: plan.courtIssueMode } : {}),
     ...(plan.courtQuestions ? { courtQuestions: plan.courtQuestions } : {}),
+    ...(plan.materialInvestigations ? { materialInvestigations: plan.materialInvestigations } : {}),
     ...(plan.investigationMode ? { investigationMode: plan.investigationMode } : {}),
     objectionRules: plan.objectionRules, retryPolicy: plan.retryPolicy,
     publicMessages: plan.publicMessages };
@@ -471,6 +472,7 @@ export function deriveGameCaseParts(input) {
       judgmentRuleIds: rules.map(rule => rule.ruleId), requiredEvidenceIds: [...new Set(required)] };
   }) : null;
   const progression = { schemaVersion: '1.0', initialState: 'TITLE',
+    ...(input.progressionPlan.materialInvestigations ? { materialInvestigations: structuredClone(input.progressionPlan.materialInvestigations) } : {}),
     ...(input.progressionPlan.investigationMode ? { investigationMode: input.progressionPlan.investigationMode } : {}),
     courtRoundCount: input.progressionPlan.courtRoundCount,
     ...(courtIssues ? { courtIssues } : {}),
@@ -561,6 +563,7 @@ function validateDisplayOrder(items, field) {
 export function validateGameCase(gameCase) {
   validateDocument('game-case', gameCase);
   validateDocument('game-progression', gameCase.progression);
+  if (gameCase.progression.materialInvestigations) validateMaterialPlans(gameCase.progression.materialInvestigations, gameCase.detective.evidence);
   validateRoundCount(gameCase.progression);
   validateReturnCondition(gameCase.progression.investigationMode, gameCase.progression.investigation.returnToCourtCondition);
   unique(gameCase.characters, item => item.characterId, 'game-case.characters.characterId');
@@ -755,7 +758,9 @@ export function evaluateObjection(gameCase, { statementId, evidenceId, interpret
     '選択されたstatementはRetrial Courtに存在しません。');
   if (!presentable.has(evidenceId)) fail('BROKEN_EVIDENCE_REFERENCE', 'objection.evidenceId',
     '提示されたEvidenceはRetrial Courtで提示できません。');
-  if (issue?.question && !publicCourtQuestion(issue.question).choices.some(item => item.choiceId === interpretationChoiceId)) {
+  const allowedQuestions = gameCase.progression.investigationMode === 'OPEN_MATERIALS'
+    ? gameCase.progression.courtIssues.map(item => item.question) : [issue?.question].filter(Boolean);
+  if (issue?.question && !allowedQuestions.some(question => publicCourtQuestion(question).choices.some(item => item.choiceId === interpretationChoiceId))) {
     fail('INTERPRETATION_CHOICE_REQUIRED', 'objection.interpretationChoiceId', '現在の争点の4択から解釈を選んでください。');
   }
   const nextAttemptCount = attemptCount + 1;
@@ -808,3 +813,4 @@ export function validateGameCaseResult(result) {
   }
   return result;
 }
+import { validateMaterialPlans } from './investigation-procedures.js';

@@ -36,6 +36,8 @@ for (const path of [
   'characters/witness-neutral.svg', 'characters/defendant-neutral.svg',
 ]) assets.set(`/assets/${path}`, [`assets/${path}`, 'image/svg+xml; charset=utf-8']);
 for (const path of ['backgrounds/courtroom-v2.png', 'backgrounds/investigation-v2.png',
+  'characters/judge-penguin-v1.png', 'characters/prosecutor-penguin-v1.png',
+  'characters/defense-penguin-v1.png', 'characters/assistant-penguin-v1.png',
   'characters/defense-portrait-v2.png', 'characters/prosecutor-portrait-v2.png',
   'characters/assistant-portrait-v1.png', 'title/title.png']) {
   assets.set(`/assets/${path}`, [`assets/${path}`, 'image/png']);
@@ -43,7 +45,8 @@ for (const path of ['backgrounds/courtroom-v2.png', 'backgrounds/investigation-v
 const generatedActionFields = new Map([
   ['begin', ['action']], ['continue', ['action']],
   ['investigate', ['action', 'targetId', 'investigationActionId']],
-  ['collect', ['action', 'evidenceId']], ['retrial', ['action', 'interpretationChoiceId']], ['investigation', ['action']],
+  ['inspect-material', ['action', 'materialId', 'methodId']],
+  ['collect', ['action', 'evidenceId']], ['retrial', ['action', 'interpretationChoiceId', 'evidenceId']], ['investigation', ['action']],
   ['objection', ['action', 'statementId', 'evidenceId', 'interpretationChoiceId']], ['retry', ['action']],
 ]);
 const xssActionFields = new Map([
@@ -71,7 +74,7 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
       session.savedAt = game.savedAt;
       const playId = randomBytes(24).toString('hex');
       session.playId = playId;
-      playableGames.set(playId, { runtime: session.runtime });
+      playableGames.set(playId, { runtime: session.runtime, savedGameId: game.gameId });
     } catch {
       throw new GameError('GAME_SAVE_FAILED', 'savedGamesDirectory',
         '完成したゲームをローカルへ保存できませんでした。', 500);
@@ -118,6 +121,13 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
       }
       const savedGameRoute = mode === 'AUTHOR'
         ? /^\/api\/author\/games\/(saved_[a-f0-9]{32})$/.exec(pathname) : null;
+      const studyRoute = mode === 'AUTHOR'
+        ? /^\/api\/author\/games\/(saved_[a-f0-9]{32})\/study$/.exec(pathname) : null;
+      if (studyRoute && req.method === 'GET') {
+        requireAuthorSession(req, authorSessions);
+        sendJson(res, 200, { study: await savedGames.study(studyRoute[1]) });
+        return;
+      }
       if (savedGameRoute && req.method === 'DELETE') {
         requireAuthorSession(req, authorSessions);
         await savedGames.delete(savedGameRoute[1]);
@@ -150,18 +160,18 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
           validateFields(body, ['mode']);
           author = autoManager.selectMode(record.session, body.mode);
         } else if (pathname === '/api/author/selection') {
-          validateFields(body, ['request']);
+          validateFields(body, ['request', 'generationSettings']);
           const previousPlayId = record.session.playId;
-          author = autoManager.submitSelection(record.session, body.request);
+          author = autoManager.submitSelection(record.session, body.request, body.generationSettings);
           if (previousPlayId) playableGames.delete(previousPlayId);
         } else if (pathname === '/api/author/manual') {
-          validateFields(body, ['configuration']);
+          validateFields(body, ['configuration', 'generationSettings']);
           if (record.session.playId) playableGames.delete(record.session.playId);
-          author = autoManager.submitManual(record.session, body.configuration);
+          author = autoManager.submitManual(record.session, body.configuration, body.generationSettings);
         } else if (pathname === '/api/author/makotomaru') {
-          validateFields(body, ['request']);
+          validateFields(body, ['request', 'generationSettings']);
           if (record.session.playId) playableGames.delete(record.session.playId);
-          author = autoManager.startMakotomaru(record.session, body.request);
+          author = autoManager.startMakotomaru(record.session, body.request, body.generationSettings);
         } else if (pathname === '/api/author/approve') {
           validateFields(body, []); author = autoManager.approve(record.session);
         } else if (pathname === '/api/author/reject') {
@@ -204,11 +214,14 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
           'game', 'Generated Game Caseの検証に失敗したため開始できません。', 503);
         let sessionRuntime = runtime;
         let sessionMode = mode;
+        let savedGameId = null;
         if (mode === 'AUTHOR') {
           if (typeof body.gameId === 'string') {
             sessionRuntime = (await savedGames.load(body.gameId)).runtime;
+            savedGameId = body.gameId;
           } else if (typeof body.playId === 'string' && playableGames.has(body.playId)) {
             sessionRuntime = playableGames.get(body.playId).runtime;
+            savedGameId = playableGames.get(body.playId).savedGameId;
           } else {
             throw new GameError('ACCEPTED_GAME_REQUIRED', 'playId',
               '保存済みゲーム、またはACCEPTEDになった制作セッションを指定してください。', 409);
@@ -217,7 +230,7 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
         }
         const game = sessionMode === 'GENERATED' ? createGeneratedGame(sessionRuntime)
           : sessionMode === 'XSS_PROTOTYPE' ? createXssPrototypeGame(sessionRuntime) : createGame();
-        sessions.set(token, { game, runtime: sessionRuntime, mode: sessionMode, updatedAt: now });
+        sessions.set(token, { game, runtime: sessionRuntime, mode: sessionMode, savedGameId, updatedAt: now });
         sendJson(res, 200, { token, game: sessionMode === 'GENERATED'
           ? generatedPlayerView(game, sessionRuntime)
           : sessionMode === 'XSS_PROTOTYPE' ? xssPrototypePlayerView(game, sessionRuntime)
@@ -235,11 +248,18 @@ export function createAppServer({ mode, gameCaseResult = null, codexRunner = nul
       if (typeof body.action !== 'string') {
         throw new GameError('INVALID_ACTION', 'action', '操作を指定してください。');
       }
+      // Commit the session only after its clear record is durably saved, so a failed
+      // write can be retried with the same action without losing the verdict.
+      const draft = structuredClone(session.game);
       const game = session.mode === 'GENERATED'
-        ? actGenerated(session.game, session.runtime, body)
+        ? actGenerated(draft, session.runtime, body)
         : session.mode === 'XSS_PROTOTYPE'
           ? actXssPrototype(session.game, session.runtime, body)
           : act(session.game, body.action, body.evidenceId);
+      if (session.mode === 'GENERATED') {
+        if (game.currentState === 'ACQUITTED' && session.savedGameId) await savedGames.markCleared(session.savedGameId);
+        Object.assign(session.game, draft);
+      }
       session.updatedAt = now;
       sendJson(res, 200, { game });
     } catch (error) {

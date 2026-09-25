@@ -7,13 +7,14 @@ import { assetPath } from '../public/visual-assets.js';
 import { AutoGenerationManager, autoAuthorBootstrap, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { actGenerated, createGeneratedGame, generatedPlayerView } from '../server/generated-game.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
+import { procedureMethods } from '../server/generation/investigation-procedures.js';
 import { currentCorrectPair } from './helpers/court-issues.js';
 
 const source = await readFile(new URL('../public/generated-view.js', import.meta.url), 'utf8');
 function ui(initial, onAction) {
   const screen = new Element('section'); const calls = [];
   const document = { createElement: tag => new Element(tag), body: { classList: { add() {} } } };
-  const render = runInNewContext(`${source.replace(/^import[^\n]+\n/, '').replace('export function', 'function')}\nrenderGeneratedGame;`,
+  const render = runInNewContext(`${source.replace(/^import[^\n]+\n/, '').replaceAll('export function', 'function')}\nrenderGeneratedGame;`,
     { document, assetPath, setTimeout() {} });
   let game = initial;
   const draw = () => render({ screen, game, action: (action, fields = {}) => {
@@ -145,7 +146,7 @@ test('generated court uses original portraits, paged dialogue and explicit state
   await page.click('この証拠で主張を検証');
   assert.deepEqual(page.calls, [{ action: 'objection', statementId: 'claim', evidenceId: 'mail' }]);
   await page.click('提示せず追加調査へ'); assert.equal(page.calls.at(-1).action, 'investigation');
-  assert.equal(page.screen.querySelectorAll('a').length, 0);
+  assert.equal(page.screen.querySelectorAll('a').length, 1);
   assert.equal(page.screen.querySelector('pre').textContent, email.publicContent);
 });
 
@@ -189,7 +190,7 @@ test('opening report shows overview, allegations and documents on one page befor
   assert.match(report.textContent, /表示と指定先は同じ/);
   assert.equal(page.screen.querySelectorAll('button').some(item => item.textContent === '次の発言'), false);
   assert.equal(page.screen.querySelector('pre').textContent, email.publicContent);
-  assert.equal(page.screen.querySelectorAll('a').length, 0);
+  assert.equal(page.screen.querySelectorAll('a').length, 1);
   assert.equal(page.calls.length, 0);
   await page.click('報告書を読んで調査へ'); assert.deepEqual(page.calls, [{ action: 'continue' }]);
 });
@@ -262,12 +263,12 @@ test('each speaker cut shows exactly one portrait and always identifies the defe
     dialogue: [{ role: 'prosecutor', speaker: '検察官', text: 'その根拠を示してください。' },
       { role: 'defense', speaker: '弁護士（あなた）', text: 'こちらの記録を確認してください。' }] });
   assert.equal(page.screen.querySelectorAll('img').length, 1);
-  assert.equal(page.screen.querySelector('img').src, assetPath('prosecutor_portrait_v2'));
+  assert.equal(page.screen.querySelector('img').src, assetPath('prosecutor_penguin_v1'));
   assert.ok(page.screen.querySelector('.case-cinematic'));
   assert.match(page.screen.querySelector('.case-player-role').textContent, /主人公.*あなた/);
   await page.click('次の台詞');
   assert.equal(page.screen.querySelectorAll('img').length, 1);
-  assert.equal(page.screen.querySelector('img').src, assetPath('defense_portrait_v2'));
+  assert.equal(page.screen.querySelector('img').src, assetPath('defense_penguin_v1'));
   assert.equal(page.screen.querySelector('.case-stage').dataset.speakerRole, 'defense');
   await page.click('証拠を選ぶ');
   assert.equal(page.screen.querySelectorAll('img').length, 1);
@@ -281,10 +282,10 @@ test('judgment states expose a creation link even before the result dialogue is 
       investigationTargets: [], discoveredEvidence: [], collectedEvidence: [],
       acquittal: { publicRuling: '被告人を無罪とします。' } });
     const link = page.screen.querySelector('.case-return-link');
-    assert.equal(link.href, '/author'); assert.equal(link.textContent, 'ゲーム作成方法に戻る');
+    assert.equal(link.href, '/author#mode'); assert.equal(link.textContent, 'ゲーム制作へ戻る');
     assert.equal(page.calls.length, 0, '画面表示だけで審理をリセットしない');
   }
-  assert.equal(ui({ ...base, currentState: 'TITLE' }).screen.querySelector('.case-return-link'), null);
+  assert.ok(ui({ ...base, currentState: 'TITLE' }).screen.querySelector('.case-return-link'));
 });
 
 test('mail viewer formats recorded headers without inventing fields or interpreting untrusted HTML', () => {
@@ -300,7 +301,7 @@ test('mail viewer formats recorded headers without inventing fields or interpret
     '教材用合成メール\n\nDate: これは本文\n<script>throw 1</script>\n<a href="javascript:alert(1)">案内</a>');
   assert.equal(page.screen.querySelector('.case-original-source'), null);
   assert.equal(page.screen.querySelectorAll('script').length, 0);
-  assert.equal(page.screen.querySelectorAll('a').length, 0);
+  assert.equal(page.screen.querySelectorAll('a').length, 1);
 });
 
 test('all log and document types display every source line directly on a read-only surface', () => {
@@ -316,7 +317,7 @@ test('all log and document types display every source line directly on a read-on
     assert.doesNotMatch(page.screen.textContent, /原文を開く/);
     assert.match(page.screen.querySelector('.case-document-toolbar').textContent, /読み取り専用/);
     assert.equal(page.screen.querySelectorAll('img').length, 0);
-    assert.equal(page.screen.querySelectorAll('a').length, 0);
+    assert.equal(page.screen.querySelectorAll('a').length, 1);
     assert.ok(page.screen.querySelector(type.endsWith('_LOG') ? '.case-log-table' : '.case-record-sheet'), type);
   }
 });
@@ -410,15 +411,22 @@ test('generated script and UI play from the one-page report through a wrong answ
   for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round += 1) {
     await clickThrough('調査を始める');
     assert.equal(page.screen.querySelectorAll('.case-target').length, 0);
-    const target = generatedPlayerView(session, runtime).investigationTargets[0];
-    assert.equal(page.screen.querySelectorAll('.case-interpretation').length, 4);
-    assert.equal(page.calls.some(call => ['investigate', 'collect'].includes(call.action)), false);
+    for (const plan of runtime.gameCase.progression.materialInvestigations) {
+      if (session.collectedEvidenceIds.includes(plan.evidenceId)) continue;
+      await page.screen.querySelector(`[data-material-id="${plan.evidenceId}"]`).dispatch('click');
+      for (const [index, step] of plan.steps.entries()) {
+        const id = procedureMethods(plan, index).find(item => item.index === step.correctOptionIndex).methodId;
+        await page.screen.querySelector(`[data-method-id="${id}"]`).dispatch('click');
+      }
+    }
     const pair = currentCorrectPair(runtime, round);
     for (const wrong of round === 1 ? [true, false] : [false]) {
-      const question = generatedPlayerView(session, runtime).courtQuestion;
+      await page.click('提出する証拠を決める');
+      await page.screen.querySelector(`[data-material-id="${pair.evidenceId}"]`).dispatch('click');
+      const question = generatedPlayerView(session, runtime).workbench.materials.find(item => item.materialId === pair.evidenceId).question;
       const choice = wrong ? question.choices.find(item => item.choiceId !== pair.interpretationChoiceId).choiceId : pair.interpretationChoiceId;
       await page.screen.querySelector(`[data-choice-id="${choice}"]`).dispatch('click');
-      await page.click('この推理で法廷へ');
+      await page.click('この資料と主張で法廷へ');
       assert.equal(session.currentState, 'RETRIAL_COURT');
       await clickThrough('証拠を選ぶ');
       await page.screen.querySelector(`[data-evidence-id="${pair.evidenceId}"]`).dispatch('click');
@@ -426,8 +434,9 @@ test('generated script and UI play from the one-page report through a wrong answ
       if (wrong) {
         assert.equal(session.currentState, 'INVESTIGATION'); assert.equal(session.currentRound, round);
         assert.match(page.screen.querySelector('.case-dialogue').textContent, /同じ調査先に戻って/);
+        assert.equal(page.screen.className.includes('case-investigation'), false);
         await clickThrough('調査を始める');
-        assert.equal(generatedPlayerView(session, runtime).investigationTargets[0].targetId, target.targetId);
+        assert.equal(page.screen.className.includes('case-investigation'), true);
       }
     }
   }

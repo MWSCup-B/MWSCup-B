@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { procedureMethods } from '../server/generation/investigation-procedures.js';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
@@ -136,10 +137,10 @@ test('Author初期値のフィッシングを編集なしで提出でき、Evide
 
 test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t => {
   const runner = new MockCodexRunner({ reviewOutcomes: ['NEEDS_REVISION', 'VERIFIED'] });
-  const runJson = runner.runJson.bind(runner); let questions;
+  const runJson = runner.runJson.bind(runner); let questions, plans;
   runner.runJson = async args => {
     const draft = await runJson(args);
-    if (args.phase === 'GENERATING_EVIDENCE') questions = structuredClone(draft.courtQuestions);
+    if (args.phase === 'GENERATING_EVIDENCE') { questions = structuredClone(draft.courtQuestions); plans = structuredClone(draft.materialInvestigations); }
     return draft;
   };
   const tools = await setup(t, runner);
@@ -187,25 +188,30 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
     return actionResult.data.game;
   };
   await play({ action: 'begin' }); let game = await play({ action: 'continue' });
-  // 現在の調査先の資料は自動取得され、4択以外の準備操作は不要。
+  assert.equal(game.collectedEvidence.length, 0);
+  for (const plan of plans) for (const [index, step] of plan.steps.entries()) game = await play({ action: 'inspect-material', materialId: plan.evidenceId,
+    methodId: procedureMethods(plan, index).find(item => item.index === step.correctOptionIndex).methodId });
   const collectedTypes = new Set();
   const rounds = game.totalRounds;
   for (let round = 1; round <= rounds; round += 1) {
-    assert.equal(game.investigationTargets.length, 1);
+    assert.ok(game.investigationTargets.length > 1);
     for (const item of game.collectedEvidence) collectedTypes.add(item.type);
     assert.ok(game.currentEvidenceIds.every(id => game.collectedEvidence.some(item => item.evidenceId === id)));
-    assert.equal(game.courtQuestion.choices.length, 4);
-    const statementId = game.courtQuestion.statementId;
+    const material = game.workbench.materials.find(item => game.currentEvidenceIds.includes(item.materialId));
+    const statementId = material.question.statementId;
+    assert.equal(material.question.choices.length, 4);
     const question = questions.find(item => item.statementId === statementId);
     const interpretationChoiceId = correctCourtChoiceId(question);
-    game = await play({ action: 'retrial', interpretationChoiceId });
+    game = await play({ action: 'retrial', evidenceId: material.materialId, interpretationChoiceId });
     assert.equal(game.pendingInterpretation.statementId, statementId);
     assert.ok(game.testimonies.length);
     game = await play({ action: 'objection', statementId,
-      evidenceId: question.supportingQuotes[0].evidenceId, interpretationChoiceId });
+      evidenceId: material.materialId, interpretationChoiceId });
   }
   for (const type of ['EMAIL', 'WEB_ACCESS_LOG']) assert.ok(collectedTypes.has(type), type);
   assert.equal(game.currentState, 'ACQUITTED');
+  assert.ok(game.caseStudy.materials.length > 0);
+  assert.equal((await tools.games(token)).data.games[0].cleared, true);
 
   const menu = await tools.post('/api/author/menu', {}, token);
   assert.equal(menu.response.status, 200);

@@ -13,7 +13,7 @@ import { AutoGenerationManager, autoAuthorBootstrap, autoAuthorView, createAutoA
   from '../server/auto-generation-service.js';
 import { createGeneratedGame, actGenerated, generatedPlayerView } from '../server/generated-game.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
-import { currentCorrectPair, collectCurrentTarget, enterCurrentCourt } from './helpers/court-issues.js';
+import { currentCorrectPair, collectCurrentTarget, enterCurrentCourt, inspectMaterial } from './helpers/court-issues.js';
 import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
   from '../server/generation/scenario-template.js';
 import { importScenarioPackage } from '../server/generation/scenario-interface.js';
@@ -48,8 +48,8 @@ test('詳細設定の初期プリセットは指定のフィッシング・Netwo
   const scenarioPackage = buildScenarioTemplate({ configuration: preset, generationInput });
   assert.equal(importScenarioPackage({ generationInput, scenarioPackage }).status, 'VALID');
   assert.deepEqual(validateScenarioEvidenceCoverage({ configuration: preset, generationInput, scenarioPackage }), []);
-  assert.ok(scenarioPackage.evidenceRequirements.requirements
-    .find(item => item.requirementId === 'requirement_attack').description.includes(preset.attacks[0].evidenceAnswer));
+  assert.match(scenarioPackage.evidenceRequirements.requirements
+    .find(item => item.requirementId === 'requirement_attack').description, /保存メールに記載された誘導内容・リンク/);
   assert.deepEqual(preset, before);
 });
 
@@ -374,8 +374,8 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
   assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
   const requirement = session.scenarioPackage.evidenceRequirements.requirements
     .find(item => item.requirementId === 'requirement_attack');
-  assert.ok(requirement.description.includes(configuration.attacks[0].evidenceAnswer));
-  assert.match(requirement.description, /表示URLとHTMLソースのhref/);
+  assert.match(requirement.description, /保存メールに記載された誘導内容・リンク/);
+  assert.match(requirement.description, /不一致.*必須にしない/);
   assert.equal(runner.evidenceCalls, 0);
   manager.approve(session); await manager.waitForIdle();
   assert.equal(session.auto.state, 'READY', JSON.stringify(autoAuthorView(session).developerDetails));
@@ -389,7 +389,9 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
   const web = artifacts.find(item => item.type === 'WEB_ACCESS_LOG');
   const [, href, display] = email.publicContent.match(/<a href="([^"]+)">([^<]+)<\/a>/);
   assert.notEqual(href, display);
-  const request = JSON.parse(web.publicContent);
+  const request = web.publicContent.split('\n').filter(Boolean).map(line => JSON.parse(line))
+    .find(row => row.request_target === new URL(href).pathname + new URL(href).search);
+  assert.ok(request, 'リンク先に対応する要求と正常なアクセスを同じ資料に含める');
   assert.equal(request.request_target, new URL(href).pathname + new URL(href).search);
   assert.ok(!web.publicContent.includes(display));
   assert.doesNotMatch(email.publicContent + web.publicContent, /302|Location:|正解/);
@@ -417,21 +419,18 @@ test('Phishing ★1: 表示URLとhrefが異なるメールとWeb記録を取得�
   const investigation = createGeneratedGame(session.runtime);
   actGenerated(investigation, session.runtime, { action: 'begin' });
   const initial = actGenerated(investigation, session.runtime, { action: 'continue' });
-  assert.deepEqual(initial.discoveredEvidence.map(item => item.evidenceId), [email.evidenceId]);
-  assert.deepEqual(initial.collectedEvidence.map(item => item.evidenceId), [email.evidenceId]);
+  assert.deepEqual(initial.discoveredEvidence, []);
+  assert.deepEqual(initial.collectedEvidence, []);
+  assert.deepEqual(initial.workbench.materials.map(item => item.materialId),
+    artifacts.filter(item => item.type !== 'TESTIMONY').map(item => item.evidenceId));
   const initialText = JSON.stringify(initial);
-  for (const artifact of artifacts.filter(item => item.evidenceId !== email.evidenceId)) {
-    for (const value of [artifact.evidenceId, artifact.title, artifact.publicContent]) {
-      assert.ok(!initialText.includes(value), `未発見の${artifact.evidenceId}が公開されています。`);
-    }
+  for (const artifact of artifacts.filter(item => item.type !== 'TESTIMONY')) {
+    assert.ok(!initialText.includes(artifact.publicContent), `未調査の${artifact.evidenceId}の本文が公開されています。`);
     assert.throws(() => actGenerated(investigation, session.runtime,
       { action: 'collect', evidenceId: artifact.evidenceId }), { code: 'EVIDENCE_NOT_DISCOVERED' });
   }
-  for (const rule of session.progressionPlan.evidenceDiscoveryRules) {
-    if (!investigation.availableInvestigationTargets.includes(rule.targetId)) continue;
-    actGenerated(investigation, session.runtime, { action: 'investigate',
-      targetId: rule.targetId, investigationActionId: rule.actionId });
-  }
+  for (const artifact of artifacts.filter(item => item.type !== 'TESTIMONY'))
+    inspectMaterial(investigation, session.runtime, artifact.evidenceId);
   const discovered = generatedPlayerView(investigation, session.runtime).discoveredEvidence;
   for (const artifact of [email]) {
     const visible = discovered.find(item => item.evidenceId === artifact.evidenceId);
