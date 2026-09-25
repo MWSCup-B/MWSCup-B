@@ -56,6 +56,18 @@ Scenario生成・独立レビュー・修正・Evidence生成で、成立性と�
 
 ## 検証記録と未確認事項
 
+### 宿題を参考扱いにした変更の検証
+
+WSL Nodeで関連9ファイル・86件を検証した。一括実行では85件成功し、旧仕様のhref比較を必須とする期待値が1件失敗したため、現在の「保存内容とアクセスの区別」と認証情報フィッシングの目標に更新した。該当ファイル8件を再実行して全件成功。最後の要件文の調整後にも、全17攻撃経路×5舞台のSchema適合を含むgeneration-readinessの7件が全件成功した。
+
+新しい回帰テストは、フィッシング単独、Stored XSS単独、両者の組合せ、不正ログインも含む3攻撃について、通常ログの水増し・URL不一致・宿題の操作回数を使わず、1 stepの調査から模擬生成・無罪判決まで到達することを確認する。参照切れ、原文にない引用、必要な観測の欠落、取得不能な実行計測は引き続き拒否される。実モデルでの再生成は未確認。
+
+```text
+node --test --test-concurrency=1 tests/phishing-evidence-repair.test.js tests/phishing-xss-stage-regression.test.js tests/attack-learning.test.js tests/material-investigation.test.js tests/generation-readiness.test.js tests/evidence-log-format.test.js tests/scenario-stage-revision.test.js tests/manual-attack-presets.test.js tests/scenario-creation-workflow.test.js
+node --test --test-concurrency=1 tests/generation-readiness.test.js
+node --test --test-concurrency=1 tests/scenario-stage-revision.test.js
+```
+
 ### フィッシング・Stored XSSの同時選択時の生成停止の修正
 
 共有Web取得元の資料を、そのまま全攻撃の必須比較課題にしていたため、XSSの未取得の実行計測を要求する説明と、修正後の資料不足判定が衝突していた。段階の比較課題・問題の背景説明・資料検証で同じ選定を使い、必要資料がそろった攻撃を比較する段階には、別の攻撃の未完了の比較を混ぜないようにした。フィッシングとStored XSSでは、メール、メールとWeb要求の比較、保存投稿とWeb要求とブラウザ実行計測の比較、の3争点を維持する。取得元や資料一覧は変更しない。

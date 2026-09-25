@@ -42,7 +42,8 @@ test('3攻撃5調査先の争点と資料を具体化し、送受信・実行・
     assert.equal(requirement.investigationStage.subjectCharacterId, 'character_defendant');
   }
   assert.deepEqual(requirements[0].grounds.map(item => item.sourceId), ['email_record']);
-  assert.match(requirements[0].investigationStage.questionFocus, /href/);
+  assert.match(requirements[0].investigationStage.questionFocus, /保存メールの誘導内容・リンク.*実際のアクセス/);
+  assert.match(requirements[0].investigationStage.limitedRefutation, /URLの不一致を必要条件にしない/);
   assert.ok(requirements[1].grounds.some(item => item.sourceId === 'credential_submission_record'));
   assert.match(requirements[1].investigationStage.expectedInference, /送信・受信/);
   assert.deepEqual(requirements[2].grounds.map(item => item.sourceId), ['authentication_record']);
@@ -58,7 +59,9 @@ test('3攻撃5調査先の争点と資料を具体化し、送受信・実行・
   assert.equal(importScenarioPackage({ generationInput, scenarioPackage }).status, 'VALID');
   assert.deepEqual(generationInput, originalInput);
   for (const attack of configuration.attacks) {
-    assert.ok(scenarioPackage.evidenceRequirements.requirements.some(item => item.description.includes(attack.evidenceAnswer)));
+    const goal = attack.attackId === 'credential_phishing'
+      ? '保存メールの誘導リンクとWeb要求、偽フォームへの送信記録' : attack.evidenceAnswer;
+    assert.ok(scenarioPackage.evidenceRequirements.requirements.some(item => item.description.includes(goal)));
   }
   for (const observation of scenarioPackage.evidenceRequirements.requirements.filter(item => item.requirementId.startsWith('requirement_observation_'))) {
     assert.ok(configuration.attacks.every(attack => !observation.description.includes(attack.evidenceAnswer)));
