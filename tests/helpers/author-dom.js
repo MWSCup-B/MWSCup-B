@@ -162,10 +162,11 @@ export function startAuthorDom(bootstrap, { missingElementId = null, startError 
   const storedSettings = new Map();
   const localStorage = { getItem: key => storedSettings.get(key) ?? null,
     setItem: (key, value) => storedSettings.set(key, String(value)) };
-  const ready = runInNewContext(`(async () => {\n${source.replace(/^import .*;$/m, '')}\n})()`, {
+  const ready = runInNewContext(`(async () => {\n${source.replace(/^import .*;$/gm, '')}\n})()`, {
     document, fetch, structuredClone, crypto: { randomUUID },
     location: { hash }, caseStudyView: value => { const node = new Element('article'); node.textContent = value.incident; return node; },
     confirm: () => true, localStorage,
+    gameAudio: { mount() {}, setScene() {}, effect() {} },
     setInterval: () => 1, clearInterval: () => {},
   });
   return { document, calls, ready, localStorage, byId: id => document.getElementById(id) };

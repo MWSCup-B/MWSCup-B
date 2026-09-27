@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "tracks": {
+    "secret-corridor": {
+      "title": "Secret Corridor",
+      "artist": "PeriTune / むつき醒",
+      "source": "https://peritune.com/blog/2026/09/18/secret_corridor/",
+      "license": "https://peritune.com/about/",
+      "file": "secret-corridor.bin",
+      "key": "7T+DOwMwKN23zbcJ6khQ+4bfu4ovebnSI3jxzIrrzw4=",
+      "sourceSha256": "6f543aac7a11a61bdc201bfb32e5274fde6882fb3f49052967d77b787a8c7fa3",
+      "packedSha256": "e1df6728d951501a839e39d4c127fc261efda5a98a84f0b3d5d4139f76574412",
+      "bytes": 2186322
+    },
+    "ticking-labyrinth": {
+      "title": "Ticking Labyrinth",
+      "artist": "PeriTune / むつき醒",
+      "source": "https://peritune.com/blog/2026/06/11/ticking-labyrinth/",
+      "license": "https://peritune.com/about/",
+      "file": "ticking-labyrinth.bin",
+      "key": "MuNJWeqyCqPUQk6bymumahu3Ffr1I/DLu872ZykLf8Q=",
+      "sourceSha256": "4213b9a84c6e8537f400c783a44633b240a975069940426d9069e42c751952a8",
+      "packedSha256": "5dcdc16d798ca30d04d0fbba7e98151024ef498db71785c5dbc6a0ec0fbbdb39",
+      "bytes": 3030853
+    },
+    "message": {
+      "title": "メッセージ表示音3",
+      "artist": "効果音ラボ",
+      "source": "https://soundeffect-lab.info/sound/button/",
+      "license": "https://soundeffect-lab.info/agreement/",
+      "file": "message.bin",
+      "key": "Zvfj5BINhv/sM+ulFe/Anf9pudmjJfPvfGCUtCb3jww=",
+      "sourceSha256": "c160df877899ab1ccf9b19c0a16c65f13e56f4aed0cbf2fbb62f2a7c18c2d81d",
+      "packedSha256": "ba6ea696c15cd6edbcc07fee7001a28671905097a5849f30c68a61a3a241035d",
+      "bytes": 25104
+    },
+    "confirm": {
+      "title": "決定ボタンを押す2",
+      "artist": "効果音ラボ",
+      "source": "https://soundeffect-lab.info/sound/button/",
+      "license": "https://soundeffect-lab.info/agreement/",
+      "file": "confirm.bin",
+      "key": "ueRRbXFa4i7fak7wgHc+eFvbtS5kfiUCGqtLTDY3DGA=",
+      "sourceSha256": "0f5a35ef0da50cd6f6779b73ef793f651c6825460ff1ff6dce122b861cd4ff74",
+      "packedSha256": "e15742ad0e46043c9385490c992a799c620073be644f3184577c4b42d897810f",
+      "bytes": 27100
+    },
+    "success": {
+      "title": "成功音",
+      "artist": "効果音ラボ",
+      "source": "https://soundeffect-lab.info/sound/button/",
+      "license": "https://soundeffect-lab.info/agreement/",
+      "file": "success.bin",
+      "key": "48HJ1TeIzDPpqR7DISgR69caJbsFvdnAW9X5JxzFsg4=",
+      "sourceSha256": "edfdb7c167549b4be1ac65dcde29bdf738db4323731760b00c2b84801803bf66",
+      "packedSha256": "8ad568f03f4130ac17c77c0b71e10fb88e402bf6ab470e43dbdffd49ebe52c68",
+      "bytes": 59586
+    },
+    "start": {
+      "title": "決定ボタンを押す12",
+      "artist": "効果音ラボ",
+      "source": "https://soundeffect-lab.info/sound/button/",
+      "license": "https://soundeffect-lab.info/agreement/",
+      "file": "start.bin",
+      "key": "+k/mDqP0dz9ArpVx8KOue3YbQajbp2Xuu9jvluIuejY=",
+      "sourceSha256": "9ef96220f24c1a7cb138dc73e9fea0da385bc5d1e4c616748f90c343ff12e974",
+      "packedSha256": "8ac68edc8f7033aa96b58558a77f6dbc33a5c642f6971563608a11f8a6b08f74",
+      "bytes": 25731
+    },
+    "save": {
+      "title": "決定ボタンを押す7",
+      "artist": "効果音ラボ",
+      "source": "https://soundeffect-lab.info/sound/button/",
+      "license": "https://soundeffect-lab.info/agreement/",
+      "file": "save.bin",
+      "key": "ntb7mOiOKQFIK/VzD3c06RIa0gW/D5gtl8zJetWGw+I=",
+      "sourceSha256": "94a8eaae204a4dac8fc25bf7db68b29ac93fd239cc50a0e821d3e9f24f8c763a",
+      "packedSha256": "722b65467353551445c15b99f440f9e28c8b5a22f6b6036639f37281c2fe5b23",
+      "bytes": 29404
+    },
+    "cursor": {
+      "title": "カーソル移動2",
+      "artist": "効果音ラボ",
+      "source": "https://soundeffect-lab.info/sound/button/",
+      "license": "https://soundeffect-lab.info/agreement/",
+      "file": "cursor.bin",
+      "key": "vOonSLfO6dg3xhC2SUIt5ap8fuMRzZ9eOdL00PNSJLc=",
+      "sourceSha256": "4154df58bc8f31320e3b5cd60e084de9764d1cb67d47094f7f7cb797e945ab07",
+      "packedSha256": "9c59dd117993c1c92ecee62c2021cad4afb876113106ec43415f12562f9a65e7",
+      "bytes": 24220
+    }
+  }
+}

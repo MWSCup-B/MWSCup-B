@@ -1,0 +1,19 @@
+.game-audio-controls { position: relative; flex: none; color: #263f50; font-size: .8rem; text-align: left; }
+details.game-audio-controls { margin-left: auto; }
+.game-audio-controls summary { cursor: pointer; padding: .45rem .7rem; border: 1px solid #aa9b78; border-radius: .4rem; background: #faf7ed; white-space: nowrap; }
+.game-audio-panel { display: grid; gap: .8rem; padding: 1rem; background: #faf7ed; border: 1px solid #aa9b78; border-radius: .5rem; }
+details > .game-audio-panel { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 60; width: min(280px, 80vw); box-shadow: 0 8px 24px #0004; }
+.game-audio-panel label { display: block; font-weight: 700; }
+.game-audio-panel output { float: right; font-variant-numeric: tabular-nums; }
+.game-audio-panel input[type=range] { display: block; width: 100%; margin: .6rem 0 0; padding: 0; accent-color: #8e690d; cursor: pointer; }
+.game-audio-panel button { width: 100%; margin: 0; font: inherit; background: #263f50; color: white; border: 0; border-radius: .4rem; padding: .6rem; }
+.game-audio-panel p { margin: 0; font-size: .75rem; overflow-wrap: anywhere; }
+.game-audio-panel a { color: #305a75; font-size: .75rem; }
+.author-page > header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+#sound-settings { grid-column: 1 / -1; }
+.settings-shell { overflow-y: auto; }
+.settings-shell .settings-card { align-self: start; }
+@media (max-width: 720px) {
+  .game-audio-controls summary { padding: .35rem .5rem; font-size: .75rem; }
+  .case-game .case-topbar { flex-wrap: wrap; }
+}

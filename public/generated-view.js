@@ -1,5 +1,6 @@
 import { assetPath } from './visual-assets.js';
 import { renderInvestigationWorkspace } from './investigation-workspace.js';
+import { gameAudio } from './game-audio.js';
 
 const compactCourt = globalThis.matchMedia?.('(max-width: 720px)');
 let redrawForViewport = null;
@@ -406,6 +407,8 @@ export function renderGeneratedGame({ screen, game, action }) {
   document.body.classList.add('playing-generated');
 
   function draw(focus = '') {
+    if (game.currentState === 'ACQUITTED' && view.explanationOpen) gameAudio.setScene('explanation');
+    else gameAudio.forGame(game);
     const cinematic = !!game.dialogue?.length && !view.scriptFinished;
     const viewport = court || cinematic || ['TITLE', 'GUILTY_RETRY', 'ACQUITTED', 'BLOCKED'].includes(game.currentState);
     const inCourt = !investigation || (cinematic && !!game.result);
@@ -426,6 +429,7 @@ export function renderGeneratedGame({ screen, game, action }) {
       header.append(status);
     }
     header.append(creationLink());
+    gameAudio.attach(header);
     screen.append(header);
     const progress = el('ol', undefined, 'case-issue-track'); progress.setAttribute('aria-label', '争点の進行');
     for (let round = 1; round <= game.totalRounds; round += 1) {

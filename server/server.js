@@ -13,6 +13,7 @@ import { CodexJsonRunner } from './codex/codex-json-runner.js';
 import { actXssPrototype, createXssPrototypeGame, xssPrototypePlayerView }
   from './xss-prototype.js';
 import { SavedGameStore } from './saved-game-store.js';
+import { AUDIO_CATALOG } from '../public/audio-catalog.js';
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -25,7 +26,15 @@ const assets = new Map([
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
   ['/author.css', ['author.css', 'text/css; charset=utf-8']],
   ['/visual-assets.js', ['visual-assets.js', 'text/javascript; charset=utf-8']],
+  ['/audio-catalog.js', ['audio-catalog.js', 'text/javascript; charset=utf-8']],
+  ['/game-audio.js', ['game-audio.js', 'text/javascript; charset=utf-8']],
+  ['/game-audio.css', ['game-audio.css', 'text/css; charset=utf-8']],
+  ['/audio-credits.html', ['audio-credits.html', 'text/html; charset=utf-8']],
+  ['/assets/audio/manifest.json', ['assets/audio/manifest.json', 'application/json; charset=utf-8']],
 ]);
+for (const id of Object.keys(AUDIO_CATALOG)) {
+  assets.set(`/assets/audio/${id}.bin`, [`assets/audio/${id}.bin`, 'application/octet-stream']);
+}
 for (const path of [
   'backgrounds/intro.svg', 'backgrounds/courtroom.svg', 'backgrounds/investigation.svg',
   'characters/defense-neutral.svg', 'characters/defense-thinking.svg',

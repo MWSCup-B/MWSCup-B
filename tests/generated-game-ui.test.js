@@ -16,7 +16,8 @@ function ui(initial, onAction) {
   const screen = new Element('section'); const calls = [];
   const document = { createElement: tag => new Element(tag), body: { classList: { add() {} } } };
   const render = runInNewContext(`${source.replace(/^import[^\n]+\n/gm, '').replaceAll('export function', 'function')}\nrenderGeneratedGame;`,
-    { document, assetPath, renderInvestigationWorkspace, setTimeout() {} });
+    { document, assetPath, renderInvestigationWorkspace, setTimeout() {},
+      gameAudio: { forGame() {}, setScene() {}, attach() {} } });
   let game = initial;
   const draw = () => render({ screen, game, action: (action, fields = {}) => {
     calls.push({ action, ...fields });

@@ -5,13 +5,14 @@ import { runInNewContext } from 'node:vm';
 import { Element } from './helpers/author-dom.js';
 
 const source = (await readFile(new URL('../public/app.js', import.meta.url), 'utf8'))
-  .replace(/^import[^\n]+\n/, '');
+  .replace(/^import[^\n]+\n/gm, '');
 function start(search, fetch) {
   const screen = new Element('section'); screen.style = {};
   const error = new Element('p');
   const document = { querySelector: selector => selector === '#screen' ? screen : error,
     createElement: tag => new Element(tag), body: { classList: { add() {}, remove() {} } } };
-  const context = { document, fetch, location: { search }, URLSearchParams };
+  const context = { document, fetch, location: { search }, URLSearchParams,
+    gameAudio: { mount() {}, forGame() {}, attach() {}, effect() {} } };
   runInNewContext(source, context);
   return { screen, error };
 }

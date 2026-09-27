@@ -1,6 +1,9 @@
 // 2026-09-24 修正後: mainのタイトル・モード・保存・設定UIとkawata-workの攻撃連鎖入力を接続。
 // 修正前の全文: docs/history/author-creation-before-2026-09-24.js
 import { caseStudyView } from './generated-view.js';
+import { gameAudio } from './game-audio.js';
+gameAudio.mount(document);
+let lastAudioState = null;
 let token = null, bootstrap = null, author = null, polling = null;
 let initialized = false, submitting = false, pollingRequest = false;
 let requestVersion = 0;
@@ -303,8 +306,9 @@ function renderSavedGames() {
           const dialog = byId('study-dialog');
           byId('study-dialog-title').textContent = `${game.title} — 解説資料`;
           byId('study-dialog-content').replaceChildren(caseStudyView(study));
-          dialog.addEventListener('close', () => studyButton.focus(), { once: true });
+          dialog.addEventListener('close', () => { studyButton.focus(); gameAudio.setScene('title'); }, { once: true });
           dialog.showModal();
+          gameAudio.setScene('explanation');
           byId('study-dialog-close').focus();
         } catch (error) { status.textContent = error.message; }
         finally { studyButton.disabled = false; }
@@ -355,6 +359,9 @@ function showPanel(id) {
 }
 function render() {
   const state = author?.currentState ?? 'MODE_SELECTION';
+  gameAudio.setScene(byId('study-dialog').open ? 'explanation' : author?.canCancel ? 'generation' : 'title');
+  if (state === 'READY' && lastAudioState && lastAudioState !== 'READY') void gameAudio.effect('success');
+  lastAudioState = state;
   if (author?.canCancel) {
     showPanel('generation-panel'); renderProgress('generation-progress'); renderDetails('detail-list');
     byId('generation-message').textContent = state.includes('REVIEW') || state.includes('VALIDAT')
@@ -433,6 +440,7 @@ for (const [id, saveData] of [['exit-save', true], ['exit-without-save', false]]
       const dialog = byId('exit-dialog'); if (typeof dialog.close === 'function') dialog.close();
       else dialog.removeAttribute('open');
       showPanel('shutdown-panel');
+      gameAudio.setScene('silent');
     } catch (error) {
       buttons.forEach(button => { button.disabled = false; });
       byId('exit-dialog-title').textContent = `終了できませんでした：${error.message}`;

@@ -1,4 +1,6 @@
 import { assetPath } from './visual-assets.js';
+import { gameAudio } from './game-audio.js';
+gameAudio.mount(document);
 
 const screen = document.querySelector('#screen');
 const errorBox = document.querySelector('#error');
@@ -32,7 +34,8 @@ async function request(path, body) {
   busy = true;
   errorBox.textContent = '';
   screen.setAttribute('aria-busy', 'true');
-  const controls = [...screen.querySelectorAll('button, input, select')].map(node => [node, node.disabled]);
+  const controls = [...screen.querySelectorAll('button, input, select')]
+    .filter(node => !node.closest?.('.game-audio-controls')).map(node => [node, node.disabled]);
   controls.forEach(([node]) => { node.disabled = true; });
   try {
     const response = await fetch(path, { method: 'POST',
@@ -48,7 +51,11 @@ async function request(path, body) {
         throw new Error('新しいゲーム画面を読み込めません。コード更新後は必要な生成内容を控え、サーバーを再起動してページを再読み込みしてください。再起動するとメモリ上のゲームとセッションは失われます。');
       }
     }
+    const previous = game;
     game = data.game;
+    if (previous && ((game.currentState === 'ACQUITTED' && previous.currentState !== 'ACQUITTED') ||
+      (game.currentScene === 'ACQUITTED' && previous.currentScene !== 'ACQUITTED') ||
+      (game.result?.success === true && previous.result?.success !== true))) void gameAudio.effect('success');
     render();
   } catch (error) {
     errorBox.textContent = error instanceof TypeError
@@ -217,6 +224,9 @@ function renderFixture() {
 }
 
 function render() {
+  if (game?.mode !== 'GENERATED') {
+    gameAudio.forGame(game); gameAudio.attach(document.querySelector('body > header'));
+  }
   screen.replaceChildren();
   document.body.classList.remove('playing-generated');
   screen.className = ''; screen.style.backgroundImage = '';
