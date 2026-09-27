@@ -126,7 +126,8 @@ function enterInvestigation(session, runtime) {
 function discoverEvidence(session, runtime, evidenceIds) {
   if (isOpenMaterials(runtime.gameCase)) {
     for (const materialId of evidenceIds) {
-      actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId: 'read' });
+      actGenerated(session, runtime, { action: 'workspace-read', materialId });
+      actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
     }
     return evidenceIds.every(id => session.discoveredEvidenceIds.includes(id));
   }

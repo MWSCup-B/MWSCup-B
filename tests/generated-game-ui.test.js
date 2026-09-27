@@ -11,11 +11,12 @@ import { procedureMethods } from '../server/generation/investigation-procedures.
 import { currentCorrectPair } from './helpers/court-issues.js';
 
 const source = await readFile(new URL('../public/generated-view.js', import.meta.url), 'utf8');
+import { renderInvestigationWorkspace } from '../public/investigation-workspace.js';
 function ui(initial, onAction) {
   const screen = new Element('section'); const calls = [];
   const document = { createElement: tag => new Element(tag), body: { classList: { add() {} } } };
-  const render = runInNewContext(`${source.replace(/^import[^\n]+\n/, '').replaceAll('export function', 'function')}\nrenderGeneratedGame;`,
-    { document, assetPath, setTimeout() {} });
+  const render = runInNewContext(`${source.replace(/^import[^\n]+\n/gm, '').replaceAll('export function', 'function')}\nrenderGeneratedGame;`,
+    { document, assetPath, renderInvestigationWorkspace, setTimeout() {} });
   let game = initial;
   const draw = () => render({ screen, game, action: (action, fields = {}) => {
     calls.push({ action, ...fields });
@@ -438,8 +439,14 @@ test('generated script and UI play from the one-page report through a wrong answ
     for (const plan of runtime.gameCase.progression.materialInvestigations) {
       if (session.collectedEvidenceIds.includes(plan.evidenceId)) continue;
       await page.screen.querySelector(`[data-material-id="${plan.evidenceId}"]`).dispatch('click');
-      assert.ok(page.screen.querySelector('.case-filtered-source'));
+      const input = page.screen.querySelector('.workspace-composer')?.querySelector('input');
+      if (input) { input.value = 'cat material.txt'; await input.dispatch('input'); await page.click('実行'); }
+      assert.ok(page.screen.querySelector('.workspace-console'));
+      assert.ok(!session.collectedEvidenceIds.includes(plan.evidenceId));
+      await page.click('原文の事実を証拠保存');
+      await page.click('行1を証拠として保存');
       assert.ok(session.collectedEvidenceIds.includes(plan.evidenceId));
+      await page.click('現場へ戻る');
     }
     const pair = currentCorrectPair(runtime, round);
     for (const wrong of round === 1 ? [true, false] : [false]) {
@@ -467,6 +474,11 @@ test('generated script and UI play from the one-page report through a wrong answ
   await clickThrough('判決を確認する');
   assert.equal(page.screen.querySelector('.case-cinematic'), null);
   assert.match(page.screen.textContent, /被告人を無罪とします/);
+  assert.equal(page.screen.querySelector('.case-study-reader'), null);
+  await page.click('解説を開く');
+  assert.ok(page.screen.querySelector('.case-study-reader'));
+  await page.click('判決へ戻る');
+  assert.equal(page.screen.querySelector('.case-study-reader'), null);
 });
 
 test('spoken lines contain only the speaker and line, without instructional badges', () => {

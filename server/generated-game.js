@@ -7,6 +7,7 @@ import { materialEntries, materialMethods, materialOutput, materialQuestion, mat
 import { publicCourtQuestion, publicInvestigationQuestion } from './generation/court-questions.js';
 import { procedureMethods, procedureOutput } from './generation/investigation-procedures.js';
 import { generatedSceneDialogue } from './generation/dialogue-template.js';
+import { investigationProgress, workspaceAction } from './generation/investigation-workspace.js';
 
 export function createGeneratedGame(runtime) {
   if (!runtime || runtime.mode !== 'GENERATED') throw new GameError('GAME_BUILD_BLOCKED',
@@ -39,7 +40,7 @@ function prerequisitesMet(rule, discovered, completed) {
 }
 
 function canReturnToCourt(session, internal) {
-  if (isOpenMaterials(internal)) return session.collectedEvidenceIds.length > 0;
+  if (isOpenMaterials(internal)) return investigationProgress(session, internal).complete;
   if (isSequential(internal)) return stageEvidenceIds(internal, session.currentRound)
     .every(id => session.collectedEvidenceIds.includes(id));
   const investigation = internal.progression.investigation;
@@ -189,13 +190,17 @@ export function actGenerated(session, runtime, fields) {
 }
 
 function applyGeneratedAction(session, runtime, { action, evidenceId, statementId, interpretationChoiceId,
-  targetId, investigationActionId, materialId, methodId }) {
+  targetId, investigationActionId, materialId, methodId, command, field, value, line }) {
   const publicCase = runtime.publicGameCase;
   const internal = runtime.gameCase;
   if (action === 'begin') {
     requireState(session, 'TITLE'); session.currentState = 'INITIAL_COURT';
   } else if (action === 'continue') {
     requireState(session, 'INITIAL_COURT'); session.currentState = 'INVESTIGATION';
+  } else if (['workspace-command', 'workspace-read', 'save-observation', 'save-fact'].includes(action)) {
+    requireState(session, 'INVESTIGATION');
+    if (!isOpenMaterials(internal)) throw new GameError('UNKNOWN_ACTION', 'action', '資料調査モードの操作です。');
+    workspaceAction(session, internal, { action, materialId, command, field, value, line });
   } else if (action === 'inspect-material') {
     requireState(session, 'INVESTIGATION');
     const material = isOpenMaterials(internal) && materialEntries(internal).find(item => item.materialId === materialId);

@@ -121,6 +121,17 @@ test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解�
   for (let round = 1; round <= author.runtime.gameCase.progression.courtRoundCount; round += 1) {
     const issue = author.runtime.gameCase.progression.courtIssues[round - 1];
     for (const rule of author.runtime.gameCase.detective.evidenceDiscoveryRules.filter(item => item.targetId === issue.investigationTargetId)) {
+      if (round === 1) {
+        const forged = await post('/api/action', { action: 'save-fact', materialId: rule.evidenceId, line: 1 }, token);
+        assert.equal(forged.status, 400);
+        assert.equal((await forged.json()).error.code, 'FACT_NOT_SEEN');
+        game = await action({ action: 'workspace-command', materialId: rule.evidenceId, command: 'cat material.txt; whoami' });
+        assert.equal(game.workbench.materials.find(item => item.materialId === rule.evidenceId).history.at(-1).valid, false);
+        game = await action({ action: 'workspace-read', materialId: rule.evidenceId });
+        assert.equal(game.workbench.materials.find(item => item.materialId === rule.evidenceId).collected, false);
+        game = await action({ action: 'save-fact', materialId: rule.evidenceId, line: 1 });
+        continue;
+      }
       const plan = author.runtime.gameCase.progression.materialInvestigations.find(item => item.evidenceId === rule.evidenceId);
       for (const [index, step] of plan.steps.entries()) game = await action({ action: 'inspect-material', materialId: rule.evidenceId,
         methodId: procedureMethods(plan, index).find(item => item.index === step.correctOptionIndex).methodId });

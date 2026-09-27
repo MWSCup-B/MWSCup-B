@@ -19,6 +19,7 @@ const assets = new Map([
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/generated-view.js', ['generated-view.js', 'text/javascript; charset=utf-8']],
+  ['/investigation-workspace.js', ['investigation-workspace.js', 'text/javascript; charset=utf-8']],
   ['/generated-game.css', ['generated-game.css', 'text/css; charset=utf-8']],
   ['/author', ['author.html', 'text/html; charset=utf-8']],
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
@@ -46,6 +47,10 @@ const generatedActionFields = new Map([
   ['begin', ['action']], ['continue', ['action']],
   ['investigate', ['action', 'targetId', 'investigationActionId']],
   ['inspect-material', ['action', 'materialId', 'methodId']],
+  ['workspace-command', ['action', 'materialId', 'command']],
+  ['workspace-read', ['action', 'materialId']],
+  ['save-observation', ['action', 'materialId', 'field', 'value']],
+  ['save-fact', ['action', 'materialId', 'line']],
   ['collect', ['action', 'evidenceId']], ['retrial', ['action', 'interpretationChoiceId', 'evidenceId']], ['investigation', ['action']],
   ['objection', ['action', 'statementId', 'evidenceId', 'interpretationChoiceId']], ['retry', ['action']],
 ]);

@@ -112,7 +112,8 @@ test('final acquittal requires multiple verified support records, not just the s
   const owned = [...session.collectedEvidenceIds];
   // Even with automatic collection, a corrupted/incomplete session cannot skip the gate.
   session.collectedEvidenceIds = ['evidence_technical_a'];
-  assert.throws(() => enterCurrentCourt(session, runtime), { code: 'MATERIAL_NOT_EXAMINED' });
+  assert.equal(generatedPlayerView(session, runtime).workbench.progress.complete, false);
+  assert.throws(() => enterCurrentCourt(session, runtime), { code: 'COURT_RETURN_CONDITION_NOT_MET' });
   session.collectedEvidenceIds = owned;
   enterCurrentCourt(session, runtime);
   actGenerated(session, runtime, { action: 'objection', ...currentCorrectPair(runtime, 2) });

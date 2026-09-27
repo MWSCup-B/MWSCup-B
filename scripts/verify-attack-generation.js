@@ -35,10 +35,16 @@ function play(runtime) {
   const player = createGeneratedGame(runtime);
   actGenerated(player, runtime, { action: 'begin' });
   actGenerated(player, runtime, { action: 'continue' });
+  // Exercise the public investigation actions before entering court.
+  for (const item of runtime.gameCase.detective.evidence.filter(item => item.type !== 'TESTIMONY')) {
+    actGenerated(player, runtime, { action: 'workspace-read', materialId: item.evidenceId });
+    actGenerated(player, runtime, { action: 'save-fact', materialId: item.evidenceId, line: 1 });
+  }
   for (const issue of runtime.gameCase.progression.courtIssues) {
     const rule = runtime.gameCase.judgment.judgmentRules.find(item => issue.judgmentRuleIds.includes(item.ruleId));
     const interpretationChoiceId = correctCourtChoiceId(issue.question);
-    actGenerated(player, runtime, { action: 'retrial', interpretationChoiceId });
+    const evidenceId = rule.acceptedEvidenceIds[0];
+    actGenerated(player, runtime, { action: 'retrial', interpretationChoiceId, evidenceId });
     actGenerated(player, runtime, { action: 'objection', interpretationChoiceId,
       statementId: rule.targetStatementId, evidenceId: rule.acceptedEvidenceIds[0] });
   }

@@ -1,5 +1,6 @@
 import { publicInvestigationQuestion } from './court-questions.js';
 import { procedureMethods } from './investigation-procedures.js';
+import { investigationProgress, workspaceMaterial, COMMAND_HELP } from './investigation-workspace.js';
 
 const labels = { EMAIL: '保存メール', WEB_ACCESS_LOG: 'Webアクセスログ', AUTHENTICATION_LOG: '認証ログ',
   APPLICATION_LOG: 'アプリケーションログ', DATABASE_LOG: 'DB監査ログ', NETWORK_LOG: '通信ログ',
@@ -47,14 +48,17 @@ export function materialQuestion(gameCase, materialId, round) {
 }
 
 export function materialWorkbench(session, gameCase) {
-  return { schemaVersion: '1.0', materials: materialEntries(gameCase).map(material => {
+  return { schemaVersion: '1.0', workspaceVersion: '1.0', help: COMMAND_HELP,
+    progress: investigationProgress(session, gameCase), savedObservations: session.savedObservations ?? [],
+    materials: materialEntries(gameCase).map(material => {
     const question = materialQuestion(gameCase, material.materialId, session.currentRound);
     // A question may quote several documents. Do not expose their contents before discovery.
     const readable = session.collectedEvidenceIds.includes(material.materialId)
       && question?.supportingQuotes.every(quote => session.collectedEvidenceIds.includes(quote.evidenceId));
     const plan = gameCase.progression.materialInvestigations?.find(item => item.evidenceId === material.materialId);
     const index = session.materialProgress?.[material.materialId] ?? 0;
-    return { ...material, ...(plan ? { methods: procedureMethods(plan, index)
+    const item = gameCase.detective.evidence.find(item => item.evidenceId === material.materialId);
+    return { ...material, ...workspaceMaterial(session, item), ...(plan ? { methods: procedureMethods(plan, index)
       .map(({ methodId, label, description }) => ({ methodId, label, description })),
       step: { number: Math.min(index + 1, plan.steps.length), total: plan.steps.length,
         prompt: plan.steps[index]?.prompt ?? '調査が完了しました。資料の原文と他の記録を照合できます。' } } : {}),

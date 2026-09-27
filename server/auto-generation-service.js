@@ -38,6 +38,7 @@ import { courtIssueGenerationProblems, requestedCourtIssueCount } from './genera
 import { validateSequentialPlan } from './generation/sequential-investigation.js';
 import { stageEvidenceProblems } from './generation/scenario-stage-plan.js';
 import { buildQuestionBackground } from './generation/investigation-lessons.js';
+import { buildTechnicalEvidenceCatalog, technicalEvidenceCoverageIssues } from './generation/technical-evidence-catalog.js';
 import { buildIncidentConclusion } from './generation/incident-conclusion.js';
 import { LEARNING_OBSERVATION_FIELDS } from './generation/learning-observations.js';
 // 2026-09-20 修正前: Scenario設計の技術境界検証を導入する
@@ -927,6 +928,8 @@ export class AutoGenerationManager {
     let evidenceRepairBase = null;
     const evidenceDraftInput = buildEvidenceGenerationDraftInput(session.evidenceGenerationInput);
     const investigationStages = buildInvestigationStages(session.configuration, session.generationInput);
+    const technicalEvidenceCatalog = buildTechnicalEvidenceCatalog(investigationStages,
+      session.scenarioPackage.evidenceRequirements.requirements);
     const questionBackgrounds = investigationStages.map((stage, index) => ({ targetId: stage.targetId,
       description: buildQuestionBackground(investigationStages, index, session.generationInput) }));
     for (let evidenceAttempt = 1; evidenceAttempt <= 2; evidenceAttempt += 1) {
@@ -944,7 +947,7 @@ export class AutoGenerationManager {
               ...(courtChoiceRevisionBase ? { courtChoiceRevisionBase } : {}),
               ...(evidenceGroundRevision ? { evidenceGroundRevision } : {}),
               ...(evidenceRepairBase ? { evidenceRepairBase } : {}),
-              investigationStages, questionBackgrounds, investigationHomework: INVESTIGATION_HOMEWORK,
+              investigationStages, technicalEvidenceCatalog, questionBackgrounds, investigationHomework: INVESTIGATION_HOMEWORK,
               requestedCourtIssueCount: requestedCourtIssueCount(session.configuration, session.generationInput),
               requestedEvidenceChainLength: session.configuration.difficulty }, feedback: evidenceFeedback,
             outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceDraft.canonicalSchema,
@@ -980,7 +983,7 @@ export class AutoGenerationManager {
       session.evidenceImportResult = importEvidencePackage({
         generationInput: session.evidenceGenerationInput, evidencePackage });
       const evidenceImported = session.evidenceImportResult;
-      let issues = [...evidenceImported.errors, ...evidenceDraftProblems(draft, evidencePackage,
+      let issues = [...evidenceImported.errors, ...technicalEvidenceCoverageIssues(technicalEvidenceCatalog, evidencePackage.evidenceArtifacts), ...evidenceDraftProblems(draft, evidencePackage,
         session.evidenceGenerationInput.evidenceAgentInput)];
       // The draft's artifact/contradiction schemas have already been checked.
       // Collect question defects even when provenance failed, so the same bounded
