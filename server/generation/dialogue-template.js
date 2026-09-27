@@ -55,6 +55,7 @@ export function generatedSceneDialogue(game) {
         ? [line('検察官', 'prosecutor', 'その点は認めます。ですが、次の記録も説明できますか。'),
           defense('一つ、主張の穴が見えた。次の記録も確かめよう。')]
         : [defense(fixedLines.defenseOpen)];
+    if (game.investigationMode === 'OPEN_MATERIALS') return opening;
     const target = game.investigationTargets[0];
     return [...opening, defense(
       `次は「${target.displayName}」の資料を確認する。`, '調査開始')];

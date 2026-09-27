@@ -119,7 +119,7 @@ function documentFromHtml() {
 }
 
 export function startAuthorDom(bootstrap, { missingElementId = null, startError = null,
-  savedGames = [], initialAuthor = null, responses = {} } = {}) {
+  savedGames = [], initialAuthor = null, responses = {}, study = null, hash = '' } = {}) {
   const document = documentFromHtml(); const calls = [];
   let storedGames = structuredClone(savedGames);
   if (missingElementId) {
@@ -144,6 +144,7 @@ export function startAuthorDom(bootstrap, { missingElementId = null, startError 
     if (path === '/api/author/games' && options.method === 'GET') {
       return { ok: true, json: async () => ({ games: structuredClone(storedGames) }) };
     }
+    if (path.endsWith('/study')) return { ok: true, json: async () => ({ study: structuredClone(study) }) };
     const deleted = /^\/api\/author\/games\/(saved_[a-f0-9]{32})$/.exec(path);
     if (deleted && options.method === 'DELETE') {
       storedGames = storedGames.filter(game => game.gameId !== deleted[1]);
@@ -161,8 +162,9 @@ export function startAuthorDom(bootstrap, { missingElementId = null, startError 
   const storedSettings = new Map();
   const localStorage = { getItem: key => storedSettings.get(key) ?? null,
     setItem: (key, value) => storedSettings.set(key, String(value)) };
-  const ready = runInNewContext(`(async () => {\n${source}\n})()`, {
+  const ready = runInNewContext(`(async () => {\n${source.replace(/^import .*;$/m, '')}\n})()`, {
     document, fetch, structuredClone, crypto: { randomUUID },
+    location: { hash }, caseStudyView: value => { const node = new Element('article'); node.textContent = value.incident; return node; },
     confirm: () => true, localStorage,
     setInterval: () => 1, clearInterval: () => {},
   });

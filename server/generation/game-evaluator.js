@@ -8,7 +8,6 @@ import { validateScenarioVerificationResult } from './scenario-verifier.js';
 import { ValidationError, fail, validateDocument } from './schema.js';
 import { correctCourtChoiceId, publicCourtQuestion } from './court-questions.js';
 import { isSequential, isOpenMaterials, stageEvidenceIds } from './sequential-investigation.js';
-import { procedureMethods } from './investigation-procedures.js';
 
 const CATEGORIES = ['UPSTREAM_INTEGRITY', 'NORMAL_PLAYTHROUGH', 'RETRY_PLAYTHROUGH',
   'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY', 'INVESTIGATION_DISCLOSURE',
@@ -127,12 +126,7 @@ function enterInvestigation(session, runtime) {
 function discoverEvidence(session, runtime, evidenceIds) {
   if (isOpenMaterials(runtime.gameCase)) {
     for (const materialId of evidenceIds) {
-      const plan = runtime.gameCase.progression.materialInvestigations?.find(item => item.evidenceId === materialId);
-      if (!plan) actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId: 'full' });
-      else for (let index = session.materialProgress?.[materialId] ?? 0; index < plan.steps.length; index++) {
-        const methodId = procedureMethods(plan, index).find(item => item.index === plan.steps[index].correctOptionIndex).methodId;
-        actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId });
-      }
+      actGenerated(session, runtime, { action: 'inspect-material', materialId, methodId: 'read' });
     }
     return evidenceIds.every(id => session.discoveredEvidenceIds.includes(id));
   }

@@ -1,5 +1,5 @@
 import { ValidationError } from './schema.js';
-import { validateGeneratedLogFormats } from './evidence-log-format.js';
+import { validateGeneratedLogFormats, validateExplorableWebLogs } from './evidence-log-format.js';
 import { validateLearningObservations } from './learning-observations.js';
 import { validatePhishingObservations } from './phishing-evidence.js';
 import { validateMaterialPlans } from './investigation-procedures.js';
@@ -28,6 +28,7 @@ export function evidenceDraftProblems(draft, evidencePackage, agentInput) {
   };
   evidencePackage.evidenceArtifacts.forEach((artifact, index) => {
     inspect(() => validateGeneratedLogFormats([artifact]), index);
+    inspect(() => validateExplorableWebLogs([artifact]), index);
     inspect(() => validateLearningObservations([artifact]), index);
   });
   // Cross-source correlations need the full set; only run after field validation.

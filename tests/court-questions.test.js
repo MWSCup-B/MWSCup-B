@@ -153,7 +153,7 @@ test('解釈の省略・別争点・未知IDは拒否し、誤解釈でも回数
   }
 });
 
-test('正しい解釈と誤った証拠では通過せず、両方が対応した時だけ解説と次の争点を公開する', async () => {
+test('正しい解釈と誤った証拠では通過せず、両方が対応した時だけ次の争点へ進む', async () => {
   const configuration = autoAuthorBootstrap().manualAttackPresets.find(item => item.attackIds.length === 3).configuration;
   const { author } = await generate(null, configuration); const { runtime } = author; assert.ok(runtime, JSON.stringify(author.auto.details));
   const session = createGeneratedGame(runtime);
@@ -178,7 +178,8 @@ test('正しい解釈と誤った証拠では通過せず、両方が対応し�
   enterCurrentCourt(session, runtime);
   const passed = actGenerated(session, runtime, { action: 'objection', ...correct });
   assert.equal(passed.currentState, 'INVESTIGATION'); assert.equal(passed.currentRound, 4);
-  assert.equal(passed.result.publicExplanation, runtime.gameCase.progression.courtIssues[2].question.explanation);
+  assert.equal(passed.result.publicExplanation, undefined);
+  assert.equal(passed.caseStudy, undefined);
 });
 
 test('4択が欠落した生成物は2回で停止し、旧形式として黙って通過させない', async () => {

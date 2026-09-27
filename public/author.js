@@ -1,8 +1,11 @@
 // 2026-09-24 修正後: mainのタイトル・モード・保存・設定UIとkawata-workの攻撃連鎖入力を接続。
 // 修正前の全文: docs/history/author-creation-before-2026-09-24.js
+import { caseStudyView } from './generated-view.js';
 let token = null, bootstrap = null, author = null, polling = null;
 let initialized = false, submitting = false, pollingRequest = false;
-let selectedAttacks = [], entryView = globalThis.location?.hash === '#mode' ? 'ACTIVITY' : 'SPLASH';
+let requestVersion = 0;
+let selectedAttacks = [], entryView = globalThis.location?.hash === '#court' ? 'COURT'
+  : globalThis.location?.hash === '#mode' ? 'ACTIVITY' : 'SPLASH';
 let savedGameItems = null, savedGamesError = '';
 const byId = id => document.getElementById(id);
 const panels = ['splash-panel', 'activity-panel', 'court-entry-panel', 'help-panel', 'settings-panel',
@@ -292,21 +295,21 @@ function renderSavedGames() {
     actions.append(play);
     if (game.cleared) {
       const studyButton = document.createElement('button'); studyButton.type = 'button'; studyButton.textContent = '解説資料';
-      const studyRegion = document.createElement('div'); studyRegion.className = 'saved-game-study'; studyRegion.hidden = true;
-      studyButton.setAttribute('aria-expanded', 'false');
+      studyButton.setAttribute('aria-haspopup', 'dialog');
       studyButton.addEventListener('click', async () => {
         studyButton.disabled = true;
         try {
-          if (!studyRegion.childElementCount) {
-            const { study } = await api(`/api/author/games/${encodeURIComponent(game.gameId)}/study`);
-            const { caseStudyView } = await import('./generated-view.js'); studyRegion.append(caseStudyView(study));
-          }
-          studyRegion.hidden = !studyRegion.hidden;
-          studyButton.setAttribute('aria-expanded', String(!studyRegion.hidden));
+          const { study } = await api(`/api/author/games/${encodeURIComponent(game.gameId)}/study`);
+          const dialog = byId('study-dialog');
+          byId('study-dialog-title').textContent = `${game.title} — 解説資料`;
+          byId('study-dialog-content').replaceChildren(caseStudyView(study));
+          dialog.addEventListener('close', () => studyButton.focus(), { once: true });
+          dialog.showModal();
+          byId('study-dialog-close').focus();
         } catch (error) { status.textContent = error.message; }
         finally { studyButton.disabled = false; }
       });
-      actions.append(studyButton); card.append(studyRegion);
+      actions.append(studyButton);
     }
     actions.append(remove); card.append(actions); list.append(card);
   }
@@ -377,13 +380,16 @@ function render() {
 async function refresh() {
   if (pollingRequest || submitting) return;
   pollingRequest = true;
-  try { author = (await api('/api/author/status')).author; render(); }
+  const version = requestVersion;
+  try { const response = await api('/api/author/status');
+    if (version === requestVersion && !submitting) { author = response.author; render(); } }
   catch (error) { showError(error.message); byId('generation-message').textContent = '状態の更新に失敗しました。' + error.message; }
   finally { pollingRequest = false; }
 }
 async function postAuthor(path, body = {}) {
   if (submitting) return;
   requireInitialized(); submitting = true; syncControls(); showError('');
+  requestVersion += 1;
   try {
     author = (await api(path, body)).author;
     if (author.canCancel) polling ??= setInterval(refresh, 400);
@@ -391,6 +397,7 @@ async function postAuthor(path, body = {}) {
   finally { submitting = false; render(); }
 }
 function bindAuthorControls() {
+byId('study-dialog-close').addEventListener('click', () => byId('study-dialog').close());
 byId('game-start').addEventListener('click', () => { entryView = 'ACTIVITY'; render(); });
 byId('activity-back').addEventListener('click', () => { entryView = 'SPLASH'; render(); });
 byId('choose-creation').addEventListener('click', () => { entryView = 'SELECTION'; render(); });
@@ -470,6 +477,11 @@ try {
     selectedAttacks = [...request.attackIds]; byId('setting').value = request.settingId; renderAttackSteps();
   }
   setInitializationState(true); render();
+  if (entryView === 'COURT') {
+    // A completed player session returns to the archive even if authoring was READY.
+    if (!author.canCancel && author.currentState !== 'MODE_SELECTION') await postAuthor('/api/author/menu');
+    await loadSavedGames();
+  }
   if (author.canCancel) polling ??= setInterval(refresh, 400);
 } catch (error) {
   initialized = false;

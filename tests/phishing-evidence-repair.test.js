@@ -132,13 +132,13 @@ for (const repair of [true, false]) test(`同じ試行でログと全引用の�
 
 for (const attackIds of [['phishing'], ['stored_xss'], ['phishing', 'stored_xss'],
   ['phishing', 'unauthorized_login', 'stored_xss']]) {
-  test(`${attackIds.join('+')}: 宿題のURL不一致・通常ログ件数・操作回数に依存せず生成してクリアできる`, async () => {
+  test(`${attackIds.join('+')}: 周辺Web記録を維持し、URL不一致や固定の操作回数に依存せずクリアできる`, async () => {
     class MinimalRunner extends MockCodexRunner {
       async runJson(args) {
         const draft = await super.runJson(args);
         if (args.phase !== 'GENERATING_EVIDENCE') return draft;
         for (const artifact of draft.evidenceArtifacts) {
-          if (artifact.type.endsWith('_LOG')) artifact.publicContent = artifact.publicContent.split('\n')[0];
+          if (artifact.type.endsWith('_LOG') && artifact.type !== 'WEB_ACCESS_LOG') artifact.publicContent = artifact.publicContent.split('\n')[0];
           if (artifact.type === 'EMAIL') {
             const link = phishingMailLinks(artifact.publicContent)[0].href;
             artifact.publicContent = `Subject: 確認のお願い\n\n次のリンクを開いて確認してください。\n${link}`;
@@ -156,8 +156,7 @@ for (const attackIds of [['phishing'], ['stored_xss'], ['phishing', 'stored_xss'
           question.correctOptionIndex = 0;
           question.explanation = '本文には確認を促す案内とリンクが残っています。保存内容はアクセスした結果を記録したものではありません。';
         }
-        // A single read is enough for these short sources. No invented normal
-        // rows or missing homework steps are needed to make the choices work.
+        // Authored walkthroughs may have one step; actual play opens full sources.
         draft.materialInvestigations = draft.evidenceArtifacts.filter(item => item.type !== 'TESTIMONY').map(item => ({
           schemaVersion: '1.0', evidenceId: item.evidenceId, steps: [{
             prompt: 'この資料が記録している内容を確認するには、どの操作を使いますか。',

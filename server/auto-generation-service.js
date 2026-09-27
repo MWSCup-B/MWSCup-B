@@ -295,7 +295,7 @@ function buildAutomaticProgression(session, courtQuestions, materialInvestigatio
       exonerationRef: exoneration?.exonerationId ?? 'missing_exoneration' };
   });
   const objectionRules = baseRules;
-  const openingEvidence = [artifacts.find((item, index) => artifactRoutes[index].targetId === targets[0].targetId)];
+  const openingEvidence = artifacts;
   // Contradiction array order is not the investigation order. Match the first
   // staged testimony to the opening source instead of quoting a later claim.
   const openingStatementId = statements.find(item => set.contradictions
@@ -551,11 +551,15 @@ export class AutoGenerationManager {
   }
 
   returnToMenu(session) {
-    if (this.active || session.auto.state !== 'READY') throw new GameError(
-      'READY_GAME_REQUIRED', 'generation', '完成したゲームの画面から戻ってください。', 409);
+    if (this.active || session.autoOperationRunning) throw new GameError(
+      'GENERATION_LOCKED', 'generation', '生成処理の終了後に戻ってください。', 409);
+    const selection = structuredClone(session.auto.selection);
+    const generationSettings = session.generationSettings;
     const fresh = createAutoAuthorSession();
     for (const key of Object.keys(session)) delete session[key];
     Object.assign(session, fresh);
+    session.auto.selection = selection;
+    session.generationSettings = generationSettings ?? fresh.generationSettings;
     return autoAuthorView(session);
   }
 

@@ -458,3 +458,12 @@ html:has(body.playing-generated), body.playing-generated { height: 100%; overflo
   .case-material-work .case-methods, .case-material-work .case-interpretations { grid-template-columns: minmax(0, 1fr); }
   .case-material-work .case-interpretation { min-height: 0; }
 }
+.case-material-work > .case-reference { clear: both; }
+.case-searchable-source { clear: both; margin-top: 1rem; }
+.case-searchable-source label { display: block; }
+.case-searchable-source input { display: block; width: 100%; box-sizing: border-box; margin: .5rem 0; padding: .65rem; color: #18283c; background: #fff; border: 1px solid #8193a8; }
+.case-filtered-source { overflow: auto; max-height: 52dvh; min-height: 12rem; white-space: pre; background: #0b1825; color: #e6f0f5; padding: 1rem; font: .85rem/1.8 ui-monospace, monospace; }
+.case-game .case-ending-explanation { background: #faf8f2; color: #18283c; padding: 1.25rem; }
+.case-ending-explanation > h2 { color: #18283c; border-bottom: 2px solid #b9985d; }
+.case-finish { display: block; text-align: center; text-decoration: none; align-self: center; padding: .8rem 2rem; }
+.case-study blockquote { margin: .5rem 0; padding-left: 1rem; border-left: 3px solid #b9985d; }

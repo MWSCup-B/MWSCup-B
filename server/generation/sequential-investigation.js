@@ -39,7 +39,8 @@ function validateDesign(targets, rules, issues, initialTargets, openingEvidence,
       evidenceStage.set(rule.evidenceId, index);
     }
   });
-  if (openingEvidence.some(id => evidenceStage.get(id) !== 0)) reject('冒頭の報告書には、最初の調査先で再確認できる資料を使用してください。');
+  if (openingEvidence.some(id => open ? !evidenceStage.has(id) : evidenceStage.get(id) !== 0))
+    reject('冒頭の報告書には、調査可能な資料を使用してください。順次調査方式では最初の調査先の資料に限ります。');
   for (const [index, issue] of issues.entries()) {
     if (issue.requiredEvidenceIds.some(id => !evidenceStage.has(id) || evidenceStage.get(id) > index)) {
       reject(`調査${index + 1}の論証に、まだ開いていない調査先の資料が必要です。現在と過去の調査資料だけで解ける主張・根拠にしてください。`);

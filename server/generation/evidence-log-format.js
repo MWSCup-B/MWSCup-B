@@ -3,6 +3,17 @@ import { fail } from './schema.js';
 export const LOG_TYPES = Object.freeze(['WEB_ACCESS_LOG', 'AUTHENTICATION_LOG', 'APPLICATION_LOG',
   'DATABASE_LOG', 'NETWORK_LOG']);
 
+// New teaching logs must offer an actual search space. Do not pad or rewrite
+// sealed evidence here: generation must supply records within its source contract.
+export function validateExplorableWebLogs(artifacts) {
+  artifacts.forEach((artifact, index) => {
+    if (artifact.type !== 'WEB_ACCESS_LOG') return;
+    const lines = artifact.publicContent.trim().split(/\r?\n/);
+    if (new Set(lines).size < 6) fail('EVIDENCE_LOG_CONTEXT_REQUIRED', `evidenceArtifacts[${index}].publicContent`,
+      'Webログには対象行だけでなく、同じ取得元・記録条件の範囲の周辺記録を含む6件以上の異なる行を用意してください。取得可能な項目だけを使い、背景記録を攻撃の成立や人物帰属の根拠にしないでください。対応する引用と手順も原文に合わせてください。');
+  });
+}
+
 // The configured services do not specify vendor/version/native logging format.
 // Automatic generation therefore uses product-neutral JSON Lines, with fields
 // appropriate to the *observed artifact*. This checks syntax, not factual support.

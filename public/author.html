@@ -106,5 +106,9 @@
     <section id="shutdown-panel" class="shutdown-stage" hidden aria-labelledby="shutdown-title"><div><p class="title-kicker">SERVER CLOSED</p><h1 id="shutdown-title">ゲームを終了しました</h1><p>ローカルサーバーを停止しました。このタブを閉じてください。</p></div></section>
   </main>
   <dialog id="exit-dialog" class="exit-dialog" aria-labelledby="exit-dialog-title"><form method="dialog"><p class="title-kicker">GAME EXIT</p><h2 id="exit-dialog-title">ゲームを終了しますか？</h2><p>完成したゲームはすでにローカルへ自動保存されています。</p><p>「保存せず終了」は現在の未完了な制作状態だけを破棄します。保存済みゲームは削除されません。</p><div class="exit-dialog-actions"><button id="exit-cancel" class="secondary" value="cancel">キャンセル</button><button id="exit-without-save" class="secondary danger-link" type="button">保存せず終了</button><button id="exit-save" type="button">保存して終了</button></div></form></dialog>
+  <dialog id="study-dialog" class="study-dialog" aria-labelledby="study-dialog-title">
+    <header class="study-dialog-header"><h2 id="study-dialog-title">解説資料</h2><button id="study-dialog-close" type="button" autofocus>閉じる</button></header>
+    <div id="study-dialog-content" class="study-dialog-content"></div>
+  </dialog>
 </body>
 </html>

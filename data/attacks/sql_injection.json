@@ -12,7 +12,7 @@
   ],
   "authoring": {
     "preferredInvestigationType": "WEB_LOG",
-    "evidenceAnswer": "Webアクセス記録とDB監査記録から、入力に対応してSQL構造が変化した対象リクエストを確認する。",
+    "evidenceAnswer": "Web記録の時刻・要求対象と、対応するDB監査の実行SQLの識別情報を照合する。DB記録のSQLの条件・構造を読み、要求の到達とSQLの実行を区別する。Web入力本文の記録は前提にしない。",
     "sourceNodeBinding": "source",
     "targetServiceBinding": "web",
     "investigationServiceBinding": "web"

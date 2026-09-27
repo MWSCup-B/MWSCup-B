@@ -91,7 +91,7 @@ export class MockCodexRunner {
       for (const artifact of draft.evidenceArtifacts) delete artifact.integrity;
       for (const artifact of draft.evidenceArtifacts.filter(item => item.type.endsWith('_LOG'))) {
         const example = JSON.parse(artifact.publicContent.split('\n')[0]);
-        const background = [1, 2].map(index => {
+        const background = [1, 2, 3, 4, 5, 6, 7].map(index => {
           const row = structuredClone(example);
           for (const [key, value] of Object.entries(row)) {
             if (typeof value !== 'string') continue;

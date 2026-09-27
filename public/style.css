@@ -452,6 +452,18 @@ code { font-family: ui-monospace, monospace; }
 @media (max-width: 700px) { .attack-browser .choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-height: 650px) { .attack-browser .choice-card { padding: .35rem; font-size: .85rem; } }
 .generation-settings { margin-top: .8rem; }
+/* Archive explanations use a centered reading area with native modal focus. */
+.study-dialog { width: min(960px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); padding: 0; border: 2px solid #b9985d; border-radius: .8rem; background: #faf8f2; color: #18283c; }
+.study-dialog::backdrop { background: #081426bb; }
+.study-dialog[open] { display: flex; flex-direction: column; }
+.study-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid #d7cdb9; }
+.study-dialog-header h2 { margin: 0; font-size: 1.15rem; }
+.study-dialog-content { min-height: 0; overflow: auto; padding: 1rem 1.5rem 2rem; overscroll-behavior: contain; }
+.study-dialog .case-study { max-width: 78ch; margin: 0 auto; line-height: 1.9; }
+.study-dialog pre { white-space: pre; overflow: auto; max-height: 45dvh; padding: 1rem; background: #122234; color: #edf3fa; font: .85rem/1.7 ui-monospace, monospace; }
+.study-dialog p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.study-dialog summary { cursor: pointer; padding-block: .5rem; font-weight: bold; }
+@media (max-width: 600px) { .study-dialog-header, .study-dialog-content { padding: .8rem; } }
 .generation-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .generation-settings-fields label { display: grid; gap: .3rem; }
 @media (max-width: 600px) { .generation-settings-fields { grid-template-columns: minmax(0, 1fr); } }

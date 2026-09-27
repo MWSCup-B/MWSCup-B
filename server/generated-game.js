@@ -4,7 +4,7 @@ import { investigationCompletionId, publicInvestigationTarget, validateInvestiga
 import { GameError } from './game.js';
 import { isSequential, isOpenMaterials, stageEvidenceIds } from './generation/sequential-investigation.js';
 import { materialEntries, materialMethods, materialOutput, materialQuestion, materialWorkbench, buildCaseStudy } from './generation/material-investigation.js';
-import { publicCourtQuestion } from './generation/court-questions.js';
+import { publicCourtQuestion, publicInvestigationQuestion } from './generation/court-questions.js';
 import { procedureMethods, procedureOutput } from './generation/investigation-procedures.js';
 import { generatedSceneDialogue } from './generation/dialogue-template.js';
 
@@ -117,8 +117,8 @@ function playerView(session, runtime) {
     return { ...base,
       canReturnToCourt: canReturnToCourt(session, runtime.gameCase),
       ...(isOpenMaterials(runtime.gameCase) ? { workbench: materialWorkbench(session, runtime.gameCase) } : {}),
-      ...(isSequential(runtime.gameCase) && !isOpenMaterials(runtime.gameCase) && canReturnToCourt(session, runtime.gameCase)
-        ? { courtQuestion: publicCourtQuestion(issue.question), investigationClaim: {
+      ...(isSequential(runtime.gameCase)
+        ? { ...(!isOpenMaterials(runtime.gameCase) && canReturnToCourt(session, runtime.gameCase) ? { courtQuestion: publicCourtQuestion(issue.question) } : {}), investigationClaim: {
           spokenContent: testimony.statements.find(item => item.statementId === issue.question.statementId).spokenContent,
           speaker: characters.get(testimony.speakerCharacterId),
         } } : {}),
@@ -156,7 +156,7 @@ function playerView(session, runtime) {
     ...(isSequential(runtime.gameCase) ? { pendingInterpretation: {
       statementId: courtQuestion.statementId,
       ...(isOpenMaterials(runtime.gameCase)
-        ? publicCourtQuestion(materialQuestion(runtime.gameCase, session.selectedMaterialId))
+        ? publicInvestigationQuestion(materialQuestion(runtime.gameCase, session.selectedMaterialId, session.currentRound))
         : courtQuestion).choices.find(choice => choice.choiceId === session.selectedInterpretationChoiceId),
       ...(isOpenMaterials(runtime.gameCase) ? { evidenceId: session.selectedMaterialId } : {}),
     } } : courtQuestion ? { courtQuestion: structuredClone(courtQuestion) } : {}),
@@ -203,17 +203,21 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     const item = internal.detective.evidence.find(item => item.evidenceId === materialId);
     const plan = internal.progression.materialInvestigations?.find(item => item.evidenceId === materialId);
     const stepIndex = session.materialProgress?.[materialId] ?? 0;
-    const method = (plan ? procedureMethods(plan, stepIndex) : materialMethods(item)).find(item => item.methodId === methodId);
+    // Reading the full source is an investigation action, not a multiple-choice quiz.
+    // Keep authored procedures callable for saved clients and post-game walkthroughs.
+    const reading = methodId === 'read';
+    const method = reading ? { methodId: 'read', label: '資料の原文' }
+      : (plan ? procedureMethods(plan, stepIndex) : materialMethods(item)).find(item => item.methodId === methodId);
     if (!method) throw new GameError('UNKNOWN_INVESTIGATION_METHOD', 'methodId', '表示された調査方法から選んでください。');
     const rule = internal.detective.evidenceDiscoveryRules.find(rule => rule.evidenceId === materialId
       && prerequisitesMet(rule, new Set(session.discoveredEvidenceIds), new Set(session.completedInvestigationActions)));
     if (!rule) throw new GameError('MATERIAL_PREREQUISITES_REQUIRED', 'materialId', '先に関連する資料の調査を完了してください。');
-    const advances = plan ? method.index === plan.steps[stepIndex].correctOptionIndex : ['full', 'numbered'].includes(methodId);
+    const advances = reading || (plan ? method.index === plan.steps[stepIndex].correctOptionIndex : ['full', 'numbered'].includes(methodId));
     if (plan && advances) {
       session.materialProgress ??= {};
-      session.materialProgress[materialId] = stepIndex + 1;
+      session.materialProgress[materialId] = reading ? plan.steps.length : stepIndex + 1;
     }
-    const complete = plan ? advances && stepIndex + 1 === plan.steps.length : advances;
+    const complete = reading || (plan ? advances && stepIndex + 1 === plan.steps.length : advances);
     if (complete) {
       if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
       if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
@@ -221,7 +225,7 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
       if (!session.completedInvestigationActions.includes(completionId)) session.completedInvestigationActions.push(completionId);
     }
     session.lastMaterialResult = { materialId, methodId, label: method.label,
-      output: plan ? procedureOutput(item.publicContent, method.operation) : materialOutput(item.publicContent, methodId), complete,
+      output: reading ? item.publicContent : plan ? procedureOutput(item.publicContent, method.operation) : materialOutput(item.publicContent, methodId), complete,
       next: complete ? '調査した資料を証拠ファイルに登録しました。別の資料と照合するか、提出する証拠を決めましょう。'
         : advances ? '結果を確認して、次の調査手順へ進みましょう。'
           : 'この操作だけでは調査目的を確認できません。結果と調査目的を比較し、別の操作を選んでください。' };
@@ -290,7 +294,7 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     if (!allowed) throw new GameError('COURT_RETURN_CONDITION_NOT_MET', 'evidence',
       '証拠の調査が不足しています。', 409);
     if (isSequential(internal)) {
-      const question = isOpenMaterials(internal) ? materialQuestion(internal, evidenceId)
+      const question = isOpenMaterials(internal) ? materialQuestion(internal, evidenceId, session.currentRound)
         : internal.progression.courtIssues[session.currentRound - 1].question;
       if (isOpenMaterials(internal) && (!session.collectedEvidenceIds.includes(evidenceId)
         || !question?.supportingQuotes.every(quote => session.collectedEvidenceIds.includes(quote.evidenceId)))) {
@@ -353,7 +357,7 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
       && session.currentRound < internal.progression.courtRoundCount;
     session.result = outcome.outcome === 'SUCCESS'
       ? { outcome: 'SUCCESS', objection: '証言の食い違いを示した！', hasNextRound,
-        ...(internal.progression.courtIssues?.[session.currentRound - 1]?.question ? {
+        ...(!hasNextRound && internal.progression.courtIssues?.[session.currentRound - 1]?.question ? {
           publicExplanation: internal.progression.courtIssues[session.currentRound - 1].question.explanation,
         } : {}) }
       : { outcome: 'FAILURE', publicFeedback: outcome.publicFailureFeedback };

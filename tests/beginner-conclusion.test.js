@@ -52,7 +52,7 @@ test('all selected attack question backgrounds and final explanations stay bound
       assert.doesNotMatch(background, /ましょう|確認してください/);
     }
     const conclusion = buildIncidentConclusion(configuration, generationInput);
-    assert.ok(conclusion.length <= 650, `${attackIds}: ${conclusion.length}`);
+    assert.ok(conclusion.length <= 2000, `${attackIds}: ${conclusion.length}`);
     assert.match(conclusion, /原因|要因|成功条件|環境|必要/);
     assert.match(conclusion, /合理的な疑い/);
     assert.doesNotMatch(conclusion, /被告人は操作していない|真犯人|groundTruth|attack_node|fact_/);

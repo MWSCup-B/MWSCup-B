@@ -258,7 +258,7 @@ export function createDefaultConfiguration({ mode = 'MANUAL', difficulty = 1,
   const specs = {
     phishing: { sourceNodeId: 'sender-host', investigationSourceNodeId: 'mail-host', investigations: ['EMAIL'], evidenceAnswer: '送信元と誘導先を示すメールヘッダーおよび本文が、後続のWebアクセスと同じ時系列にある。', effect: 'この利用者・ブラウザ・Webサービス・リクエストに限定したアクセス。認証情報取得やコード実行を意味しない。' },
     reflected_xss: { sourceNodeId: 'client-host', investigationSourceNodeId: 'web-host', investigations: ['WEB_LOG'], evidenceAnswer: '対象時刻のWebアクセスログに、反射された入力を含む同一リクエストが記録されている。', effect: 'このブラウザの対象Webオリジンでスクリプトが実行される。Webオリジンを越えた権限やDB権限を付与しない。' },
-    sql_injection: { sourceNodeId: 'sender-host', investigationSourceNodeId: 'web-host', investigations: ['WEB_LOG'], evidenceAnswer: 'Webログとアプリケーション記録に、対象時刻のSQL構文を変化させた入力が対応して記録されている。', effect: '当該リクエストによりSQLが改変され、指定されたDB主体の権限範囲内で実行される。具体的な漏えい・改変被害は別途条件が必要。' },
+    sql_injection: { sourceNodeId: 'sender-host', investigationSourceNodeId: 'web-host', investigations: ['WEB_LOG'], evidenceAnswer: 'Web記録の時刻・要求対象と、対応するDB監査の実行SQLの識別情報を照合する。DB記録のSQLの条件・構造を読み、要求の到達とSQLの実行を区別する。Web入力本文の記録は前提にしない。', effect: '当該リクエストによりSQLが改変され、指定されたDB主体の権限範囲内で実行される。具体的な漏えい・改変被害は別途条件が必要。' },
   };
   return {
     schemaVersion: '1.0', configurationId: `configuration_${randomBytes(8).toString('hex')}`,

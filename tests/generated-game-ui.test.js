@@ -33,6 +33,30 @@ const base = { mode: 'GENERATED', gameCaseId: 'case_ui', currentRound: 1, totalR
 const email = { evidenceId: 'mail', title: '保存メール', type: 'EMAIL',
   publicContent: '<a href="https://example.invalid/actual">https://example.invalid/display</a>' };
 
+test('調査は全文を開いて複数候補へ絞り込み、資料を替えても検察側の主張は固定される', async () => {
+  const records = ['09:00 /home', '09:01 /records request=a', '09:02 /records request=b',
+    '09:03 /help', '09:04 /home', '09:05 <script>unsafe()</script>'];
+  const log = { evidenceId: 'log', title: 'Web記録', type: 'WEB_ACCESS_LOG', publicContent: records.join('\n') };
+  const game = { ...base, currentState: 'INVESTIGATION', investigationMode: 'OPEN_MATERIALS',
+    investigationClaim: { spokenContent: '対象の要求は一度しかありません。' },
+    collectedEvidence: [log, email], workbench: { materials: [log, email].map(item => ({
+      materialId: item.evidenceId, label: item.title, collected: true,
+      step: { prompt: '表示してはいけない解法' }, methods: [{ description: 'これが正解' }],
+    })) } };
+  const page = ui(game);
+  assert.doesNotMatch(page.screen.textContent, /表示してはいけない|これが正解/);
+  assert.match(page.screen.querySelector('.case-filtered-source').textContent, /09:00[\s\S]*09:05/);
+  const input = page.screen.querySelector('input'); input.value = '/records'; await input.dispatch('input');
+  assert.match(page.screen.textContent, /2 \/ 6 行/);
+  assert.equal(page.screen.querySelector('.case-filtered-source').textContent, '2  ' + records[1] + '\n3  ' + records[2]);
+  await page.click('全文に戻す');
+  assert.match(page.screen.querySelector('.case-filtered-source').textContent, /<script>unsafe/);
+  assert.equal(page.screen.querySelector('script'), null);
+  await page.screen.querySelector('[data-material-id="mail"]').dispatch('click');
+  assert.match(page.screen.querySelector('.case-reference').textContent, /対象の要求は一度しかありません/);
+  assert.equal(page.calls.length, 0);
+});
+
 test('the case file omits the incident-summary item and keeps entry to the report', async () => {
   const page = ui({ ...base, currentState: 'TITLE' });
   assert.doesNotMatch(page.screen.textContent, /事件のあらまし/);
@@ -414,10 +438,8 @@ test('generated script and UI play from the one-page report through a wrong answ
     for (const plan of runtime.gameCase.progression.materialInvestigations) {
       if (session.collectedEvidenceIds.includes(plan.evidenceId)) continue;
       await page.screen.querySelector(`[data-material-id="${plan.evidenceId}"]`).dispatch('click');
-      for (const [index, step] of plan.steps.entries()) {
-        const id = procedureMethods(plan, index).find(item => item.index === step.correctOptionIndex).methodId;
-        await page.screen.querySelector(`[data-method-id="${id}"]`).dispatch('click');
-      }
+      assert.ok(page.screen.querySelector('.case-filtered-source'));
+      assert.ok(session.collectedEvidenceIds.includes(plan.evidenceId));
     }
     const pair = currentCorrectPair(runtime, round);
     for (const wrong of round === 1 ? [true, false] : [false]) {

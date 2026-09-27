@@ -24,6 +24,15 @@ export function publicCourtQuestion(question) {
       .sort((a, b) => a.choiceId.localeCompare(b.choiceId)) };
 }
 
+export function publicInvestigationQuestion(question) {
+  const result = publicCourtQuestion(question);
+  result.prompt = '検察側の主張に対し、資料からどの反論ができますか。';
+  // Presentation compatibility for older saves; IDs still grade original choices.
+  result.choices = result.choices.map(choice => ({ ...choice, text: choice.text.replace(
+    /(?:Stored|Reflected)\s*XSS|SQLインジェクション|(?:蓄積|格納|反射)型XSS|クロスサイトスクリプティング/gi, 'この攻撃') }));
+  return result;
+}
+
 export function correctCourtChoiceId(question) {
   return courtChoiceId(question, question.choices[question.correctOptionIndex]);
 }
@@ -75,6 +84,10 @@ export function courtQuestionSourceErrors(questions, evidenceSet, agentInput = n
   for (const question of questions) {
     try {
       validateCourtQuestion(question);
+      if (agentInput && question.choices.some(text => /(?:Stored|Reflected)\s*XSS|SQLインジェクション|(?:蓄積|格納|反射)型XSS|クロスサイトスクリプティング/i.test(text))) {
+        fail('EVIDENCE_QUESTION_ATTACK_NAME_LEAK', 'courtQuestions.choices',
+          'プレイ中の反論候補には攻撃名を記載せず、記録された処理についての具体的な仮説にしてください。攻撃の名前・定義は終了後のexplanationに記載してください。');
+      }
       const publicText = [question.prompt, ...question.choices, question.explanation];
       if (agentInput && publicText.some(text => leakedInternalValue(text, agentInput)
         || agentInput.characters.characters.some(person => text.includes(person.characterId)))) {

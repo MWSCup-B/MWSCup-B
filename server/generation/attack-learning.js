@@ -48,8 +48,8 @@ export const ATTACK_LEARNING = Object.freeze({
   },
   sql_injection: {
     name: 'SQLインジェクション', sources: ['web_access_record', 'database_statement_record'],
-    comparison: 'Web要求の対象・入力部分と、それに対応するDB監査のSQLを照合する。値として扱うべき入力がSQLの条件・構造に影響した箇所を読み取り、要求の到達とDBでの実行を区別する。',
-    limit: '記録にないクエリ結果・流出件数・OS操作やDB権限の拡大を補完しない。SQLの抜粋は実行せず文字列として比較する。',
+    comparison: 'Web記録の時刻・要求対象で対象要求を確認し、その要求に対応するDB監査の実行SQLを読む。SQLのstatement欄（同義のsql・query欄も可）の条件式・演算子・引用符の範囲から、文字列の値と命令の構造を区別する。両資料で保証された対象要求と実行SQLの識別情報を照合し、Webへの要求の到達とDBでの実行を区別する。',
+    limit: 'Web記録に入力値や本文が保存されるとは仮定しない。未記録の入力や通常要求の比較例、相関IDを追加しない。識別情報で対応を確認できない場合は未確認とし、時刻の近さだけで同一要求と断定しない。記録にないクエリ結果・流出件数・OS操作やDB権限の拡大を補完しない。SQLは実行せず文字列として読む。',
   },
   unauthorized_login: {
     name: '不正ログイン', sources: ['authentication_record', 'application_session_record'],
@@ -83,7 +83,7 @@ const SOURCE_GUIDES = Object.freeze({
   web_access_record: ['Web要求', '要求対象と時刻を確認し、どのページへの要求が記録されたかを読みましょう。'],
   stored_content_record: ['保存投稿', '投稿の識別子・保存内容と閲覧対象の対応を調べましょう。'],
   browser_execution_record: ['ブラウザ計測', 'どの閲覧対象の実行を計測したか、保存資料や要求記録と照合しましょう。'],
-  database_statement_record: ['DB監査', 'Web入力とSQLの条件・構造を比べ、どこで入力が処理されたかを調べましょう。'],
+  database_statement_record: ['DB監査', '対象要求に対応する実行SQLの識別情報と、記録されたSQLの条件・構造を確認しましょう。'],
   credential_submission_record: ['フォーム送受信', '送信先・時刻・相関IDを照合し、アクセスと送受信を分けて整理しましょう。'],
   authentication_record: ['認証監査', 'アカウント・時刻・成否を読み、認証時点で確認できる範囲を整理しましょう。'],
   application_session_record: ['セッション監査', '認証の受理、セッション受入れ、利用できる権限を分けて調べましょう。'],

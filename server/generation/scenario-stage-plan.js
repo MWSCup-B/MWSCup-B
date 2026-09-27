@@ -104,7 +104,7 @@ export function buildStageRequirements(configuration, generationInput) {
         credential_phishing: 'ページを閲覧しただけで、偽フォームへ送信した資料はありません。',
         stored_xss: 'ブラウザはページを開いただけで、保存された投稿の実行を示す記録はありません。',
         reflected_xss: '要求がサーバーに届いただけで、ブラウザで動いたことを示す記録はありません。',
-        sql_injection: '入力は検索する値として処理されただけで、SQLの条件や構造には影響していません。',
+        sql_injection: '対象の要求で実行されたSQLの検索条件は、指定された一つの値だけに一致する条件です。',
         unauthorized_login: '認証されたアカウントとWeb側のセッションを照合する必要はありません。認証成功なら、対象Webでどんな操作も許されます。',
         clickfix: '案内の要求IDと端末のプロセスIDは、同じ操作を示す番号です。実行ユーザーの記録から、被告人が案内に従って起動したと分かります。',
         password_spray: '認証の制限設定があるので、記録された不審な試行はすべて遮断されたはずです。',
@@ -118,6 +118,10 @@ export function buildStageRequirements(configuration, generationInput) {
       questionFocus = `${completed.map(task => task.name).join('・')}の取得済み資料を比較し、対象・値の対応と攻撃の特徴、記録から判断できる範囲を問う4択。対象が分かる読みやすい問題文にする。`;
       expectedInference = completed.map(task => task.comparison + task.limit).join('\n');
       limitedRefutation = 'この主張を資料の比較で反駁する。各資料が観測する段階を分け、単一資料に攻撃全体の結論を書かない。' + focus.limit;
+      if (attackId === 'sql_injection') {
+        questionFocus = 'Web記録の時刻・要求対象で調査対象を確認し、対応するDB監査のstatement（sql・query）欄に記録された実行SQLの条件式・演算子・引用符の範囲を読む。対象要求とSQLの識別情報で照合できる範囲を問う。Webの入力本文や通常要求の比較例は要求しない。';
+        limitedRefutation = '対象要求と実行SQLの対応、およびDB記録の条件式が示す検索対象の範囲に基づき、検索条件についてのclaimを反駁する。入力値がWeb記録に残ることを前提にしない。人物帰属の一般論だけに置き換えない。' + focus.limit;
+      }
       if (attackId === 'clickfix') {
         questionFocus = '保存案内の要求ID・応答時刻・求める操作と、今回の端末計測の端末ID・プロセスID・親子関係・実行ユーザー・起動結果を読み比べる。二つのIDが識別する対象の違い、起動の確認範囲、被告人への帰属を選ぶ4択。各資料の実在する値を使い、対応の欠落は未確認とする。';
         expectedInference = focus.comparison + focus.limit
@@ -142,7 +146,7 @@ export function buildStageRequirements(configuration, generationInput) {
       limitedRefutation += 'URL不一致は必須ではない。扱う場合は公開本文内の比較結果に限定し、Ground Truthに事件事実を追加しない。';
     }
     return { requirementId: `requirement_stage_${index + 1}`, purpose: 'CONTRADICTION_PROOF',
-      description: `第${index + 1}段階: ${stage.displayName}。investigationStageの主張は架空の証言であり技術的事実ではない。groundsの観測資料だけをこの段階の4択・反駁に使う。今回の資料は観測資料ごとの取得要件に示された既存の取得元・操作で取得し、以前の資料は収集済みのものを使う。\n${learningDesign}\n問題文に必要な攻撃の仕組み・用語の背景：${buildQuestionBackground(stages, index, generationInput)} この背景は制作資料であり、問題の前には表示しない。必要な定義だけを問題文に組み込み、実際の事件の経緯は取得済み資料の値と確認できる時系列から説明する。答えや将来の資料を先に示さない。`,
+      description: `第${index + 1}段階: ${stage.displayName}。investigationStageの主張は架空の証言であり技術的事実ではない。groundsの観測資料だけをこの段階の4択・反駁に使う。今回の資料は観測資料ごとの取得要件に示された既存の取得元・操作で取得し、以前の資料は収集済みのものを使う。\n${learningDesign}\n終了後の解説に使う攻撃の仕組み・用語の背景：${buildQuestionBackground(stages, index, generationInput)} この背景は制作資料であり、問題文へコピーしない。プレイ中は検察側のclaimを争点ごとに固定し、資料を替えても変更しない。原文全体を検索・照合し、資料・証拠箇所・反論を学習者が判断する。攻撃名、読み方、正解の箇所は事前に説明しない。必要な基礎知識、実際の事件の経緯、原文の根拠、各選択肢の読み違いは終了後に丁寧な日本語で説明する。`,
       investigationStage: { targetId: stage.targetId, order: index + 1, sourceNodeId: stage.sourceNodeId,
         witnessCharacterId: 'character_witness', subjectCharacterId: 'character_defendant',
         claim, questionFocus, expectedInference, limitedRefutation },

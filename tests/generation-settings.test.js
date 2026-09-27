@@ -6,7 +6,7 @@ import { MockCodexRunner } from './helpers/mock-codex.js';
 import { autoAuthorBootstrap } from '../server/auto-generation-service.js';
 import { startAuthorDom } from './helpers/author-dom.js';
 
-test('モデル・エフォートは初期生成、独立検証、修正、承認後の証拠生成まで維持される', async () => {
+test('攻撃・舞台の基盤設計後もモデル・エフォートは独立検証、修正、証拠生成まで維持される', async () => {
   const runner = new MockCodexRunner({ reviewOutcomes: ['NEEDS_REVISION', 'VERIFIED'] });
   const manager = new AutoGenerationManager({ jsonRunner: runner }); const session = createAutoAuthorSession();
   const settings = { schemaVersion: '1.0', model: 'gpt-5.5', reasoningEffort: 'high' };
@@ -17,7 +17,8 @@ test('モデル・エフォートは初期生成、独立検証、修正、承�
   manager.approve(session); await manager.waitForIdle();
   assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));
   const invocations = runner.calls.filter(item => item.kind === 'invocation');
-  for (const phase of ['GENERATING_SCENARIO', 'REVIEWING_SCENARIO', 'REVISING_SCENARIO', 'GENERATING_EVIDENCE'])
+  assert.ok(!invocations.some(call => call.phase === 'GENERATING_SCENARIO'));
+  for (const phase of ['REVIEWING_SCENARIO', 'REVISING_SCENARIO', 'GENERATING_EVIDENCE'])
     assert.ok(invocations.some(call => call.phase === phase), phase);
   for (const call of invocations) {
     assert.deepEqual(call.generationSettings, { schemaVersion: '1.0', model: 'gpt-5.5', reasoningEffort: 'high' });

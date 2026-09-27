@@ -7,7 +7,7 @@ compactCourt?.addEventListener('change', () => redrawForViewport?.());
 // View state contains selections only. Progress, ownership and verdicts belong to the server.
 const view = { key: '', state: '', page: 0, target: null, evidence: null, deskEvidence: null, statement: null,
   interpretation: null, discoveryKey: '', scriptFinished: false, evidencePage: 0, filePage: 0, referencePage: 0,
-  textPages: {}, choicePage: 0, material: null, submission: false };
+  textPages: {}, choicePage: 0, material: null, submission: false, filters: {}, caseId: null };
 const phases = { TITLE: '事件ファイル', INITIAL_COURT: '事件報告書', INVESTIGATION: '調査パート',
   RETRIAL_COURT: '法廷パート', GUILTY_RETRY: 'もう一度、調べよう', ACQUITTED: '判決', BLOCKED: '審理終了' };
 const types = { EMAIL: 'メール', WEB_ACCESS_LOG: 'アクセス記録', TESTIMONY: '供述調書',
@@ -185,64 +185,95 @@ function materialDesk(game, redraw, action) {
   for (const item of materials) {
     const selected = item.materialId === view.material;
     const choice = button(`${item.label}${item.collected ? '（確認済み）' : ''}`, () => {
-      view.material = item.materialId; view.interpretation = null; redraw('material');
+      view.material = item.materialId; view.interpretation = null;
+      if (!item.collected && !view.submission) action('inspect-material', { materialId: item.materialId, methodId: 'read' });
+      else redraw('material');
     }, selected ? 'is-selected' : '');
     choice.dataset.materialId = item.materialId; choice.setAttribute('aria-pressed', String(selected)); list.append(choice);
   }
   const material = materials.find(item => item.materialId === view.material);
-  const work = panel(view.submission ? '検察側の主張に対し、資料から何が言える？' : '調査方法を選ぶ');
+  const work = panel(view.submission ? '証拠と反論を選ぶ' : '資料を調べる');
   work.className += ' case-material-work';
   work.append(assistantPortrait());
+  if (game.investigationClaim) work.append(reference('検察側の主張',
+    game.investigationClaim.spokenContent, `争点 ${game.currentRound}`));
   const toggle = button(view.submission ? '資料の調査へ戻る' : '提出する証拠を決める', () => {
     view.submission = !view.submission; view.interpretation = null; redraw();
   });
   work.append(toggle);
   if (material && !view.submission) {
-    work.append(el('p', material.label));
-    if (material.step) work.append(el('h3', `調査 ${material.step.number} / ${material.step.total}`), el('p', material.step.prompt));
-    const result = material.result ?? game.workbench.result;
-    if (result?.materialId === material.materialId) {
-      const output = el('section', undefined, 'case-material-result');
-      output.setAttribute('aria-label', '操作の実行結果');
-      const original = el('pre', result.output); original.tabIndex = 0;
-      output.append(el('h3', result.label), original, el('p', result.next)); work.append(output);
-      if (material.methods.length) work.append(el('h3', '次の調査方法を選ぶ'));
-    } else work.append(el('p', '保存した資料のコピーを調べます。コマンドはゲーム内の表示操作です。', 'case-muted'));
-    const methods = el('div', undefined, 'case-methods');
-    for (const method of material.methods) {
-      const option = button('', () => action('inspect-material', { materialId: material.materialId, methodId: method.methodId }));
-      option.dataset.methodId = method.methodId;
-      option.append(el('strong', method.label), el('small', method.description)); methods.append(option);
-    }
-    work.append(methods);
-    if (material.collected) {
-      const source = (game.collectedEvidence ?? []).find(item => item.evidenceId === material.materialId);
-      if (source) work.append(evidenceReader(source));
-    }
+    const source = (game.collectedEvidence ?? []).find(item => item.evidenceId === material.materialId);
+    if (source) work.append(searchableSource(source));
+    else work.append(button('原文を開く', () => action('inspect-material', { materialId: material.materialId, methodId: 'read' }), 'case-primary'));
   } else if (material?.question) {
-    work.append(el('p', material.question.prompt));
+    work.append(el('p', '選んだ資料を根拠に、どの反論を提示しますか。'));
     const choices = el('div', undefined, 'case-interpretations'); choices.setAttribute('aria-label', '反対主張の4択');
     material.question.choices.forEach((choice, index) => {
-      const option = button(`${String.fromCharCode(65 + index)}. ${choice.text}`, () => {
+      const option = button(`${String.fromCharCode(65 + index)}. ${reasoningText(choice.text)}`, () => {
         view.interpretation = choice.choiceId; redraw('interpretation');
       }, `case-interpretation${view.interpretation === choice.choiceId ? ' is-selected' : ''}`);
       option.dataset.choiceId = choice.choiceId; option.setAttribute('aria-pressed', String(view.interpretation === choice.choiceId)); choices.append(option);
     });
     work.append(choices, button('この資料と主張で法廷へ', () => action('retrial', {
       evidenceId: material.materialId, interpretationChoiceId: view.interpretation }), 'case-primary', !view.interpretation));
-  } else work.append(el('p', 'この資料と、照合に使う関連資料の全文を調査すると、反対主張の4択を確認できます。'));
+  } else work.append(el('p', '資料の原文を開き、関連する記録を調査してください。'));
   desk.append(list, work); return desk;
+}
+
+// Legacy questions can contain the attack's name. Keep their answer IDs intact,
+// but do not disclose the name in an unjudged hypothesis. Never edit source text.
+function reasoningText(text) {
+  return text.replace(/(?:Stored|Reflected)\s*XSS|SQLインジェクション|(?:蓄積|格納|反射)型XSS|クロスサイトスクリプティング/gi, 'この攻撃');
+}
+
+function searchableSource(item) {
+  const node = el('section', undefined, 'case-searchable-source');
+  const label = el('label', '原文を絞り込む（空白で区切って複数指定）');
+  const input = el('input'); input.type = 'search'; input.maxLength = 200;
+  input.value = view.filters[item.evidenceId] ?? ''; input.setAttribute('aria-label', '原文の検索文字列');
+  label.append(input);
+  const count = el('p', '', 'case-muted'); count.setAttribute('role', 'status');
+  const output = el('pre', '', 'case-filtered-source'); output.tabIndex = 0;
+  output.setAttribute('aria-label', `${item.title}の原文と行番号`);
+  const lines = item.publicContent.replace(/\n$/, '').split('\n');
+  const update = () => {
+    view.filters[item.evidenceId] = input.value;
+    const terms = input.value.trim().split(/\s+/).filter(Boolean);
+    const matches = lines.map((line, index) => ({ line, index }))
+      .filter(({ line }) => terms.every(term => line.toLowerCase().includes(term.toLowerCase())));
+    count.textContent = `${matches.length} / ${lines.length} 行${terms.length ? '（絞り込み中）' : '（全文）'}`;
+    output.textContent = matches.map(({ line, index }) => `${index + 1}  ${line}`).join('\n');
+  };
+  input.addEventListener('input', update);
+  node.append(el('h3', item.title), label, button('全文に戻す', () => { input.value = ''; update(); input.focus(); }), count, output);
+  update(); return node;
 }
 
 export function caseStudyView(study) {
   const node = el('article', undefined, 'case-study');
   node.append(el('h2', '事件の解説資料'), el('h3', '発生していたインシデント'), el('p', study.incident));
+  node.append(el('h3', '資料の調べ方'));
+  node.append(el('p', 'まず資料全体を確認し、事件の時刻や対象を手がかりに候補を絞ります。残った記録を前後の行や別の資料と照合し、同じ対象のどの処理を記録したものかを確かめます。検索に一致したことだけで、その記録が事件の原因だとは決まりません。'));
   for (const item of study.materials) {
     const section = el('details'); section.append(el('summary', item.label));
+    if (item.vocabulary) section.append(el('p', item.vocabulary));
     for (const step of item.procedures) section.append(el('p', `${step.label} — ${step.description}`));
     const source = el('pre', item.content); source.tabIndex = 0; section.append(source); node.append(section);
   }
-  for (const [index, issue] of study.issues.entries()) node.append(el('h3', `争点 ${index + 1} の調査と結論`), el('p', issue.explanation));
+  for (const [index, issue] of study.issues.entries()) {
+    const section = el('section', undefined, 'case-study-issue');
+    section.append(el('h3', `争点 ${index + 1} の調査と結論`));
+    if (issue.claim) section.append(el('h4', '検察側の主張'), el('p', issue.claim));
+    if (issue.references?.length) {
+      section.append(el('h4', '判断の根拠になった記録'));
+      for (const ref of issue.references) {
+        section.append(el('p', ref.title), el('pre', ref.quote));
+      }
+    }
+    if (issue.answer) section.append(el('h4', '証拠から導ける反論'), el('p', issue.answer));
+    section.append(el('h4', '読み解き方と、判断できる範囲'), el('p', issue.explanation));
+    node.append(section);
+  }
   return node;
 }
 
@@ -353,6 +384,7 @@ function evidenceBrowser(items, redraw, options = {}) {
 }
 
 export function renderGeneratedGame({ screen, game, action }) {
+  if (view.caseId !== game.gameCaseId) { view.caseId = game.gameCaseId; view.filters = {}; view.material = null; }
   const key = `${game.gameCaseId}:${game.currentState}:${game.currentRound}`;
   const changed = view.key !== key;
   const previousState = view.state;
@@ -660,16 +692,14 @@ export function renderGeneratedGame({ screen, game, action }) {
       const result = el('div', undefined, 'case-result case-verdict-scene');
       const judgment = dialogue('裁判官', game.acquittal.publicRuling);
       judgment.querySelector('p').className = 'case-ruling';
-      if (game.acquittal.publicExplanation !== game.acquittal.publicRuling) {
-        for (const paragraph of game.acquittal.publicExplanation.split('\n\n').filter(Boolean)) {
-          judgment.append(el('p', paragraph, 'case-conclusion-paragraph'));
-        }
-      }
       result.append(el('div', 'すべての争点を解決', 'case-verdict'), judgment);
       result.insertBefore(portrait('judge', '裁判官'), result.firstChild);
-      if (game.caseStudy) {
-        const study = el('details'); study.append(el('summary', '事件・調査手順の詳しい解説を読む'), caseStudyView(game.caseStudy)); result.append(study);
-      }
+      const explanation = panel('解説'); explanation.className += ' case-ending-explanation';
+      if (game.caseStudy) explanation.append(caseStudyView(game.caseStudy));
+      else explanation.append(el('p', game.acquittal.publicExplanation));
+      result.append(explanation);
+      const exit = el('a', 'ゲーム終了', 'case-primary case-finish'); exit.href = '/author#court';
+      result.append(exit);
       body.append(result);
     } else if (game.currentState === 'BLOCKED') {
       const result = el('div', undefined, 'case-result case-verdict-blocked');

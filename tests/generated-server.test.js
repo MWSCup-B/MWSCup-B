@@ -135,7 +135,7 @@ test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解�
       correctOptionIndex: 0 }, token);
     assert.equal(injected.status, 400);
     game = await action({ action: 'objection', ...currentCorrectPair(author.runtime, round) });
-    assert.equal(typeof game.result.publicExplanation, 'string');
+    assert.equal(typeof game.result.publicExplanation, game.currentState === 'ACQUITTED' ? 'string' : 'undefined');
   }
   assert.equal(game.currentState, 'ACQUITTED');
 });

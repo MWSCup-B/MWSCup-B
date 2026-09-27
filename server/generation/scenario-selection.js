@@ -45,7 +45,7 @@ export function createSelectionConfiguration(request, catalog) {
       evidenceAnswer: '偽の修復案内と端末の実行計測を区別する。案内の表示だけでは端末上の実行や操作者の意図を特定できない。',
       notes: '偽案内の制御、利用者による端末操作、一般利用者権限での実行許可を明示する。メール誘導が選択されている場合だけ、その到達を使う。実行可能なコマンド・窃取・権限昇格は含めない。' },
     sql_injection: { investigationTypes: ['WEB_LOG'], investigationSourceNodeId: 'web-host',
-      evidenceAnswer: 'Web要求とDB監査を照合し、要求の到達とSQLの実行を区別する。実行されたSQLもアプリケーションのDB権限内であり、操作者の特定やOS実行の証明ではない。',
+      evidenceAnswer: 'Web記録の時刻・要求対象と、対応するDB監査の実行SQLの識別情報を照合する。DB記録のSQLの条件・構造を読み、要求の到達とSQLの実行を区別する。Web入力本文の記録は前提にしない。実行されたSQLもアプリケーションのDB権限内であり、操作者の特定やOS実行の証明ではない。',
       notes: '入力が安全にパラメータ化されていない処理、WebからDBへの到達、当該DB主体の接続・クエリ実行権限、DB監査の保持を明示する。データ流出やOS実行は追加しない。' },
     password_spray: { targetNodeId: 'auth-host', targetServiceId: 'auth-service',
       investigationTypes: ['AUTH_LOG'], investigationSourceNodeId: 'auth-host',

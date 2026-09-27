@@ -15,6 +15,40 @@ async function choose(page, ids) {
 }
 const options = (page, index) => page.byId(`attack-${index}`).children.map(option => option.value).filter(Boolean);
 
+test('失敗後の戻るボタンで攻撃・舞台の選択画面へ戻れる', async () => {
+  const page = startAuthorDom(autoAuthorBootstrap(), { initialAuthor: {
+    currentState: 'FAILED', failure: { message: '生成失敗' }, canCancel: false,
+    selection: { request: { attackIds: ['sql_injection'], settingId: 'school' } },
+  } });
+  await page.ready;
+  assert.equal(page.byId('failure-panel').hidden, false);
+  await page.byId('retry').dispatch('click');
+  assert.equal(page.byId('selection-panel').hidden, false);
+  assert.equal(page.byId('failure-panel').hidden, true);
+  assert.equal(page.byId('attack-1').value, 'sql_injection');
+  assert.equal(page.byId('setting').value, 'school');
+});
+
+test('ゲーム終了の戻り先から保存一覧を開き、解説をモーダルで読める', async () => {
+  const gameId = `saved_${'2'.repeat(32)}`;
+  const page = startAuthorDom(autoAuthorBootstrap(), { hash: '#court', initialAuthor: { currentState: 'READY' },
+    savedGames: [{ gameId, savedAt: '2026-09-27T09:00:00Z', title: '調査事件', summary: '概要',
+      targetSystem: 'Web', difficulty: 1, attacks: [], cleared: true, clearedAt: '2026-09-27T09:30:00Z' }],
+    study: { incident: '調べた資料に基づく詳しい解説。' } });
+  await page.ready;
+  assert.equal(page.byId('court-entry-panel').hidden, false);
+  const open = page.byId('saved-game-list').querySelectorAll('button').find(item => item.textContent === '解説資料');
+  assert.equal(open.getAttribute('aria-haspopup'), 'dialog');
+  await open.dispatch('click');
+  assert.equal(page.byId('study-dialog').open, true);
+  assert.equal(page.byId('study-dialog-content').textContent, '調べた資料に基づく詳しい解説。');
+  assert.equal(page.byId('study-dialog-close').focused, true);
+  await page.byId('study-dialog-close').dispatch('click');
+  assert.equal(page.byId('study-dialog').open, false);
+  await page.byId('study-dialog').dispatch('close');
+  assert.equal(open.focused, true);
+});
+
 test('mainのタイトル・モード選択から攻撃と舞台へ進み、戻っても選択を保持する', async () => {
   const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
   assert.equal(page.byId('splash-panel').hidden, false);
@@ -102,7 +136,7 @@ test('入力は8種の攻撃と舞台だけで、自動設定項目を送信し�
   const page = startAuthorDom(autoAuthorBootstrap()); await page.ready;
   assert.equal(page.byId('initialization-status').hidden, true);
   assert.equal(page.document.querySelectorAll('input').length, 0);
-  assert.equal(page.byId('selection-panel').querySelectorAll('select').length, 4);
+  assert.equal(page.byId('selection-panel').querySelectorAll('select').length, 6);
   assert.equal(options(page, 1).length, 8);
   assert.equal(page.byId('setting').children.length, 5);
   assert.equal(page.byId('create-scenario').disabled, false);
