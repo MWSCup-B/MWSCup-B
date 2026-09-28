@@ -24,6 +24,7 @@ const assets = new Map([
   ['/generated-game.css', ['generated-game.css', 'text/css; charset=utf-8']],
   ['/author', ['author.html', 'text/html; charset=utf-8']],
   ['/author.js', ['author.js', 'text/javascript; charset=utf-8']],
+  ['/network-diagram.js', ['network-diagram.js', 'text/javascript; charset=utf-8']],
   ['/author.css', ['author.css', 'text/css; charset=utf-8']],
   ['/visual-assets.js', ['visual-assets.js', 'text/javascript; charset=utf-8']],
   ['/audio-catalog.js', ['audio-catalog.js', 'text/javascript; charset=utf-8']],

@@ -1,6 +1,6 @@
 import { INVESTIGATION_TYPES } from './scenario-configuration.js';
 import { fail } from './schema.js';
-import { ATTACK_LEARNING, investigationSourceLabel } from './attack-learning.js';
+import { learningProfile, investigationSourceLabel } from './attack-learning.js';
 
 // Artifactの取得条件はAttack Graphで確認し、取得操作は既存Networkの取得元へ割り当てる。
 // ブラウザ履歴をスクリプト実行の証明へ置き換えない。実行計測は端末資料として扱う。
@@ -90,7 +90,7 @@ export function buildInvestigationStages(configuration, generationInput) {
   // Grouping, hosts, actions and obtainable observations remain unchanged.
   const ranks = new Map(generationInput.technicalInput.attackGraph.nodes.map(node => [node.nodeId, {
     attack: configuration.attacks.find(attack => attack.attackId === node.attackDefinitionId)?.order ?? Infinity,
-    sources: ATTACK_LEARNING[node.attackDefinitionId]?.sources ?? [],
+    sources: learningProfile(node)?.sources ?? [],
   }]));
   const routes = buildEvidenceInvestigationPlan(configuration, generationInput).sort((a, b) => {
     const left = ranks.get(a.ground.attackNodeId); const right = ranks.get(b.ground.attackNodeId);

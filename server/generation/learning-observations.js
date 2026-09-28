@@ -3,6 +3,9 @@ import { fail } from './schema.js';
 // Minimum observable fields from data/attacks/*.json, not vendor log assumptions.
 // Aliases permit existing product-neutral names; values are never filled here.
 export const LEARNING_OBSERVATION_FIELDS = Object.freeze({
+  announcement_audit_record: [['timestamp', 'time'], ['request_id'], ['session_id'], ['post_id'], ['result']],
+  browser_request_initiator_record: [['timestamp', 'time'], ['request_id'], ['view_request_id'], ['execution_id'], ['source_post_id'], ['initiator_type'], ['source_location']],
+  application_response_record: [['timestamp', 'time'], ['request_id'], ['query_id'], ['record_refs', 'result_digest'], ['status']],
   // 2026-09-24: mainの取得定義を、kawata-workの観測資料検証にも登録する。
   ssh_authentication_record: [['timestamp', 'time'], ['account', 'user'], ['source_ip', 'source']],
   ssh_session_record: [['timestamp', 'time'], ['session_ref', 'session_id'], ['user', 'account'], ['shell_result', 'result']],
@@ -56,6 +59,32 @@ function validateRecordedJoins(artifacts) {
     const source = id => artifacts.filter(item => item.type !== 'TESTIMONY'
       && item.sourceRefs?.some(ref => ref.sourceType === 'ATTACK_GRAPH_ARTIFACT'
         && ref.attackNodeId === nodeId && ref.sourceId === id));
+    const rows = id => source(id).flatMap(records);
+    const same = (a, b) => a === b && ((typeof a === 'string' && a.trim() !== '') || Number.isSafeInteger(a));
+    const reject = message => fail('EVIDENCE_LEARNING_CAUSAL_CHAIN_MISSING', 'evidenceArtifacts.publicContent', message);
+    if (['stored_content_record', 'web_access_record', 'browser_execution_record',
+      'browser_request_initiator_record', 'announcement_audit_record'].every(id => source(id).length)) {
+      const linked = rows('browser_request_initiator_record').some(start => start.initiator_type === 'script'
+        && typeof start.source_location === 'string' && start.source_location.trim()
+        && rows('stored_content_record').some(post => same(post.post_id, start.source_post_id))
+        && rows('web_access_record').some(view => same(view.request_id, start.view_request_id))
+        && rows('browser_execution_record').some(run => same(run.execution_id, start.execution_id)
+          && same(run.request_id, start.view_request_id) && same(run.post_id, start.source_post_id)
+          && ['observed', 'executed', 'script_executed', 'success'].includes(run.execution_result))
+        && rows('announcement_audit_record').some(post => same(post.request_id, start.request_id)
+          && ['created', 'stored', 'accepted', 'success'].includes(post.result)));
+      if (!linked) reject('保存投稿ID、閲覧要求ID、実行ID、スクリプト開始元、投稿要求ID、投稿成功の対応が不足しています。同じ処理の記録を照合可能にし、無関係な行や時刻だけで因果を結ばないでください。');
+    }
+    if (['web_access_record', 'database_statement_record', 'application_response_record'].every(id => source(id).length)) {
+      const linked = rows('application_response_record').some(response => ((Number(response.status) >= 200
+        && Number(response.status) < 300) || ['returned', 'returned_to_requester', 'success', 'ok'].includes(response.status))
+        && ((Array.isArray(response.record_refs) && response.record_refs.some(ref => typeof ref === 'string' && ref.trim()))
+          || (typeof response.result_digest === 'string' && response.result_digest.trim()))
+        && rows('web_access_record').some(request => same(request.request_id, response.request_id))
+        && rows('database_statement_record').some(query => same(query.request_id, response.request_id)
+          && same(query.query_id, response.query_id) && typeof query.statement === 'string' && query.statement.trim()));
+      if (!linked) reject('Web要求IDとDBクエリIDの同一の組を、要求・実行SQL・結果返却の資料で照合できません。成功応答には返却レコード参照またはダイジェストが必要です。SQL実行だけを漏えいの証明にしないでください。');
+    }
     for (const [left, right, names] of [
       ['upload_receipt_record', 'uploaded_file_record', ['storage_ref', 'storage_id']],
       ['process_execution_record', 'file_encryption_record', ['process_ref', 'process_id', 'correlation_id']],

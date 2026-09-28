@@ -42,7 +42,7 @@ for (const attack of ['sql_injection', 'stored_xss']) {
     const { runtime } = author;
     const session = createGeneratedGame(runtime);
     const opening = actGenerated(session, runtime, { action: 'begin' });
-    assert.match(opening.initialCourt.incidentOverview, /事案が発生/);
+    assert.match(opening.initialCourt.incidentOverview, /事件が発生/);
     assert.doesNotMatch(opening.initialCourt.incidentOverview, /SQLインジェクション|Stored XSS/);
     assert.equal(opening.initialCourt.presentedMaterials.length, runtime.gameCase.detective.evidence.length);
     if (attack === 'sql_injection') assert.ok(opening.initialCourt.presentedMaterials.some(item => item.type === 'DATABASE_LOG'));
@@ -53,7 +53,7 @@ for (const attack of ['sql_injection', 'stored_xss']) {
       assert.equal(view.workbench.result.output, item.publicContent);
       assert.deepEqual(view.investigationClaim, firstClaim);
       assert.equal(view.caseStudy, undefined);
-      if (item.type === 'WEB_ACCESS_LOG') assert.ok(item.publicContent.trim().split('\n').length >= 6);
+      if (item.type.endsWith('_LOG')) assert.ok(item.publicContent.trim().split('\n').length >= 100);
     }
     for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round++) {
       const view = generatedPlayerView(session, runtime);

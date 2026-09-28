@@ -25,6 +25,7 @@ Object.assign(scenarioOutputSchema.properties, {
 });
 // 外部v1の省略可能フィールドはCLI用だけ必須nullableにする。
 scenarioOutputSchema.properties.evidenceRequirements.properties.requirements.items.required.push('investigationStage');
+scenarioOutputSchema.properties.groundTruth.required.push('incidentNarratives');
 
 const evidenceOutputSchema = structuredClone(evidencePackage);
 evidenceOutputSchema.properties.evidenceArtifacts.items = evidenceArtifact;
@@ -33,6 +34,8 @@ evidenceOutputSchema.properties.exonerations.items = exoneration;
 
 const makotomaruOutputSchema = structuredClone(makotomaruResult);
 makotomaruOutputSchema.properties.configuration = scenarioConfiguration;
+// This legacy configuration generator does not select the authoring incident profile.
+delete makotomaruOutputSchema.properties.configuration.properties.incidentDesign;
 
 export const AUTO_CODEX_OUTPUT_SCHEMAS = Object.freeze({
   scenarioRevision: Object.freeze({

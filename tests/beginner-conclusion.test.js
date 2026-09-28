@@ -54,7 +54,8 @@ test('all selected attack question backgrounds and final explanations stay bound
     const conclusion = buildIncidentConclusion(configuration, generationInput);
     assert.ok(conclusion.length <= 2000, `${attackIds}: ${conclusion.length}`);
     assert.match(conclusion, /原因|要因|成功条件|環境|必要/);
-    assert.match(conclusion, /合理的な疑い/);
+    assert.match(conclusion, attackIds.some(id => ['stored_xss', 'sql_injection'].includes(id))
+      ? /被害と発生原因[\s\S]*別の攻撃主体[\s\S]*無罪/ : /合理的な疑い/);
     assert.doesNotMatch(conclusion, /被告人は操作していない|真犯人|groundTruth|attack_node|fact_/);
     assert.deepEqual({ configuration, generationInput }, original);
   }

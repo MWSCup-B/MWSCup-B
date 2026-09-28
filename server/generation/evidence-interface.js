@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { ValidationError, validateDocument } from './schema.js';
 import { COURT_QUESTION_SCHEMA, validateCourtQuestion } from './court-questions.js';
 import { MATERIAL_PLAN_SCHEMA } from './investigation-procedures.js';
+import { LOG_BACKGROUNDS_SCHEMA } from './log-backgrounds.js';
 import {
   canonical,
   contentDigest,
@@ -46,6 +47,8 @@ EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.materialInvestigations = {
   type: 'array', minItems: 1, maxItems: 512, items: structuredClone(MATERIAL_PLAN_SCHEMA),
 };
 EVIDENCE_GENERATION_DRAFT_SCHEMA.required.push('materialInvestigations');
+EVIDENCE_GENERATION_DRAFT_SCHEMA.properties.logBackgrounds = structuredClone(LOG_BACKGROUNDS_SCHEMA);
+EVIDENCE_GENERATION_DRAFT_SCHEMA.required.push('logBackgrounds');
 
 function generationRef(input) {
   return input.evidenceAgentInput ? {

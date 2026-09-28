@@ -20,7 +20,7 @@ test('report narrates each validated chain using its enabling result, not select
     const config = createSelectionConfiguration({ schemaVersion: '1.0', attackIds, settingId: 'company' }, catalog);
     const { technical } = validateScenarioConfiguration(config, catalog);
     const overview = buildIncidentOverview(config, technical.generationInput);
-    assert.match(overview, /検察側|理由書/);
+    assert.match(overview, /2026-09-18.*青葉ソリューションズ/);
     assert.doesNotMatch(overview, /フィッシング|ClickFix|暗号化|投稿権限|不正ログイン|偽フォーム/);
     assert.ok(overview.length <= 1000);
     const disconnected = structuredClone(technical.generationInput);
@@ -36,7 +36,8 @@ test('suspicion describes the allegation without quoting logs or inventing an ac
   assert.ok(!text.includes(record.publicContent));
   assert.doesNotMatch(text, /timestamp|request_target|2026-09-18|\/notice/);
   assert.match(text, /アクセス資料/);
-  assert.match(text, /【確認事項】.*【証言】.*【検察側の主張と疑いの経緯】/s);
+  assert.match(text, /検察側は.*被告人.*提出資料：/s);
+  assert.doesNotMatch(text, /何が起きた|これからの調査|具体的な裏付け|具体的な手口/);
   assert.doesNotMatch(text, /被告人のIP|被告人のアカウント|203\.0\.113/);
   assert.throws(() => buildProsecutionOpening([]), { code: 'INCIDENT_REPORT_EVIDENCE_REQUIRED' });
   assert.ok(buildProsecutionOpening([{ ...record, title: '記'.repeat(300), publicContent: 'a'.repeat(20000) }]).length <= 1000);
@@ -90,8 +91,8 @@ test('generated opening report carries the incident explanation separately from 
   assert.ok(opening.initialCourt.presentedMaterials.length > 0);
   for (const item of author.runtime.gameCase.detective.evidence) assert.ok(!JSON.stringify(opening).includes(item.publicContent));
   assert.doesNotMatch(opening.initialCourt.prosecutionOpening, /From:|notice@example/);
-  assert.match(opening.initialCourt.prosecutionOpening, /発言内容は下の供述欄/);
-  assert.match(opening.initialCourt.incidentOverview, /検察官.*理由書/);
+  assert.match(opening.initialCourt.prosecutionOpening, /関係者の供述欄/);
+  assert.match(opening.initialCourt.incidentOverview, /セキュリティ上の事件が発生/);
   assert.equal(opening.initialCourt.attributionStatus, 'ALLEGATION_ONLY');
   assert.doesNotMatch(JSON.stringify(opening), /correctOptionIndex|groundTruthRefs|fact_attack|requirement_stage/);
 });
@@ -119,8 +120,8 @@ test('suspicion never quotes native values or testimony and stays within schema 
     [{ spokenContent: 'この利用記録は本人の操作を示します。' }]);
   assert.ok(!summary.includes(native));
   assert.doesNotMatch(summary, /この利用記録は本人|staff-a|900719925474099[23]/);
-  assert.match(summary, /【証言】/);
-  assert.match(summary, /具体的な裏付け.*これからの調査と審理/);
+  assert.match(summary, /根拠となる供述.*関係者の供述欄/);
+  assert.doesNotMatch(summary, /具体的な裏付け|これからの調査と審理/);
   const long = buildProsecutionOpening([{ type: 'AUTHENTICATION_LOG', title: '😀'.repeat(300), publicContent: '😀'.repeat(20000) }],
     [{ spokenContent: '😀'.repeat(4000) }]);
   assert.ok(long.length <= 1000);

@@ -6,11 +6,14 @@ import { fail } from './schema.js';
 import { requestedCourtIssueCount } from './court-issues.js';
 import { isDeepStrictEqual } from 'node:util';
 import { phishingMaterialPolicy, scenarioInvestigationGoal, phishingObservationRequirement } from './attack-learning.js';
+import { buildIncidentNarratives } from './incident-design.js';
 
 // 2026-09-20 修正後: 記述の自由度と技術的な参照構造を分離する。
 export function validateScenarioDesignBoundary(template, proposed) {
   const structure = value => {
     const copy = structuredClone(value);
+    // CLI Structured Outputs spells an absent optional incident profile as null.
+    if (copy.groundTruth?.incidentNarratives == null) delete copy.groundTruth?.incidentNarratives;
     for (const character of copy.characters?.characters ?? []) delete character.displayName;
     for (const objective of copy.learningObjectives?.objectives ?? []) delete objective.description;
     for (const requirement of copy.evidenceRequirements?.requirements ?? []) delete requirement.description;
@@ -50,6 +53,22 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
       characterId: character.characterId, role: character.roles[0],
     })),
   };
+  const incidentNarratives = buildIncidentNarratives(configuration, graph);
+  if (incidentNarratives.length) {
+    groundTruth.incidentNarratives = incidentNarratives;
+    for (const narrative of incidentNarratives) groundTruth.technicalFacts.push({
+      factId: `fact_impact_${narrative.attackNodeId}`, sourceType: 'NODE_EFFECT',
+      attackNodeId: narrative.attackNodeId, sourceId: narrative.impactEffectId });
+    for (const character of characters.characters) {
+      if (character.characterId === 'character_attacker') character.bindingRefs = graph.nodes.flatMap(node =>
+        node.bindings.filter(binding => binding.name === 'attacker').map(binding => ({ attackNodeId: node.nodeId,
+          bindingName: binding.name, entityId: binding.entityId })));
+      if (character.characterId === 'character_defendant') character.bindingRefs = graph.nodes
+        .filter(node => node.attackDefinitionId === 'stored_xss').flatMap(node =>
+          node.bindings.filter(binding => binding.name === 'victim').map(binding => ({ attackNodeId: node.nodeId,
+            bindingName: binding.name, entityId: binding.entityId })));
+    }
+  }
 
   const predecessors = new Map(graph.nodes.map(node => [node.nodeId, new Set()]));
   for (const relation of [...graph.edges.map(edge => ({ before: edge.from, after: edge.to })),
@@ -104,7 +123,7 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
     ? '保存メールの誘導内容・リンクとWebアクセス記録の要求先・時刻を確認し、各資料が示す範囲を比較する。宿題の表示URLとhrefの不一致や特定の調査手順は必須にしない。公開本文で確認できる対応だけを説明し、不明な対応は未確認とする。メール保存はクリックの証明ではなく、要求記録もページ遷移の完了・クリック原因・操作人物・意図を示さない。'
     : '各資料の対象と記録時刻・記録範囲を照合する。')
     + (hasLogin ? ' 認証サービスの認証記録とWeb側のセッション監査をアカウントの合成識別子・時刻・記録範囲で照合する。認証成功、投稿権限、実際の投稿は別の事実で、認証記録は人物同定ではない。' : '')
-    + (hasStored ? ' 保存投稿の識別子と非実行ソース抜粋、後の閲覧要求、ブラウザ実行計測を照合する。保存が閲覧に先行する関係を維持し、反射型XSSとは区別する。アクセス成功だけでスクリプト実行を証明しない。' : '')
+    + (hasStored ? ' 保存投稿の識別子と非実行ソース抜粋、後の閲覧要求、ブラウザのスクリプト実行記録を照合する。保存が閲覧に先行する関係を維持し、反射型XSSとは区別する。アクセス成功だけでスクリプト実行を証明しない。' : '')
     + (selectedIds.has('credential_phishing') ? ' 偽フォームと正規ポータルは別サービスである。偽フォームへの送信・受信は取得可能な専用計測資料で照合する。秘密値を記録せず、リンク誘導だけから資格情報取得を推定しない。' : '')
     + (selectedIds.has('reflected_xss') || selectedIds.has('sql_injection')
       ? ' アクセス記録だけでスクリプト実行やSQL実行を証明せず、確認済みの実行計測・DB記録と区別する。' : '');
@@ -151,6 +170,14 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
       ...buildStageRequirements(configuration, generationInput),
     ],
   };
+  if (incidentNarratives.length) {
+    const narrative = incidentNarratives.map(item => `${item.impact} ${item.causalRefutation}`).join('\n');
+    evidenceRequirements.requirements.find(item => item.requirementId === 'requirement_contradiction').description =
+      '検察側の帰属主張と技術的事実を分ける。検察側が被告人に帰属させた被害操作について、別の攻撃主体の入力から発生した処理を複数資料で論証する。被告人の利用記録や人物対応を観測事実として補完しない。' + narrative + issueDesign;
+    evidenceRequirements.requirements.find(item => item.requirementId === 'requirement_exoneration').description =
+      '事件の真相はgroundTruth.incidentNarrativesに先に確定している。必要資料をすべて通常調査で取得可能にし、被害とその原因を示して被告人への誤った帰属を反駁する。単に「人物や意図は不明」とする結論では不十分。' + narrative
+      + ' IP・アカウントだけで人物を特定しない。人物の役割の設定と観測事実を区別する。新しい犯人名、供述、アリバイや未定義の被害を補わない。';
+  }
   const scenarioDraft = { schemaVersion: '1.0', scenarioId, state: 'DRAFT', attackGraphRef,
     groundTruthId: groundTruth.groundTruthId, characterSetId: characters.characterSetId,
     timelineId: timeline.timelineId, learningObjectiveSetId: learningObjectives.learningObjectiveSetId,

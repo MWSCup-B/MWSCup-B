@@ -3,6 +3,7 @@
   "title": "Scenario Configuration v1",
   "type": "object",
   "properties": {
+    "incidentDesign": { "const": "ATTACK_CAUSED_HARM_V1" },
     "schemaVersion": {
       "const": "1.0"
     },

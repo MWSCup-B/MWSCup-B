@@ -91,14 +91,16 @@ export class MockCodexRunner {
       for (const artifact of draft.evidenceArtifacts) delete artifact.integrity;
       for (const artifact of draft.evidenceArtifacts.filter(item => item.type.endsWith('_LOG'))) {
         const example = JSON.parse(artifact.publicContent.split('\n')[0]);
-        const background = [1, 2, 3, 4, 5, 6, 7].map(index => {
+        const count = artifact.publicContent.trim().split('\n').length;
+        const background = Array.from({ length: Math.max(0, 100 - count) }, (_, offset) => {
+          const index = offset + 1;
           const row = structuredClone(example);
           for (const [key, value] of Object.entries(row)) {
             if (typeof value !== 'string') continue;
-            if (key === 'timestamp') row[key] = `2026-09-18T08:0${index}:00+09:00`;
+            if (key === 'timestamp') row[key] = new Date(Date.UTC(2026, 8, 17, 23, 0, index * 30)).toISOString();
             else if (key === 'request_target') row[key] = `/help?document=guide-${index}`;
             else if (key === 'statement') row[key] = `SELECT title FROM training_records WHERE category = 'guide-${index}'`;
-            else if (key === 'stored_content') row[key] = `通常の案内 ${index}`;
+            else if (key === 'stored_content') row[key] = `Routine announcement ${index}`;
             else if (key === 'source_ip') row[key] = `192.0.2.${index}`;
             else if (key === 'destination') row[key] = `https://portal.example.invalid/forms/help-${index}`;
             else if (/account|user|_id$|_ref$/.test(key)) row[key] = `routine-${index}`;

@@ -125,7 +125,7 @@ test('XSSの実行防御と認証条件が不明・不成立なら技術検証�
   }
 });
 
-test('Stored XSSのブラウザ計測がない構成は証拠を捏造せず停止する', () => {
+test('Stored XSSのブラウザの動作記録がない構成は証拠を捏造せず停止する', () => {
   const configuration = createManualAttackPreset(['stored_xss'], catalog);
   configuration.network.nodes.find(node => node.nodeId === 'client-host').logSources = ['BROWSER_HISTORY'];
   const { technical } = validateScenarioConfiguration(configuration, catalog);

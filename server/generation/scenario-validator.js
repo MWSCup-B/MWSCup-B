@@ -1,6 +1,7 @@
 import { validateCatalog } from './catalog.js';
 import { validateAttackGraphResult } from './attack-graph.js';
 import { fail, validateDocument, ValidationError } from './schema.js';
+import { INCIDENT_PROFILES } from './incident-design.js';
 
 class ScenarioContractError extends ValidationError {
   constructor(code, field, message, suggestion, relatedIds = []) {
@@ -91,6 +92,21 @@ function validateGroundTruth(groundTruth, graph, characters) {
     if (!character || !character.roles.includes(ref.role)) stop('BROKEN_REFERENCE',
       'ground-truth.characterFactRefs', 'Characterまたはそのroleへの参照が不正です。',
       'Character Setに明示されたcharacterIdとroleを指定してください。', [ref.characterId, ref.role]);
+  }
+  for (const narrative of groundTruth.incidentNarratives ?? []) {
+    const node = nodes.get(narrative.attackNodeId), profile = INCIDENT_PROFILES[node?.attackDefinitionId];
+    const effect = node?.effects.find(item => item.effectId === narrative.impactEffectId);
+    if (!profile || effect?.predicate !== profile.effect || node.state !== 'SATISFIED'
+      || narrative.attackerCharacterId === narrative.defendantCharacterId
+      || !characterMap.get(narrative.attackerCharacterId)?.roles.includes('attacker')
+      || !characterMap.get(narrative.defendantCharacterId)?.roles.includes('defendant')
+      || profile.requiredArtifacts.length !== narrative.requiredArtifactIds.length
+      || profile.requiredArtifacts.some(id => !narrative.requiredArtifactIds.includes(id)
+        || !node.artifactEvaluations.some(item => item.artifactId === id && item.state === 'SATISFIED'))) {
+      stop('INCIDENT_NARRATIVE_UNGROUNDED', 'ground-truth.incidentNarratives',
+        '事件の被害・人物・必要資料が検証対象の攻撃と一致しません。',
+        '成立した被害effect、別の攻撃主体、取得可能な資料を同一Graphへ対応付けてください。');
+    }
   }
 }
 

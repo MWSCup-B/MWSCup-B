@@ -2,6 +2,7 @@ import { AUTHOR_ATTACK_CHOICES, SCENARIO_SETTINGS } from './author-options.js';
 import { createDefaultConfiguration, createManualAttackPreset, validateScenarioConfiguration }
   from './scenario-configuration.js';
 import { validateDocument, fail, ValidationError } from './schema.js';
+import { INCIDENT_DESIGN, INCIDENT_PROFILES, incidentDefinitions } from './incident-design.js';
 
 // These are explicit, recorded teaching defaults, not repairs to a submitted network.
 // The legacy full-configuration API continues to validate its input without filling gaps.
@@ -46,7 +47,7 @@ export function createSelectionConfiguration(request, catalog) {
       notes: '偽案内の制御、利用者による端末操作、一般利用者権限での実行許可を明示する。メール誘導が選択されている場合だけ、その到達を使う。実行可能なコマンド・窃取・権限昇格は含めない。' },
     sql_injection: { investigationTypes: ['WEB_LOG'], investigationSourceNodeId: 'web-host',
       evidenceAnswer: 'Web記録の時刻・要求対象と、対応するDB監査の実行SQLの識別情報を照合する。DB記録のSQLの条件・構造を読み、要求の到達とSQLの実行を区別する。Web入力本文の記録は前提にしない。実行されたSQLもアプリケーションのDB権限内であり、操作者の特定やOS実行の証明ではない。',
-      notes: '入力が安全にパラメータ化されていない処理、WebからDBへの到達、当該DB主体の接続・クエリ実行権限、DB監査の保持を明示する。データ流出やOS実行は追加しない。' },
+      notes: '入力が安全にパラメータ化されていない処理、WebからDBへの到達、当該DB主体の接続・クエリ実行権限、DB監査の保持を明示する。非公開レコードの返却はincidentDesignの明示条件に限定する。OS実行や権限昇格は追加しない。' },
     password_spray: { targetNodeId: 'auth-host', targetServiceId: 'auth-service',
       investigationTypes: ['AUTH_LOG'], investigationSourceNodeId: 'auth-host',
       evidenceAnswer: '複数アカウントへの試行と成否を読む。秘密値を記録しない認証ログだけで同一パスワードの使用や実際の人物を断定できない。認証設定と試行の結果を分けて確かめる。',
@@ -82,6 +83,17 @@ export function createSelectionConfiguration(request, catalog) {
     victimSystem: setting.victimSystem, accusedRole: setting.accusedRole,
     initialSuspicionReason: '調査担当者は記録に現れた端末やアカウントを被告人の操作と結び付けています。これは疑う側の主張であり、実際の操作者との対応はまだ確かめられていません。' });
   network.subnets.find(subnet => subnet.subnetId === 'internal-net').label = setting.networkLabel;
+  configuration.incidentDesign = INCIDENT_DESIGN;
+  const impactCatalog = incidentDefinitions(catalog, configuration);
+  for (const attack of configuration.attacks) {
+    const profile = INCIDENT_PROFILES[attack.attackId];
+    if (!profile) continue;
+    attack.expectedEffect = impactCatalog.find(item => item.id === attack.attackId).effects.at(-1).description;
+    attack.evidenceAnswer = profile.refutation;
+    attack.notes += ` 被害: ${profile.impact} 被害成立・監査の取得条件はincidentDesignに定義した明示的な制作既定値。`;
+  }
+  const allegations = configuration.attacks.map(attack => INCIDENT_PROFILES[attack.attackId]?.allegation).filter(Boolean);
+  if (allegations.length) configuration.incidentContext.initialSuspicionReason = allegations.join('\n');
   validateSelectionChain(configuration, catalog);
   return configuration;
 }

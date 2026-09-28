@@ -6,6 +6,7 @@ import { buildScenarioGenerationInputs } from './scenario-interface.js';
 import { requestedCourtIssueCount } from './court-issues.js';
 import { AUTHOR_ATTACK_CHOICES, SCENARIO_SETTINGS } from './author-options.js';
 import { buildIncidentOverview } from './incident-report.js';
+import { incidentDefinitions } from './incident-design.js';
 
 export const INVESTIGATION_TYPES = Object.freeze({
   WEB_LOG: { label: 'Webアクセスログ', actionId: 'action_audit_log' },
@@ -113,8 +114,8 @@ export function createManualAttackPreset(attackIds, catalog) {
       evidenceAnswer: '認証ログとWeb側のセッション監査は同じアカウントの認証・投稿権限を示すが、それだけで実際の操作者を被告人と特定できないこと。',
       notes: `${capture ? '前段の偽フォームで取得した' : '初期条件として取得済みの'}有効な資格情報を悪用する。認証先auth-service、投稿先web-service。教材はパスワードのみの認証・投稿権限に限定し、MFA突破や管理者権限は仮定しない。` },
     stored_xss: { investigationTypes: ['APPLICATION_LOG', 'WEB_LOG'], investigationSourceNodeId: 'web-host',
-      evidenceAnswer: '保存投稿と後の閲覧記録・ブラウザ計測を照合するとStored XSSの実行を確認できるが、閲覧端末の利用記録は投稿者の特定にはならないこと。',
-      notes: `${has('unauthorized_login') ? '前段の不正ログインによる投稿権限' : '初期条件として明示した投稿権限'}を使用。投稿の保存は閲覧前に完了している条件。発生日時は閲覧時の実行時点で、投稿時刻とは別。出力エンコード・サニタイズが不足し、実効CSPは実行を阻止しない。ブラウザ計測を取得可能とする。資格情報窃取は効果に含めない。` },
+      evidenceAnswer: '保存投稿と後の閲覧記録・ブラウザの動作記録を照合するとStored XSSの実行を確認できるが、閲覧端末の利用記録は投稿者の特定にはならないこと。',
+      notes: `${has('unauthorized_login') ? '前段の不正ログインによる投稿権限' : '初期条件として明示した投稿権限'}を使用。投稿の保存は閲覧前に完了している条件。発生日時は閲覧時の実行時点で、投稿時刻とは別。出力エンコード・サニタイズが不足し、実効CSPは実行を阻止しない。ブラウザの動作記録を取得可能とする。資格情報窃取は効果に含めない。` },
   };
   configuration.attacks = ids.map((attackId, index) => {
     const definition = catalog.find(item => item.id === attackId);
@@ -568,6 +569,7 @@ export function validateScenarioConfiguration(configuration, catalog) {
         expectedFormat: error.expectedFormat ?? null,
       })], technical: null };
   }
+  catalog = incidentDefinitions(catalog, configuration);
   const attacks = [...configuration.attacks].sort((a, b) => a.order - b.order);
   const unique = (items, field) => {
     if (new Set(items).size !== items.length) errors.push(issue('DUPLICATE_VALUE', field,

@@ -387,6 +387,12 @@ function evidenceBrowser(items, redraw, options = {}) {
   return section;
 }
 
+// Presentation-only compatibility for saved reports. Evidence bytes remain untouched.
+function reportText(value = '') {
+  return value.replaceAll('具体的な手口と、主張を裏付ける証拠は調査と審理で確認します。', '')
+    .replaceAll('具体的な裏付けと記録の意味は、これからの調査と審理で確認します。', '').trim();
+}
+
 export function renderGeneratedGame({ screen, game, action }) {
   if (view.caseId !== game.gameCaseId) { view.caseId = game.gameCaseId; view.filters = {}; view.material = null; view.workspace = {}; view.explanationOpen = false; }
   const key = `${game.gameCaseId}:${game.currentState}:${game.currentRound}`;
@@ -409,7 +415,7 @@ export function renderGeneratedGame({ screen, game, action }) {
   function draw(focus = '') {
     if (game.currentState === 'ACQUITTED' && view.explanationOpen) gameAudio.setScene('explanation');
     else gameAudio.forGame(game);
-    const cinematic = !!game.dialogue?.length && !view.scriptFinished;
+    const cinematic = game.currentState !== 'INITIAL_COURT' && !!game.dialogue?.length && !view.scriptFinished;
     const viewport = court || cinematic || ['TITLE', 'GUILTY_RETRY', 'ACQUITTED', 'BLOCKED'].includes(game.currentState);
     const inCourt = !investigation || (cinematic && !!game.result);
     screen.className = `case-game ${inCourt ? 'case-court' : 'case-investigation'}${viewport ? ' case-court-viewport' : ''}${game.currentState === 'ACQUITTED' && !cinematic ? ' case-final-verdict' : ''} case-state-${game.currentState.toLowerCase()}`;
@@ -439,26 +445,8 @@ export function renderGeneratedGame({ screen, game, action }) {
       if (round === game.currentRound) item.setAttribute('aria-current', 'step');
       progress.append(item);
     }
-    if (game.currentState !== 'TITLE') screen.append(progress);
+    if (!['TITLE', 'INITIAL_COURT'].includes(game.currentState)) screen.append(progress);
     let body = el('div', undefined, 'case-body'); screen.append(body);
-    const briefing = el('details', undefined, 'case-briefing');
-    briefing.append(el('summary', '資料・結果'));
-    if (court || game.participants?.length || (viewport && game.result?.publicExplanation)) body.append(briefing);
-    if (game.result?.publicExplanation && game.result.outcome === 'SUCCESS') {
-      const resolved = panel(game.currentState === 'ACQUITTED' ? '最後の争点で確認できたこと' : '前の争点で確認できたこと');
-      resolved.append(el('p', game.result.publicExplanation));
-      // During the next scene, keep the prior finding available without displacing the dialogue.
-      (viewport ? briefing : body).append(resolved);
-    }
-    if (game.participants?.length) {
-      const people = el('aside', undefined, 'case-participants'); people.setAttribute('aria-label', '登場人物');
-      for (const person of game.participants) {
-        const item = el('div');
-        item.append(el('span', `${person.publicRole === 'DEFENDANT' ? '被告人' : '証言者'}：${person.displayName}`));
-        people.append(item);
-      }
-      briefing.append(people);
-    }
 
     if (cinematic) {
       const script = game.dialogue.flatMap(line => sourcePages(line.text, compactCourt?.matches ? 5 : 6,
@@ -489,16 +477,15 @@ export function renderGeneratedGame({ screen, game, action }) {
       const report = el('article', undefined, 'case-incident-report');
       report.setAttribute('aria-label', '事件報告書');
       report.append(el('span', '検察官作成 · 有罪を求める理由書 · 教材内の架空設定', 'case-eyebrow'),
-        el('h2', '事件報告書'), el('h3', '何が起きた？'), el('p', court.incidentOverview ?? game.synopsis, 'case-incident-overview'),
-        el('h3', '疑われた理由'), el('p', court.prosecutionOpening ?? '次の資料と証言が、疑いの根拠として挙げられています。', 'case-allegation'),
-        el('h3', '最初に提出された資料'));
+        el('h2', '事件報告書'), el('h3', '被害の概要'), el('p', reportText(court.incidentOverview ?? game.synopsis), 'case-incident-overview'),
+        el('h3', '被告人に対する嫌疑と根拠'), el('p', reportText(court.prosecutionOpening ?? '検察側は、次の提出資料と供述を嫌疑の根拠としています。'), 'case-allegation'),
+        el('h3', '提出資料'));
       for (const item of court.presentedEvidence) report.append(evidenceReader(item));
-      for (const item of court.presentedMaterials ?? []) report.append(el('p', `${item.label}（原文は調査で確認）`));
-      report.append(el('h3', '証言者はこう話している'));
+      for (const item of court.presentedMaterials ?? []) report.append(el('p', item.label));
+      report.append(el('h3', '関係者の供述'));
       for (const item of court.prosecutionStatements) report.append(el('p',
         `${item.speaker?.displayName ?? '証言者'}「${item.spokenContent}」`));
-      report.append(el('p', court.publicRuling),
-        button('報告書を読んで調査へ', () => action('continue'), 'case-primary'));
+      report.append(button('報告書を読んで調査へ', () => action('continue'), 'case-primary'));
       body.append(report);
     } else if (investigation && game.workbench) {
       if (game.workbench.workspaceVersion) body.append(renderInvestigationWorkspace(game, view.workspace ??= {}, action, draw,
@@ -625,7 +612,7 @@ export function renderGeneratedGame({ screen, game, action }) {
       const references = el('details', undefined, 'case-help');
       references.append(el('summary', '登録済み資料を読み返す（提示しません）'));
       for (const item of game.presentableEvidence) references.append(evidenceReader(item));
-      briefing.append(references);
+      speaker.append(references);
       const questionPanel = panel('1. 調査資料から言えることを選ぶ');
       if (!compactCourt?.matches) questionPanel.append(pagedText('question', '解釈を選ぶ', question.prompt, draw, { lines: 2, columns: 32 }));
       const choices = el('div', undefined, 'case-interpretations'); choices.setAttribute('aria-label', '解釈の4択');
@@ -744,7 +731,7 @@ export function renderGeneratedGame({ screen, game, action }) {
   draw();
   if (changed) {
     screen.querySelector('#screen-title').focus({ preventScroll: true });
-    if (previousState && game.currentState !== 'TITLE') {
+    if (previousState && !['TITLE', 'INITIAL_COURT'].includes(game.currentState)) {
       const transition = el('div', undefined, 'case-transition'); transition.setAttribute('aria-hidden', 'true');
       const nextIssue = game.result?.hasNextRound && investigation;
       transition.append(el('small', nextIssue ? '争点解決 / 次の審理へ' : '場面転換'),

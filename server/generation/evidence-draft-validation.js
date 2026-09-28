@@ -17,7 +17,7 @@ function issue(error, field = error.field) {
 
 // Called only after schema/shape validation. Independent failures go to the same
 // bounded repair instead of revealing the next defect only on the last attempt.
-export function evidenceDraftProblems(draft, evidencePackage, agentInput) {
+export function evidenceDraftProblems(draft, evidencePackage, agentInput, observationArtifacts = evidencePackage.evidenceArtifacts) {
   const issues = [];
   const inspect = (operation, index = null) => {
     try { operation(); }
@@ -26,14 +26,28 @@ export function evidenceDraftProblems(draft, evidencePackage, agentInput) {
       issues.push(issue(error, index === null ? error.field : error.field.replace(/^evidenceArtifacts\[0\]/, `evidenceArtifacts[${index}]`)));
     }
   };
+  // Generated labels/instructions are editorial text, separate from immutable
+  // quoted evidence. Return wording defects to the author rather than rewriting it.
+  const displayText = [
+    ...evidencePackage.evidenceArtifacts.map(item => item.title),
+    ...(draft.courtQuestions ?? []).flatMap(item => [item.prompt, item.explanation, ...item.choices]),
+    ...(draft.materialInvestigations ?? []).flatMap(item => item.steps.flatMap(step =>
+      [step.prompt, step.explanation, ...step.choices.map(choice => choice.description)])),
+  ];
+  if (displayText.some(text => /ブラウザ(?:実行)?計測/.test(text))) issues.push({
+    code: 'EVIDENCE_PRESENTATION_TERMINOLOGY', field: 'evidence-generation-draft',
+    reason: 'ブラウザ実行計測・ブラウザ計測という表示用語は使用しません。',
+    correctionHint: '表示名・問題文・解説では「ブラウザのスクリプト実行記録」または「ブラウザの動作記録」を使ってください。原文・引用・参照・観測値は変更しません。',
+  });
   evidencePackage.evidenceArtifacts.forEach((artifact, index) => {
     inspect(() => validateGeneratedLogFormats([artifact]), index);
     inspect(() => validateExplorableWebLogs([artifact]), index);
-    inspect(() => validateLearningObservations([artifact]), index);
+    inspect(() => validateLearningObservations([observationArtifacts[index]]), index);
   });
-  // Cross-source correlations need the full set; only run after field validation.
+  // Correlations use original authored incident rows. Repeated ordinary samples
+  // must never fill a missing causal link or a required observation field.
   if (!issues.some(item => item.code.startsWith('EVIDENCE_LEARNING_')))
-    inspect(() => validateLearningObservations(evidencePackage.evidenceArtifacts));
+    inspect(() => validateLearningObservations(observationArtifacts));
   inspect(() => validatePhishingObservations(evidencePackage.evidenceArtifacts, agentInput.attackGraph));
   inspect(() => validateMaterialPlans(draft.materialInvestigations, evidencePackage.evidenceArtifacts));
   issues.push(...courtQuestionSourceErrors(draft.courtQuestions, evidencePackage, agentInput).map(error => issue(error)));

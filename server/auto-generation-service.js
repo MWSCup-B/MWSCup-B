@@ -34,6 +34,7 @@ import { assignDialogueTemplate } from './generation/dialogue-template.js';
 import { buildIncidentOverview, buildProsecutionOpening } from './generation/incident-report.js';
 import { evidenceDraftProblems } from './generation/evidence-draft-validation.js';
 import { createSelectionConfiguration, buildAttackSelectionPaths } from './generation/scenario-selection.js';
+import { prepareLogBackgrounds } from './generation/log-backgrounds.js';
 import { courtIssueGenerationProblems, requestedCourtIssueCount } from './generation/court-issues.js';
 import { validateSequentialPlan } from './generation/sequential-investigation.js';
 import { stageEvidenceProblems } from './generation/scenario-stage-plan.js';
@@ -318,7 +319,7 @@ function buildAutomaticProgression(session, courtQuestions, materialInvestigatio
     publicMessages: {
       incidentOverview: buildIncidentOverview(session.configuration, session.generationInput),
       prosecutionOpening: buildProsecutionOpening(openingEvidence,
-        statements.filter(item => item.statementId === openingStatementId)),
+        statements.filter(item => item.statementId === openingStatementId), session.configuration),
       initialRuling: '疑いだけでは判断できません。弁護人は記録を調べ、主張の根拠を確かめてください。',
       acquittalRuling: '被告人を無罪とします。',
       acquittalExplanation: buildIncidentConclusion(session.configuration, session.generationInput),
@@ -936,6 +937,7 @@ export class AutoGenerationManager {
       mark(session, 'evidence', 'RUNNING', evidenceAttempt);
       let evidencePackage;
       let draft;
+      let compactDraft;
       try {
         draft = await measured(session, 'GENERATING_EVIDENCE', evidenceAttempt,
           () => this.jsonRunner.runJson({ instruction: EVIDENCE_PROMPT_TEMPLATE,
@@ -953,8 +955,10 @@ export class AutoGenerationManager {
             outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceDraft.canonicalSchema,
             outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceDraft.name,
             phase: 'GENERATING_EVIDENCE', signal }));
-        evidencePackage = materializeEvidenceGenerationDraft(draft);
         evidenceRepairBase = structuredClone(draft);
+        compactDraft = draft;
+        draft = prepareLogBackgrounds(draft);
+        evidencePackage = materializeEvidenceGenerationDraft(draft);
       } catch (error) {
         if (!(error instanceof CodexOutputError) && !(error instanceof ValidationError)) throw error;
         const issue = { code: error.code, field: error.field ?? 'evidence-generation-draft',
@@ -964,7 +968,7 @@ export class AutoGenerationManager {
         evidenceFeedback = feedbackFromIssues([issue], 'REPAIRABLE_BLOCKED');
         continue;
       }
-      if (evidenceGroundRevision && !preservesEvidenceGroundRevision(evidenceGroundRevision, draft)) {
+      if (evidenceGroundRevision && !preservesEvidenceGroundRevision(evidenceGroundRevision, compactDraft)) {
         const issues = [{ code: 'EVIDENCE_GROUND_REPAIR_CHANGED_INPUT', field: 'evidence-generation-draft',
           reason: '根拠参照の修正で、対象以外の証拠・証言・論証・4択が変更されています。',
           correctionHint: 'evidenceGroundRevision.draftを維持し、mismatchesで指定されたContradictionと対象statementのgroundTruthRefsだけを、検証済みfactと資料の意味に基づいて見直してください。' }];
@@ -972,7 +976,7 @@ export class AutoGenerationManager {
         evidenceFeedback = feedbackFromIssues(issues, 'REPAIRABLE_BLOCKED');
         continue;
       }
-      if (courtChoiceRevisionBase && !preservesCourtChoiceRevision(courtChoiceRevisionBase, draft)) {
+      if (courtChoiceRevisionBase && !preservesCourtChoiceRevision(courtChoiceRevisionBase, compactDraft)) {
         const issues = [{ code: 'EVIDENCE_COURT_REPAIR_CHANGED_INPUT', field: 'evidence-generation-draft',
           reason: '誤答選択肢の修正で、既存の証拠・論証・証言が変更されています。',
           correctionHint: 'courtChoiceRevisionBaseを維持し、既存TESTIMONYのstatementsとpublicContentの末尾に、既存Ground Truthと資料に裏付けられるCONSISTENTな発言だけを追記してください。' }];
@@ -984,7 +988,7 @@ export class AutoGenerationManager {
         generationInput: session.evidenceGenerationInput, evidencePackage });
       const evidenceImported = session.evidenceImportResult;
       let issues = [...evidenceImported.errors, ...technicalEvidenceCoverageIssues(technicalEvidenceCatalog, evidencePackage.evidenceArtifacts), ...evidenceDraftProblems(draft, evidencePackage,
-        session.evidenceGenerationInput.evidenceAgentInput)];
+        session.evidenceGenerationInput.evidenceAgentInput, compactDraft.evidenceArtifacts)];
       // The draft's artifact/contradiction schemas have already been checked.
       // Collect question defects even when provenance failed, so the same bounded
       // repair can address both. No invalid import can proceed to game creation.
@@ -1019,7 +1023,7 @@ export class AutoGenerationManager {
           evidenceProgressionPlan = plan;
           break;
         }
-        courtChoiceRevisionBase ??= structuredClone(draft);
+        courtChoiceRevisionBase ??= structuredClone(compactDraft);
         issues = [{ code: 'EVIDENCE_NO_INCORRECT_OBJECTION_PAIR',
           field: 'evidenceArtifacts.testimony.statements',
           reason: '提示可能な技術Evidenceと証言の全組合せが正解で、誤答・再試行・試行上限の経路を構成できません。',
@@ -1029,7 +1033,7 @@ export class AutoGenerationManager {
         'GENERATING_EVIDENCE', evidenceAttempt)));
       if (classifyBlocked(issues) === 'HARD_BLOCKED') break;
       if (evidenceAttempt < 2 && evidenceImported.status === 'INVALID') {
-        evidenceGroundRevision ??= buildEvidenceGroundRevision(draft, issues);
+        evidenceGroundRevision ??= buildEvidenceGroundRevision(compactDraft, issues);
       }
       evidenceFeedback = feedbackFromIssues(issues, 'REPAIRABLE_BLOCKED');
     }

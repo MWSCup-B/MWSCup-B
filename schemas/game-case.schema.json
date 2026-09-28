@@ -46,7 +46,7 @@
               "evidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
               "title": { "type": "string", "minLength": 1, "maxLength": 300 },
               "type": { "enum": ["EMAIL", "WEB_ACCESS_LOG", "AUTHENTICATION_LOG", "APPLICATION_LOG", "DATABASE_LOG", "BROWSER_HISTORY", "DEVICE_INFORMATION", "NETWORK_LOG", "FILE_METADATA", "TESTIMONY", "DOCUMENT", "OTHER"] },
-              "publicContent": { "type": "string", "minLength": 1, "maxLength": 20000 },
+              "publicContent": { "type": "string", "minLength": 1, "maxLength": 100000 },
               "availability": { "const": "AVAILABLE" },
               "displayOrder": { "type": "number" }
             },

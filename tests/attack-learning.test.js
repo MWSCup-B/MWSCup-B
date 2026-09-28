@@ -5,7 +5,7 @@ import { createSelectionConfiguration } from '../server/generation/scenario-sele
 import { validateScenarioConfiguration } from '../server/generation/scenario-configuration.js';
 import { buildScenarioTemplate, validateScenarioEvidenceCoverage } from '../server/generation/scenario-template.js';
 import { buildInvestigationStages } from '../server/generation/investigation-registry.js';
-import { ATTACK_LEARNING } from '../server/generation/attack-learning.js';
+import { ATTACK_LEARNING, learningProfile } from '../server/generation/attack-learning.js';
 import { validateLearningObservations } from '../server/generation/learning-observations.js';
 import { validateCourtQuestionSources } from '../server/generation/court-questions.js';
 import { stageEvidenceProblems } from '../server/generation/scenario-stage-plan.js';
@@ -32,7 +32,7 @@ test('every selected attack has an obtainable comparison of its own distinct obs
       assert.ok(requirement.grounds.every(ground => available.has(key(ground))));
     }
     for (const node of generationInput.technicalInput.attackGraph.nodes) {
-      const profile = ATTACK_LEARNING[node.attackDefinitionId];
+      const profile = learningProfile(node);
       const comparison = requirements.find(requirement => profile.sources.every(sourceId => requirement.grounds
         .some(ground => ground.attackNodeId === node.nodeId && ground.sourceId === sourceId)));
       assert.ok(comparison, node.attackDefinitionId);

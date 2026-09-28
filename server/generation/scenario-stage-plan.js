@@ -74,7 +74,7 @@ export function buildStageRequirements(configuration, generationInput) {
       grounds = [...available.filter(ground => ['stored_content_record', 'web_access_record'].includes(ground.sourceId)), ...current];
       claim = 'ブラウザはページを表示しただけ。スクリプトが動いた記録はありませんよ。';
       questionFocus = '今回取得した実行計測と取得済みの対象資料を照合し、閲覧履歴ではなく実行の観測から言えることを選ぶ4択。';
-      expectedInference = '対応するブラウザ実行計測が示す範囲で実行を確認できる。アクセス成功や保存ソースだけからの推測とは区別する。';
+      expectedInference = '対応するブラウザのスクリプト実行記録が示す範囲で実行を確認できる。アクセス成功や保存ソースだけからの推測とは区別する。';
       limitedRefutation = '「実行した記録がない」という主張だけを反駁する。被告人の操作や意図、計測されていない影響は断定しない。';
     } else if (has('authentication_record')) {
       claim = '認証成功の記録さえあれば、その後の投稿完了も分かります。';
@@ -94,6 +94,10 @@ export function buildStageRequirements(configuration, generationInput) {
       limitedRefutation = '要求の記録だけで後続処理の成功まで断定する部分を反駁する。まだ取得していない端末・DB・認証の資料を要求しない。';
     }
     const completed = tasks.filter(task => task.complete);
+    if (!completed.length && stage.routes.some(route => route.ground.sourceId === 'application_response_record')) {
+      expectedInference = 'アクセス記録は要求を示す。応答監査は記録された返却対象と応答状態を示すが、実行SQLの構造までは示さない。対応するDB監査を取得してからstatement欄を照合する。';
+      limitedRefutation = 'アクセス記録だけで後続処理の成功が分かるという部分を反駁する。応答監査で確認できる返却と、まだ未取得の実行SQLの構造を混同しない。';
+    }
     // Reuse only acquired observations of the same selected attack. Never borrow a
     // similarly named record from a different attack node to fill a missing source.
     grounds = [...new Map([...grounds, ...tasks.flatMap(task => task.grounds)]
@@ -104,7 +108,7 @@ export function buildStageRequirements(configuration, generationInput) {
         credential_phishing: 'ページを閲覧しただけで、偽フォームへ送信した資料はありません。',
         stored_xss: 'ブラウザはページを開いただけで、保存された投稿の実行を示す記録はありません。',
         reflected_xss: '要求がサーバーに届いただけで、ブラウザで動いたことを示す記録はありません。',
-        sql_injection: '対象の要求で実行されたSQLの検索条件は、指定された一つの値だけに一致する条件です。',
+        sql_injection: '対象の要求に含まれる入力は値としてだけ扱われ、実行されたSQLの構造を変えていません。',
         unauthorized_login: '認証されたアカウントとWeb側のセッションを照合する必要はありません。認証成功なら、対象Webでどんな操作も許されます。',
         clickfix: '案内の要求IDと端末のプロセスIDは、同じ操作を示す番号です。実行ユーザーの記録から、被告人が案内に従って起動したと分かります。',
         password_spray: '認証の制限設定があるので、記録された不審な試行はすべて遮断されたはずです。',
@@ -120,7 +124,8 @@ export function buildStageRequirements(configuration, generationInput) {
       limitedRefutation = 'この主張を資料の比較で反駁する。各資料が観測する段階を分け、単一資料に攻撃全体の結論を書かない。' + focus.limit;
       if (attackId === 'sql_injection') {
         questionFocus = 'Web記録の時刻・要求対象で調査対象を確認し、対応するDB監査のstatement（sql・query）欄に記録された実行SQLの条件式・演算子・引用符の範囲を読む。対象要求とSQLの識別情報で照合できる範囲を問う。Webの入力本文や通常要求の比較例は要求しない。';
-        limitedRefutation = '対象要求と実行SQLの対応、およびDB記録の条件式が示す検索対象の範囲に基づき、検索条件についてのclaimを反駁する。入力値がWeb記録に残ることを前提にしない。人物帰属の一般論だけに置き換えない。' + focus.limit;
+        expectedInference = '対象要求とDB監査の識別情報を照合し、statement欄から入力によるSQL構造の改変と実行を確認する。特定の検索範囲・取得件数・データ流出は、この事実だけでは確定しない。';
+        limitedRefutation = '保証されている入力によるSQL構造の改変・実行に基づいてclaimを反駁する。一つの値だけに一致する検索条件や特定の検索範囲を必須にしない。' + focus.limit;
       }
       if (attackId === 'clickfix') {
         questionFocus = '保存案内の要求ID・応答時刻・求める操作と、今回の端末計測の端末ID・プロセスID・親子関係・実行ユーザー・起動結果を読み比べる。二つのIDが識別する対象の違い、起動の確認範囲、被告人への帰属を選ぶ4択。各資料の実在する値を使い、対応の欠落は未確認とする。';
@@ -135,6 +140,18 @@ export function buildStageRequirements(configuration, generationInput) {
       questionFocus += '同じ最終争点の中で、記録上の処理と被告人本人への帰属も区別する。';
       expectedInference += '取得済み資料が示す処理と、被告人本人が行ったという主張は別である。アカウント・端末の記録から本人の操作や意図を証明したとは言えない。';
       limitedRefutation += 'このclaimの被告人本人への帰属も、既存の最終法廷内で裏付け不足として限定的に反駁する。別の法廷を追加しない。被告人の非関与や別人の実行は補完しない。';
+    }
+    const incidentTask = completed.find(task => task.sources.includes('browser_request_initiator_record')
+      || task.sources.includes('application_response_record'));
+    if (incidentTask) {
+      const stored = incidentTask.sources.includes('browser_request_initiator_record');
+      claim = stored
+        ? '虚偽の告知は被告人が手動で投稿したものです。先に保存された別の投稿は、この告知の発信に関係ありません。'
+        : '非公開レコードを取り出したSQLは、被告人がDBへ直接入力したものです。外部からのWeb要求によるSQLの改変ではありません。';
+      questionFocus = '被害を起こした処理の開始元と、その処理が被告人の操作に見えた理由を、取得済み資料の識別情報と内容を比較して判断する。';
+      if (!stored) questionFocus += 'DB監査のstatement欄でSQLの構造を読み、要求ID・クエリIDと返却資料を照合する。未記録のWebの入力本文は要求しない。';
+      expectedInference = incidentTask.comparison;
+      limitedRefutation = '被害が発生した事実と、攻撃入力から被害処理までの因果を裏付ける公開資料を示し、被告人が当該被害操作を直接行ったというclaimを反駁する。「意図は分からない」という一般論だけを結論にしない。人物の設定は観測で確認できる範囲と区別して示し、IP・アカウントだけから名前を特定しない。既存の最終法廷内で取得済み資料を統合し、人物帰属だけの争点を追加しない。';
     }
     const learningDesign = tasks.map(task => task.complete
       ? `${task.name}: ${task.comparison} ${task.limit} この攻撃の必要資料をすべて取得済み。複数資料の照合を正答の必須条件にする。`

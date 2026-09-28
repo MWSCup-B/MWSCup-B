@@ -75,7 +75,7 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
       'From: notice@example.invalid\nSubject: ポータルからのお知らせ\nContent-Type: text/html; charset=UTF-8\n\n次の案内を確認してください。\n<a href="https://portal.example.invalid/notice?ref=training-01">https://portal.example.invalid/help</a>'],
     web_access_record: ['WEB_ACCESS_LOG', 'Webアクセス記録',
       '{"request_target":"/notice?ref=training-01"}'],
-    browser_execution_record: ['DEVICE_INFORMATION', 'ブラウザ実行計測',
+    browser_execution_record: ['DEVICE_INFORMATION', 'ブラウザのスクリプト実行記録',
       '{"request_target":"/notice?ref=training-01","execution_id":"training-script-01","execution_result":"observed"}'],
     database_statement_record: ['DATABASE_LOG', 'DB実行記録',
       '{"query_id":"training-query-01","statement":"SELECT title FROM training_records WHERE category = \'public\'"}'],
@@ -89,6 +89,9 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
       '{"account":"training-editor","session_accepted":true,"permission":"post"}'] };
     // 2026-09-24: mainの資料も定義済みの観測項目を持つ合成データで検証する。
     const extendedRecords = {
+      announcement_audit_record: { timestamp: '2026-09-18T09:10:02+09:00', request_id: 'training-submit-01', session_id: 'training-session-01', post_id: 'training-notice-02', result: 'created' },
+      browser_request_initiator_record: { timestamp: '2026-09-18T09:10:01+09:00', source_post_id: 'training-post-01', view_request_id: 'training-view-01', execution_id: 'training-script-01', request_id: 'training-submit-01', initiator_type: 'script', source_location: '/notice?ref=training-01:1:1' },
+      application_response_record: { timestamp: '2026-09-18T09:10:01+09:00', request_id: 'training-request-01', query_id: 'training-query-01', record_refs: ['synthetic-record-01'], status: 200 },
       ssh_authentication_record: { timestamp: '2026-09-18T09:10:00+09:00', account: 'training-user', source_ip: '203.0.113.10' },
       ssh_session_record: { timestamp: '2026-09-18T09:10:00+09:00', session_ref: 'training-session-01', user: 'training-user', shell_result: 'started' },
       traversal_access_record: { request_target: '/download?file=training-report.txt' },
@@ -118,8 +121,16 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
         observation.id, JSON.stringify(extendedRecords[ground.sourceId])];
       const event = agent.timeline.events.find(item => item.attackNodeId === ground.attackNodeId);
       const timestamp = agent.timeline.narrativeTimestamps.find(item => item.eventId === event?.eventId);
-      const publicContent = type === 'WEB_ACCESS_LOG' && timestamp
+      let publicContent = type === 'WEB_ACCESS_LOG' && timestamp
         ? JSON.stringify({ timestamp: timestamp.displayTimestamp, ...JSON.parse(body) }) : body;
+      const impact = node.effects.some(effect => ['false_announcement_posted_by_script', 'restricted_rows_disclosed'].includes(effect.predicate));
+      if (impact && ['web_access_record', 'browser_execution_record', 'database_statement_record'].includes(ground.sourceId)) {
+        const row = JSON.parse(publicContent);
+        row.request_id = node.attackDefinitionId === 'stored_xss' ? 'training-view-01' : 'training-request-01';
+        if (ground.sourceId === 'browser_execution_record') row.post_id = 'training-post-01';
+        if (ground.sourceId === 'database_statement_record') row.statement = "SELECT title FROM training_records WHERE category = 'public' OR category = 'restricted'";
+        publicContent = JSON.stringify(row);
+      }
       return artifact(evidenceGenerationInput, { evidenceId: index === 0 ? 'evidence_technical_a'
         : index === 1 ? 'evidence_technical_b' : `evidence_technical_${index + 1}`,
       type, title, publicContent, sourceRefs: [ground],

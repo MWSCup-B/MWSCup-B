@@ -3,14 +3,15 @@ import { fail } from './schema.js';
 export const LOG_TYPES = Object.freeze(['WEB_ACCESS_LOG', 'AUTHENTICATION_LOG', 'APPLICATION_LOG',
   'DATABASE_LOG', 'NETWORK_LOG']);
 
-// New teaching logs must offer an actual search space. Do not pad or rewrite
-// sealed evidence here: generation must supply records within its source contract.
+export const MIN_LOG_RECORDS = 100;
+// Generation supplies the entire search space before hashing. Validation never
+// pads sealed evidence or changes the positions of supporting quotes.
 export function validateExplorableWebLogs(artifacts) {
   artifacts.forEach((artifact, index) => {
-    if (artifact.type !== 'WEB_ACCESS_LOG') return;
+    if (!LOG_TYPES.includes(artifact.type)) return;
     const lines = artifact.publicContent.trim().split(/\r?\n/);
-    if (new Set(lines).size < 6) fail('EVIDENCE_LOG_CONTEXT_REQUIRED', `evidenceArtifacts[${index}].publicContent`,
-      'Webログには対象行だけでなく、同じ取得元・記録条件の範囲の周辺記録を含む6件以上の異なる行を用意してください。取得可能な項目だけを使い、背景記録を攻撃の成立や人物帰属の根拠にしないでください。対応する引用と手順も原文に合わせてください。');
+    if (new Set(lines).size < MIN_LOG_RECORDS) fail('EVIDENCE_LOG_CONTEXT_REQUIRED', `evidenceArtifacts[${index}].publicContent`,
+      'ログには対象行と同じ取得元・記録条件の通常記録を含め、100件以上の異なる記録を用意してください。背景記録を追加の攻撃や人物帰属の根拠にせず、引用と調査手順を原文に合わせてください。');
   });
 }
 
@@ -22,7 +23,7 @@ export function validateGeneratedLogFormats(artifacts) {
     if (!LOG_TYPES.includes(artifact.type)) return;
     const field = `evidenceArtifacts[${index}].publicContent`;
     const reject = () => fail('EVIDENCE_LOG_FORMAT_INVALID', field,
-      'ログは1行1件のJSONオブジェクト（JSON Lines）にしてください。見出し・教材注記・解説・空行を本文に入れず、取得条件にある観測項目だけを残してください。引用も完成した原文と一致させてください。');
+      'ログは英語の項目・値による1行1件のJSONオブジェクト（JSON Lines）にしてください。見出し・教材注記・解説・空行を本文に入れず、取得条件にある観測項目だけを残してください。引用も完成した原文と一致させてください。');
     const lines = artifact.publicContent.split(/\r?\n/);
     if (lines.at(-1) === '') lines.pop(); // A final newline is a record terminator.
     if (!lines.length) reject();
@@ -32,9 +33,9 @@ export function validateGeneratedLogFormats(artifacts) {
       if (Array.isArray(value)) return value.every(validFields);
       if (value && typeof value === 'object') return Object.entries(value).every(([key, child]) =>
         /^[a-zA-Z_][a-zA-Z0-9_.-]*$/.test(key)
-        && !/^(?:explanation|comment|note|description|interpretation|verdict|answer)$/i.test(key)
+        && !/^(?:explanation|comment|note|description|interpretation|verdict|answer|hint|conclusion)$/i.test(key)
         && validFields(child));
-      return true;
+      return typeof value !== 'string' || !/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(value);
     };
     for (const line of lines) {
       let record;

@@ -36,12 +36,12 @@ function executionClaim(draft, input) {
   // 検証済み段階の保存・閲覧・実行計測への参照は維持し、Ground Truth参照だけを壊す。
   assert.ok(contradiction.conflictingEvidenceIds.includes(evidence.evidenceId));
   contradiction.groundTruthRefs = [executionFact.factId];
-  contradiction.reason = 'ブラウザの実行計測資料が存在しないという主張と競合する。';
+  contradiction.reason = 'ブラウザのスクリプト実行記録資料が存在しないという主張と競合する。';
   const question = draft.courtQuestions.find(item => item.statementId === statement.statementId);
-  question.prompt = 'training-script-01を含む保存・閲覧後のブラウザ計測資料から、どこまで言えますか。';
-  question.choices = ['対象応答に対応するブラウザの実行計測記録がある。',
+  question.prompt = 'training-script-01を含む保存・閲覧後のブラウザの動作記録資料から、どこまで言えますか。';
+  question.choices = ['対象応答に対応するブラウザのスクリプト実行記録記録がある。',
     '保存された投稿の資料だけで実行成功を確認できる。', '認証成功の記録だけでブラウザ実行まで確認できる。',
-    'ブラウザの実行計測だけで操作者の氏名が確定する。'];
+    'ブラウザのスクリプト実行記録だけで操作者の氏名が確定する。'];
   question.correctOptionIndex = 0; question.explanation = question.choices[0];
   syncQuestionQuotes(draft);
   question.explanation += `照合した値：${question.supportingQuotes.map(item => observationAnchors(item.quote)[0]).join('、')}。`;

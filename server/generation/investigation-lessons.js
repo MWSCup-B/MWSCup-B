@@ -22,7 +22,7 @@ const READINGS = Object.freeze({
   email_record: '保存メールは案内やリンクの内容を示す資料です。リンクの記載と実際のアクセス記録は別です。HTML資料を比較する場合、hrefはリンクが指定する行き先です。',
   web_access_record: '要求は、ブラウザなどがページを取り寄せるために送る連絡です。',
   stored_content_record: '投稿IDは保存された投稿を見分ける番号、保存内容は投稿の元の文字列です。',
-  browser_execution_record: 'ブラウザ計測は、ページ表示に伴う処理を別途観測した資料です。',
+  browser_execution_record: 'ブラウザの動作記録は、ページ表示に伴う処理を別途観測した資料です。',
   database_statement_record: 'SQLのSELECTは読み出す項目、WHEREは選ぶ条件を表します。',
   credential_submission_record: '送信先は情報を送った相手、相関IDは対応する処理を探す目印です。',
   authentication_record: 'accountはアカウント名、source_ipは接続元の住所、resultは成否です。',

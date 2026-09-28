@@ -2,6 +2,7 @@
 // 修正前の全文: docs/history/author-creation-before-2026-09-24.js
 import { caseStudyView } from './generated-view.js';
 import { gameAudio } from './game-audio.js';
+import { renderNetworkDiagram } from './network-diagram.js';
 gameAudio.mount(document);
 let lastAudioState = null;
 let token = null, bootstrap = null, author = null, polling = null;
@@ -13,7 +14,6 @@ let savedGameItems = null, savedGamesError = '';
 const byId = id => document.getElementById(id);
 const panels = ['splash-panel', 'activity-panel', 'court-entry-panel', 'help-panel', 'settings-panel',
   'selection-panel', 'preview-panel', 'generation-panel', 'ready-panel', 'failure-panel', 'shutdown-panel'];
-const svgNs = 'http://www.w3.org/2000/svg';
 const settingsKey = 'incident-craft-settings-v1';
 const defaultSettings = { textSize: 'STANDARD', motion: 'STANDARD' };
 const initializationHelp = 'サーバーを再起動（npm start）して画面を再読み込みしてください。';
@@ -181,43 +181,7 @@ function renderChoices() {
     }
   }
 }
-function drawNetwork(id, network) {
-  const svg = byId(id); svg.replaceChildren(); const rowHeight = 165;
-  const subnetGroups = network.subnets.map((subnet, index) => ({ subnet, index,
-    nodes: network.nodes.filter(node => node.subnetId === subnet.subnetId) }));
-  const width = Math.max(900, 70 + Math.max(1, ...subnetGroups.map(group => group.nodes.length)) * 145);
-  svg.setAttribute('viewBox', `0 0 ${width} ${Math.max(180, subnetGroups.length * rowHeight)}`);
-  const positions = new Map();
-  subnetGroups.forEach(({ subnet, index, nodes }) => {
-    const y = index * rowHeight + 10; const rect = document.createElementNS(svgNs, 'rect');
-    rect.setAttribute('x', '10'); rect.setAttribute('y', String(y)); rect.setAttribute('width', String(width - 20));
-    rect.setAttribute('height', '145'); rect.setAttribute('rx', '12'); rect.setAttribute('class', 'diagram-subnet'); svg.append(rect);
-    const title = document.createElementNS(svgNs, 'text'); title.setAttribute('x', '24'); title.setAttribute('y', String(y + 22));
-    title.textContent = `${subnet.label} (${subnet.cidr}) / ${subnet.trustBoundaryId}`; svg.append(title);
-    nodes.forEach((node, nodeIndex) => { const x = 45 + nodeIndex * Math.max(145, (width - 120) / Math.max(nodes.length, 1));
-      positions.set(node.nodeId, { x, y: y + 45 }); const box = document.createElementNS(svgNs, 'rect');
-      box.setAttribute('x', String(x)); box.setAttribute('y', String(y + 34)); box.setAttribute('width', '125');
-      box.setAttribute('height', '92'); box.setAttribute('rx', '8'); box.setAttribute('class', 'diagram-node'); svg.append(box);
-      const line1 = document.createElementNS(svgNs, 'text'); line1.setAttribute('x', String(x + 8)); line1.setAttribute('y', String(y + 56));
-      line1.textContent = node.label; svg.append(line1); const line2 = document.createElementNS(svgNs, 'text');
-      line2.setAttribute('x', String(x + 8)); line2.setAttribute('y', String(y + 77)); line2.textContent = `${node.ip} / ${node.nodeType}`;
-      line2.setAttribute('class', 'diagram-caption'); svg.append(line2);
-      const line3 = document.createElementNS(svgNs, 'text'); line3.setAttribute('x', String(x + 8));
-      line3.setAttribute('y', String(y + 96)); line3.setAttribute('class', 'diagram-caption');
-      line3.textContent = `Role: ${node.roles.join(', ')}`; svg.append(line3);
-      const serviceLabels = network.services.filter(service => service.nodeId === node.nodeId)
-        .map(service => `${service.label} [${service.serviceType}]`);
-      const line4 = document.createElementNS(svgNs, 'text'); line4.setAttribute('x', String(x + 8));
-      line4.setAttribute('y', String(y + 114)); line4.setAttribute('class', 'diagram-caption');
-      line4.textContent = serviceLabels.length ? `Service: ${serviceLabels.join(', ')}` : 'Service: なし';
-      svg.append(line4); });
-  });
-  for (const connection of network.connections) { const from = positions.get(connection.fromNodeId); const to = positions.get(connection.toNodeId);
-    if (!from || !to) continue; const line = document.createElementNS(svgNs, 'line');
-    line.setAttribute('x1', String(from.x + 125)); line.setAttribute('y1', String(from.y + 35));
-    line.setAttribute('x2', String(to.x)); line.setAttribute('y2', String(to.y + 35)); line.setAttribute('class', 'diagram-connection');
-    svg.insertBefore(line, svg.firstChild); }
-}
+function drawNetwork(id, network) { renderNetworkDiagram(byId(id), network, document); }
 
 function renderProgress(targetId) {
   const target = byId(targetId); target.replaceChildren(); for (const item of author.progress) {
@@ -342,6 +306,7 @@ function renderPreview() {
   }
   for (const attack of author.configuration?.attacks ?? []) {
     text(detail, 'p', `Attack ${attack.order} の証拠の答え: ${attack.evidenceAnswer}`);
+    if (attack.notes) text(detail, 'p', `Attack ${attack.order} の成立条件: ${attack.notes}`);
   }
 
 }

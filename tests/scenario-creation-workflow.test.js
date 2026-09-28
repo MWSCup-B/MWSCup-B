@@ -286,7 +286,9 @@ test('Networkは自動構成しPreviewにmainのSVGを表示する', async () =>
   const html = await readFile(new URL('../public/author.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/author.js', import.meta.url), 'utf8');
   assert.doesNotMatch(html, /Subnet追加|Node追加|Service追加/);
-  assert.match(html, /preview-network-diagram/); assert.match(source, /createElementNS/);
+  assert.match(html, /preview-network-diagram/); assert.match(source, /renderNetworkDiagram/);
+  const diagram = await readFile(new URL('../public/network-diagram.js', import.meta.url), 'utf8');
+  assert.match(diagram, /createElementNS/);
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function/);
 });
 

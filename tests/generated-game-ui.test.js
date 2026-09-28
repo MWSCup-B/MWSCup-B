@@ -221,6 +221,24 @@ test('opening report shows overview, allegations and documents on one page befor
   await page.click('報告書を読んで調査へ'); assert.deepEqual(page.calls, [{ action: 'continue' }]);
 });
 
+test('entering the incident report never reveals the first dispute or transition before reading', async () => {
+  const page = ui({ ...base, currentState: 'TITLE' });
+  page.change({ ...base, currentState: 'INITIAL_COURT',
+    dialogue: [{ speaker: '検察官', text: '先に表示してはいけない争点', role: 'prosecutor' }],
+    initialCourt: { incidentOverview: '虚偽の告知が掲載された。具体的な手口と、主張を裏付ける証拠は調査と審理で確認します。', prosecutionOpening: '投稿セッションを嫌疑の根拠とする。具体的な裏付けと記録の意味は、これからの調査と審理で確認します。',
+      presentedEvidence: [], prosecutionStatements: [], publicRuling: '後続の調査をしてください。' } });
+  assert.ok(page.screen.querySelector('.case-incident-report'));
+  for (const selector of ['.case-transition', '.case-issue-track', '.case-briefing', '.case-cinematic'])
+    assert.equal(page.screen.querySelector(selector), null, selector);
+  assert.doesNotMatch(page.screen.textContent, /先に表示してはいけない|後続の調査|資料・結果|何が起きた|具体的な手口|具体的な裏付け/);
+  assert.deepEqual(page.screen.querySelectorAll('h3').map(node => node.textContent),
+    ['被害の概要', '被告人に対する嫌疑と根拠', '提出資料', '関係者の供述']);
+  await page.click('報告書を読んで調査へ');
+  assert.deepEqual(page.calls, [{ action: 'continue' }]);
+  page.change({ ...base, currentState: 'INVESTIGATION', investigationTargets: [], collectedEvidence: [], discoveredEvidence: [] });
+  assert.ok(page.screen.querySelector('.case-issue-track'));
+});
+
 test('court requires an explicit interpretation and evidence choice, and resets them between issues', async () => {
   const choices = ['表示文字と指定先が異なる。', '指定先は同じである。', '人物まで確定できる。', 'クリックを証明できる。']
     .map((text, index) => ({ choiceId: `choice_${index}`, text }));
@@ -510,7 +528,7 @@ test('closing dialogue precedes the complete one-page verdict without consuming 
   await page.click('判決を確認する');
   assert.equal(page.screen.querySelector('.case-cinematic'), null);
   assert.deepEqual(page.screen.querySelector('.case-verdict-scene').querySelectorAll('p').map(p => p.textContent), [ruling, explanation]);
-  assert.ok(page.screen.querySelector('.case-briefing').textContent.includes(last));
+  assert.equal(page.screen.querySelector('.case-briefing'), null);
   assert.equal(page.screen.querySelector('.case-verdict-scene').querySelectorAll('button').length, 0);
   assert.equal(page.screen.querySelector('.case-verdict-scene').textContent.includes(last), false);
   assert.equal(page.calls.length, 0);

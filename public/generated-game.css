@@ -422,7 +422,7 @@ html:has(body.playing-generated), body.playing-generated { height: 100%; overflo
 .case-game .case-topbar { flex: none; padding: .5rem 1rem; gap: .65rem; }
 .case-game .case-return-link { flex: none; margin-left: auto; max-width: 11rem; }
 .case-game .case-topbar > div:first-child { min-width: 0; }
-.case-game .case-issue-track { flex: none; max-height: 3rem; overflow: auto; }
+.case-game .case-issue-track { flex: none; max-height: none; overflow: visible; flex-wrap: wrap; }
 .case-game .case-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 0 1rem .7rem; }
 .case-game .case-body:has(.case-material-desk) { display: flex; flex-direction: column; overflow: hidden; }
 .case-material-desk { display: grid; grid-template-columns: minmax(180px, .35fr) minmax(0, 1fr); gap: 1rem; min-height: 0; flex: 1; }
@@ -437,7 +437,9 @@ html:has(body.playing-generated), body.playing-generated { height: 100%; overflo
 .case-material-work .case-methods small { margin-top: .4rem; line-height: 1.5; }
 .case-material-result { clear: both; }
 .case-material-result pre, .case-study pre { max-height: 32dvh; overflow: auto; white-space: pre; padding: .8rem; background: #0b1825; color: #e6f0f5; font: .85rem/1.65 ui-monospace, monospace; overscroll-behavior: contain; }
-.case-game .case-incident-report { max-height: 100%; overflow: auto; }
+.case-state-initial_court .case-body { display: flex; flex-direction: column; overflow: hidden; padding-top: .7rem; }
+.case-game .case-incident-report { flex: 1; min-height: 0; width: min(100%, 900px); margin: 0 auto; overflow: auto; overscroll-behavior: contain; }
+.case-incident-overview, .case-allegation { white-space: pre-line; }
 .case-game .case-court-source { overflow: auto; }
 .case-game .case-result { justify-content: flex-start; flex: 0 0 auto; }
 .case-verdict-scene > .case-person { width: 130px; height: 130px; flex: none; align-self: center; }

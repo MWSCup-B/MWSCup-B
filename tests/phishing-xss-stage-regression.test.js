@@ -54,17 +54,17 @@ test('共有Web取得元ではフィッシングを比較し、XSSの実行比�
   // The XSS records remain available on their original host, outside this question.
   assert.ok(stages[1].routes.some(route => route.ground.attackNodeId === xss));
   assert.deepEqual(new Set(plans[1].grounds.map(key)), new Set([`${phishing}/email_record`, `${phishing}/web_access_record`]));
-  assert.doesNotMatch(plans[1].description + plans[1].investigationStage.questionFocus, /Stored XSS|ブラウザ実行計測/);
+  assert.doesNotMatch(plans[1].description + plans[1].investigationStage.questionFocus, /Stored XSS|ブラウザのスクリプト実行記録/);
   assert.doesNotMatch(buildQuestionBackground(stages, 1, value.generationInput), /Stored XSS/);
-  for (const sourceId of ['stored_content_record', 'web_access_record', 'browser_execution_record'])
+  for (const sourceId of ['stored_content_record', 'web_access_record', 'browser_execution_record', 'announcement_audit_record', 'browser_request_initiator_record'])
     assert.ok(plans[2].grounds.some(ground => ground.attackNodeId === xss && ground.sourceId === sourceId));
-  assert.match(plans[2].investigationStage.questionFocus, /Stored XSS/);
+  assert.match(plans[2].investigationStage.questionFocus, /被害.*開始元/);
   assert.deepEqual(validateScenarioEvidenceCoverage(value), []);
 });
 
 test('XSS単独の保存資料の段階も、未取得の実行計測との比較完了を要求しない', () => {
   const value = fixture(['stored_xss']); const plans = requirements(value.scenarioPackage);
-  assert.doesNotMatch(plans[0].description, /必要資料をすべて取得済み|対応するブラウザ実行計測を照合する/);
+  assert.doesNotMatch(plans[0].description, /必要資料をすべて取得済み|対応するブラウザのスクリプト実行記録を照合する/);
   assert.match(plans[0].investigationStage.expectedInference, /実行成功は分からない/);
   assert.match(plans[1].description, /必要資料をすべて取得済み/);
   assert.deepEqual(validateScenarioEvidenceCoverage(value), []);
@@ -101,7 +101,7 @@ test('指摘された3項目を差分修正後に再レビューし、最大回�
       if (args.phase === 'REVIEWING_SCENARIO' && this.reviewCalls === 1) {
         for (const check of result.checks.filter(item => ['EVIDENCE_GROUND_ALIGNMENT', 'FACT_NARRATIVE_SEPARATION', 'INVESTIGATION_COVERAGE'].includes(item.category))) {
           check.outcome = 'FAIL'; check.reason = 'URL不一致の合成値と技術事実を区別し、Web段階をメールと要求記録の比較に限定してください。';
-          check.correctionHint = 'XSSの比較はブラウザ実行計測を取得する後の段階へ残してください。';
+          check.correctionHint = 'XSSの比較はブラウザのスクリプト実行記録を取得する後の段階へ残してください。';
         }
       }
       if (args.phase === 'REVISING_SCENARIO') {

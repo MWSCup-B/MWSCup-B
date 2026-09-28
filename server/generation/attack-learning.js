@@ -1,4 +1,5 @@
 import { EXTENDED_ATTACK_LEARNING } from './extended-attack-learning.js';
+import { INCIDENT_PROFILES } from './incident-design.js';
 
 // A configured teaching answer is not an additional fact in the attack graph.
 export function phishingMaterialPolicy(attackId) {
@@ -38,12 +39,12 @@ export const ATTACK_LEARNING = Object.freeze({
   },
   stored_xss: {
     name: 'Stored XSS', sources: ['stored_content_record', 'web_access_record', 'browser_execution_record'],
-    comparison: '保存投稿の識別子と非実行ソース、後の閲覧要求、対応するブラウザ実行計測を照合する。サーバーに保存された内容が後の閲覧時にブラウザで解釈される特徴を説明する。',
+    comparison: '保存投稿の識別子と非実行ソース、後の閲覧要求、対応するブラウザのスクリプト実行記録を照合する。サーバーに保存された内容が後の閲覧時にブラウザで解釈される特徴を説明する。',
     limit: '保存・閲覧要求だけでは実行成功は分からない。実行計測が示す対象に限定し、Cookie窃取など未入力の影響を追加しない。',
   },
   reflected_xss: {
     name: 'Reflected XSS', sources: ['web_access_record', 'browser_execution_record'],
-    comparison: '要求対象と当該応答に対応するブラウザ実行計測を照合する。要求を契機とした応答のスクリプト実行と、サーバー上での処理を区別する。',
+    comparison: '要求対象と当該応答に対応するブラウザのスクリプト実行記録を照合する。要求を契機とした応答のスクリプト実行と、サーバー上での処理を区別する。',
     limit: 'アクセス成功だけで実行を判断せず、保存投稿やセッション窃取を追加しない。',
   },
   sql_injection: {
@@ -79,10 +80,13 @@ export const ATTACK_LEARNING = Object.freeze({
 });
 
 const SOURCE_GUIDES = Object.freeze({
+  announcement_audit_record: ['告知投稿の監査記録', '投稿要求の識別子と処理結果を、要求の開始元の記録と照合しましょう。'],
+  browser_request_initiator_record: ['ブラウザ通信の開始元記録', 'どのスクリプトから通信が発生したか、保存投稿・実行・投稿要求の識別子を確認しましょう。'],
+  application_response_record: ['Web応答の監査記録', '要求・クエリの識別子と返却レコードの対応を、Web・DBの記録と照合しましょう。'],
   email_record: ['メールのリンク情報', '本文の案内、表示URL、href（リンク先の指定）を読み比べましょう。'],
   web_access_record: ['Web要求', '要求対象と時刻を確認し、どのページへの要求が記録されたかを読みましょう。'],
   stored_content_record: ['保存投稿', '投稿の識別子・保存内容と閲覧対象の対応を調べましょう。'],
-  browser_execution_record: ['ブラウザ計測', 'どの閲覧対象の実行を計測したか、保存資料や要求記録と照合しましょう。'],
+  browser_execution_record: ['ブラウザの動作記録', 'どの閲覧対象の実行を計測したか、保存資料や要求記録と照合しましょう。'],
   database_statement_record: ['DB監査', '対象要求に対応する実行SQLの識別情報と、記録されたSQLの条件・構造を確認しましょう。'],
   credential_submission_record: ['フォーム送受信', '送信先・時刻・相関IDを照合し、アクセスと送受信を分けて整理しましょう。'],
   authentication_record: ['認証監査', 'アカウント・時刻・成否を読み、認証時点で確認できる範囲を整理しましょう。'],
@@ -104,12 +108,23 @@ export function investigationSourceLabel(routes) {
   return [...new Set(routes.map(route => (SOURCE_GUIDES[route.ground.sourceId]?.[0] ?? route.sourceLabel)).filter(Boolean))].join('・');
 }
 
+export function learningProfile(node) {
+  const profile = ATTACK_LEARNING[node?.attackDefinitionId];
+  const incident = INCIDENT_PROFILES[node?.attackDefinitionId];
+  if (!incident || !node.effects.some(effect => effect.predicate === incident.effect)) return profile;
+  const sources = node.attackDefinitionId === 'stored_xss'
+    ? ['stored_content_record', 'web_access_record', 'announcement_audit_record', 'browser_execution_record', 'browser_request_initiator_record']
+    : ['web_access_record', 'application_response_record', 'database_statement_record'];
+  return { ...profile, sources, comparison: incident.refutation,
+    limit: '新しい被害や人物同定を加えず、検証済みの被害・人物設定と取得資料の対応だけを扱う。IP・アカウント記録だけで人物を特定しない。' };
+}
+
 export function stageLearningTasks(stages, index, generationInput) {
   const available = stages.slice(0, index + 1).flatMap(stage => stage.routes.map(route => route.ground));
   const current = stages[index].routes.map(route => route.ground);
   return [...new Set(current.map(ground => ground.attackNodeId))].map(attackNodeId => {
     const node = generationInput.technicalInput.attackGraph.nodes.find(item => item.nodeId === attackNodeId);
-    const profile = ATTACK_LEARNING[node?.attackDefinitionId];
+    const profile = learningProfile(node);
     if (!profile) throw new Error(`Missing learning contract: ${node?.attackDefinitionId}`);
     const grounds = available.filter(ground => ground.attackNodeId === attackNodeId);
     const complete = profile.sources.every(id => grounds.some(ground => ground.sourceId === id));

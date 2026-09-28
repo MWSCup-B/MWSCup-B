@@ -185,7 +185,7 @@ test('draft本文の型不正・未知field・長さ違反をハッシュ生成�
   for (const [mutate, code] of [
     [item => { item.publicContent = null; }, 'INVALID_TYPE'],
     [item => { item.untrustedExtra = 'ignored'; }, 'UNKNOWN_FIELD'],
-    [item => { item.publicContent = 'x'.repeat(20001); }, 'INVALID_STRING'],
+    [item => { item.publicContent = 'x'.repeat(100001); }, 'INVALID_STRING'],
   ]) {
     const draft = generationDraft(); mutate(draft.evidenceArtifacts[0]);
     assert.throws(() => materializeEvidenceGenerationDraft(draft), { code });

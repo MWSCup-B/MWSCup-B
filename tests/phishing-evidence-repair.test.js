@@ -138,7 +138,6 @@ for (const attackIds of [['phishing'], ['stored_xss'], ['phishing', 'stored_xss'
         const draft = await super.runJson(args);
         if (args.phase !== 'GENERATING_EVIDENCE') return draft;
         for (const artifact of draft.evidenceArtifacts) {
-          if (artifact.type.endsWith('_LOG') && artifact.type !== 'WEB_ACCESS_LOG') artifact.publicContent = artifact.publicContent.split('\n')[0];
           if (artifact.type === 'EMAIL') {
             const link = phishingMailLinks(artifact.publicContent)[0].href;
             artifact.publicContent = `Subject: 確認のお願い\n\n次のリンクを開いて確認してください。\n${link}`;

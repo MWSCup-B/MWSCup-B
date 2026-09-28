@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import { randomUUID } from 'node:crypto';
+import { renderNetworkDiagram } from '../../public/network-diagram.js';
 
 const [html, source] = await Promise.all([
 // 2026-09-20 修正前: ブラウザと同様に保存用HTMLコメントを描画対象から除外
@@ -163,7 +164,7 @@ export function startAuthorDom(bootstrap, { missingElementId = null, startError 
   const localStorage = { getItem: key => storedSettings.get(key) ?? null,
     setItem: (key, value) => storedSettings.set(key, String(value)) };
   const ready = runInNewContext(`(async () => {\n${source.replace(/^import .*;$/gm, '')}\n})()`, {
-    document, fetch, structuredClone, crypto: { randomUUID },
+    document, fetch, structuredClone, crypto: { randomUUID }, renderNetworkDiagram,
     location: { hash }, caseStudyView: value => { const node = new Element('article'); node.textContent = value.incident; return node; },
     confirm: () => true, localStorage,
     gameAudio: { mount() {}, setScene() {}, effect() {} },

@@ -230,7 +230,7 @@
     },
     {
       "id": "browser_execution_record",
-      "description": "当該スクリプトの実行を示すブラウザ計測記録。標準のアクセスログやCSP違反ログを実行成功の証明に置き換えない。",
+      "description": "当該スクリプトの実行を示すブラウザのスクリプト実行記録。標準のアクセスログやCSP違反ログを実行成功の証明に置き換えない。",
       "conditions": [
         {
           "source": "loggingConfiguration",
@@ -241,7 +241,7 @@
             "$request"
           ],
           "value": true,
-          "description": "当該実行を識別できるブラウザ計測が有効で、実行成功の記録が取得・保持されている。"
+          "description": "当該実行を識別できるブラウザの動作記録が有効で、実行成功の記録が取得・保持されている。"
         }
       ]
     }

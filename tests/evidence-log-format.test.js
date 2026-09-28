@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LOG_TYPES, validateGeneratedLogFormats } from '../server/generation/evidence-log-format.js';
+import { LOG_TYPES, validateGeneratedLogFormats, validateExplorableWebLogs } from '../server/generation/evidence-log-format.js';
 import { AutoGenerationManager, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 
@@ -30,6 +30,20 @@ test('prose logs, commentary fields and malformed record containers are rejected
 test('format verification does not turn testimony, saved mail or a document into logs', () => {
   for (const type of ['EMAIL', 'TESTIMONY', 'DOCUMENT', 'FILE_METADATA']) {
     assert.doesNotThrow(() => validateGeneratedLogFormats([{ type, publicContent: '保存資料の本文。' }]));
+  }
+});
+
+test('all machine logs require 100 distinct English records and reject repeated padding or embedded answers', () => {
+  const records = Array.from({ length: 100 }, (_, i) => JSON.stringify({ request_id: `req-${i}`, result: 'success' }));
+  for (const type of LOG_TYPES) {
+    const artifact = { type, publicContent: records.join('\n') }, before = structuredClone(artifact);
+    validateGeneratedLogFormats([artifact]); validateExplorableWebLogs([artifact]);
+    assert.deepEqual(artifact, before);
+    for (const lines of [records.slice(0, 99), Array(100).fill(records[0])]) {
+      assert.throws(() => validateExplorableWebLogs([{ type, publicContent: lines.join('\n') }]), { code: 'EVIDENCE_LOG_CONTEXT_REQUIRED' });
+    }
+    for (const row of [{ event: '被告人による操作とは断定できない' }, { hint: 'The defendant is innocent' }])
+      assert.throws(() => validateGeneratedLogFormats([{ type, publicContent: JSON.stringify(row) }]), { code: 'EVIDENCE_LOG_FORMAT_INVALID' });
   }
 });
 

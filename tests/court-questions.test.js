@@ -98,8 +98,8 @@ test('冒頭説明と調査の準備状態を公開し、未発見の資料本�
   assert.match(opening.initialCourt.incidentOverview, /青葉ソリューションズ|社内ポータル/);
   assert.match(opening.initialCourt.prosecutionOpening, /案内メールが保存され/);
   assert.doesNotMatch(opening.initialCourt.prosecutionOpening, /From: notice@example\.invalid/);
-  assert.match(opening.initialCourt.prosecutionOpening, /検察側の主張と疑いの経緯/);
-  assert.match(opening.initialCourt.prosecutionOpening, /具体的な裏付け/);
+  assert.match(opening.initialCourt.prosecutionOpening, /検察側の嫌疑/);
+  assert.doesNotMatch(opening.initialCourt.prosecutionOpening, /具体的な裏付け|これからの調査と審理/);
   assert.equal(opening.initialCourt.attributionStatus, 'ALLEGATION_ONLY');
   const investigation = actGenerated(player, runtime, { action: 'continue' });
   assert.equal(investigation.discoveredEvidence.length, 0);
