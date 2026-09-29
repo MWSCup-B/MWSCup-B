@@ -122,11 +122,14 @@ function pagedText(key, speaker, text, redraw, { spoken = false, lines = compact
 function courtEvidenceReader(item, redraw, lines = compactCourt?.matches ? 5 : 6) {
   const node = el('article', undefined, 'case-document case-court-document');
   if (!item) { node.append(el('p', '資料を選ぶと、ここに原文が表示されます。')); return node; }
-  const pages = sourcePages(item.publicContent, lines, compactCourt?.matches ? 26 : 30);
+  const saved = Array.isArray(item.savedFacts);
+  const content = saved ? item.savedFacts.map(fact => `行${fact.line}: ${fact.text}`).join('\n') : item.publicContent;
+  const description = saved ? '保存した証拠（元資料の行番号）' : '原文';
+  const pages = sourcePages(content, lines, compactCourt?.matches ? 26 : 30);
   view.evidencePage = Math.min(view.evidencePage, pages.length - 1);
-  node.append(el('span', `${types[item.type] ?? '資料'} · 原文`, 'case-eyebrow'), el('h3', item.title));
+  node.append(el('span', `${types[item.type] ?? '資料'} · ${description}`, 'case-eyebrow'), el('h3', item.title));
   const original = el('pre', pages[view.evidencePage], 'case-court-source'); original.tabIndex = 0;
-  original.setAttribute('aria-label', `${item.title}の原文 ${view.evidencePage + 1}ページ`);
+  original.setAttribute('aria-label', `${item.title}の${description} ${view.evidencePage + 1}ページ`);
   node.append(original);
   const controls = el('div', undefined, 'case-document-pages');
   controls.append(button('前のページ', () => { view.evidencePage -= 1; redraw('document'); }, '', view.evidencePage === 0),
@@ -188,7 +191,7 @@ function materialDesk(game, redraw, action) {
   for (const item of materials) {
     const selected = item.materialId === view.material;
     const choice = button(`${item.label}${item.collected ? '（確認済み）' : ''}`, () => {
-      view.material = item.materialId; view.interpretation = null;
+      view.material = item.materialId; view.interpretation = null; view.evidencePage = 0;
       if (!item.collected && !view.submission) action('inspect-material', { materialId: item.materialId, methodId: 'read' });
       else redraw('material');
     }, selected ? 'is-selected' : '');
@@ -210,6 +213,8 @@ function materialDesk(game, redraw, action) {
     if (source) work.append(searchableSource(source));
     else work.append(button('原文を開く', () => action('inspect-material', { materialId: material.materialId, methodId: 'read' }), 'case-primary'));
   } else if (material?.question) {
+    const saved = game.collectedEvidence?.find(item => item.evidenceId === material.materialId && Array.isArray(item.savedFacts));
+    if (saved) work.append(courtEvidenceReader(saved, redraw));
     work.append(el('p', '選んだ資料を根拠に、どの反論を提示しますか。'));
     const choices = el('div', undefined, 'case-interpretations'); choices.setAttribute('aria-label', '反対主張の4択');
     material.question.choices.forEach((choice, index) => {

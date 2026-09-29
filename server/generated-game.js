@@ -34,6 +34,14 @@ function publicEvidence(item) {
     publicContent: item.publicContent };
 }
 
+function collectedEvidenceView(item, session) {
+  // Legacy investigation APIs collect a whole document. Workspace saves instead
+  // own explicit excerpts; never replace those excerpts with the original file.
+  if (!Object.hasOwn(session.savedFacts ?? {}, item.evidenceId)) return publicEvidence(item);
+  const savedFacts = structuredClone(session.savedFacts[item.evidenceId]).sort((a, b) => a.line - b.line);
+  return { ...publicEvidence(item), publicContent: savedFacts.map(fact => fact.text).join('\n'), savedFacts };
+}
+
 function prerequisitesMet(rule, discovered, completed) {
   return rule.prerequisites.requiredEvidenceIds.every(id => discovered.has(id))
     && rule.prerequisites.requiredCompletedActionIds.every(id => completed.has(id));
@@ -145,7 +153,7 @@ function playerView(session, runtime) {
         .map(item => ({ ...publicEvidence(item),
           discoveryState: collected.has(item.evidenceId) ? 'COLLECTED' : 'DISCOVERED' })),
       collectedEvidence: evidenceItems.filter(item => collected.has(item.evidenceId))
-        .map(publicEvidence),
+        .map(item => collectedEvidenceView(item, session)),
       ...(isSequential(runtime.gameCase) ? { currentEvidenceIds: stageEvidenceIds(runtime.gameCase, session.currentRound)
         .filter(id => collected.has(id)) } : {}) };
   }
@@ -166,7 +174,7 @@ function playerView(session, runtime) {
       speaker: characters.get(testimony.speakerCharacterId) })).filter(item => item.statements.length),
     presentableEvidence: evidenceItems.filter(item => collected.has(item.evidenceId)
       && publicCase.progression.retrialCourt.presentableEvidenceIds.includes(item.evidenceId))
-      .map(publicEvidence) };
+      .map(item => collectedEvidenceView(item, session)) };
   }
   if (session.currentState === 'GUILTY_RETRY') return { ...base,
     publicFailureFeedback: publicCase.progression.retry.publicFailureFeedback };

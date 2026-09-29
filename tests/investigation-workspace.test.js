@@ -93,7 +93,11 @@ for (const attacks of [['unauthorized_login'], ['password_spray'], ['password_sp
     for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round++) {
       assert.equal(generatedPlayerView(session, runtime).workbench.progress.complete, true);
       const pair = currentCorrectPair(runtime, round);
-      actGenerated(session, runtime, { action: 'retrial', ...pair });
+      const court = actGenerated(session, runtime, { action: 'retrial', ...pair });
+      for (const item of court.presentableEvidence) {
+        assert.deepEqual(item.savedFacts, session.savedFacts[item.evidenceId]);
+        assert.equal(item.publicContent, session.savedFacts[item.evidenceId].map(fact => fact.text).join('\n'));
+      }
       actGenerated(session, runtime, { action: 'objection', ...pair });
     }
     assert.equal(session.currentState, 'ACQUITTED');

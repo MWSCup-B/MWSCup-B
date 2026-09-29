@@ -35,6 +35,36 @@ const base = { mode: 'GENERATED', gameCaseId: 'case_ui', currentRound: 1, totalR
 const email = { evidenceId: 'mail', title: '保存メール', type: 'EMAIL',
   publicContent: '<a href="https://example.invalid/actual">https://example.invalid/display</a>' };
 
+test('submission and court display only saved excerpts with their original line numbers', async () => {
+  const savedFacts = [{ line: 3, text: '<script>not executed</script>' }, { line: 19, text: '保存した別の行' }];
+  const saved = { ...email, publicContent: savedFacts.map(fact => fact.text).join('\n'), savedFacts };
+  const choices = ['記録から人物は特定できない。', '人物を特定できる。', '意図まで分かる。', '記録は存在しない。']
+    .map((text, index) => ({ choiceId: `saved_choice_${index}`, text }));
+  const page = ui({ ...base, currentState: 'INVESTIGATION', investigationMode: 'OPEN_MATERIALS',
+    investigationTargets: [], canReturnToCourt: true, collectedEvidence: [saved],
+    workbench: { workspaceVersion: '1.0', progress: { complete: true, collected: 1, required: 1 },
+      materials: [{ materialId: 'mail', label: '保存メール', collected: true, savedFacts, question: { choices } }] } });
+  await page.click('提出する証拠を決める');
+  assert.match(page.screen.querySelector('.case-court-document').textContent, /保存した証拠（元資料の行番号）/);
+  assert.match(page.screen.querySelector('.case-court-source').textContent, /行3: <script>not executed<\/script>/);
+  await page.click(choices[0].text.replace(/^/, 'A. '));
+  await page.click('この資料と主張で法廷へ');
+  assert.deepEqual(page.calls, [{ action: 'retrial', evidenceId: 'mail', interpretationChoiceId: choices[0].choiceId }]);
+  page.change({ ...base, currentState: 'RETRIAL_COURT', investigationMode: 'OPEN_MATERIALS',
+    pendingInterpretation: { evidenceId: 'mail', statementId: 'claim', ...choices[0] }, presentableEvidence: [saved] });
+  let shown = '';
+  for (let guard = 0; guard < 20; guard++) {
+    shown += page.screen.querySelector('.case-court-source').textContent;
+    const next = page.screen.querySelectorAll('button').find(item => item.textContent === '次のページ');
+    if (next.disabled) break;
+    await page.click('次のページ');
+  }
+  assert.equal(shown, '行3: <script>not executed</script>\n行19: 保存した別の行');
+  assert.equal(page.screen.querySelectorAll('script').length, 0);
+  await page.click('この証拠を提示する');
+  assert.deepEqual(page.calls.at(-1), { action: 'objection', statementId: 'claim', evidenceId: 'mail', interpretationChoiceId: choices[0].choiceId });
+});
+
 test('調査は全文を開いて複数候補へ絞り込み、資料を替えても検察側の主張は固定される', async () => {
   const records = ['09:00 /home', '09:01 /records request=a', '09:02 /records request=b',
     '09:03 /help', '09:04 /home', '09:05 <script>unsafe()</script>'];

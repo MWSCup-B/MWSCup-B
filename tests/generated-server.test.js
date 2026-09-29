@@ -142,6 +142,13 @@ test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解�
     assert.equal(rejected.status, 400);
     assert.equal((await rejected.json()).error.code, 'INTERPRETATION_CHOICE_REQUIRED');
     game = await action({ action: 'retrial', evidenceId, interpretationChoiceId: currentCorrectPair(author.runtime, round).interpretationChoiceId });
+    if (round === 1) {
+      const submitted = game.presentableEvidence.find(item => item.evidenceId === evidenceId);
+      const source = author.runtime.gameCase.detective.evidence.find(item => item.evidenceId === evidenceId);
+      assert.deepEqual(submitted.savedFacts, [{ line: 1, text: source.publicContent.split(/\r?\n/)[0] }]);
+      assert.equal(submitted.publicContent, submitted.savedFacts[0].text);
+      assert.notEqual(submitted.publicContent, source.publicContent);
+    }
     const injected = await post('/api/action', { action: 'objection', ...currentCorrectPair(author.runtime, round),
       correctOptionIndex: 0 }, token);
     assert.equal(injected.status, 400);
