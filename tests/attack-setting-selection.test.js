@@ -7,6 +7,8 @@ import { validateScenarioConfiguration } from '../server/generation/scenario-con
 import { buildAttackGraphs } from '../server/generation/attack-graph.js';
 import { buildScenarioTemplate } from '../server/generation/scenario-template.js';
 import { validateStageRequirements } from '../server/generation/scenario-stage-plan.js';
+import { EXTENDED_ATTACK_LEARNING } from '../server/generation/extended-attack-learning.js';
+import { hasSelfDisclosingShortcut } from '../server/generation/court-claim-style.js';
 import { buildEvidenceInvestigationPlan } from '../server/generation/investigation-registry.js';
 import { AutoGenerationManager, createAutoAuthorSession, autoAuthorBootstrap } from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
@@ -73,6 +75,33 @@ test('候補は実際の技術グラフから導出し、公開データに根�
   changed.find(item => item.id === 'clickfix').effects[0].predicate = 'independent_endpoint_execution';
   const changedPaths = buildAttackSelectionPaths(changed);
   assert.ok(!changedPaths.some(path => path.join('>') === 'clickfix>ransomware'), '固定の相性表でなくeffectとの一致を再検査');
+});
+
+test('検察側の主張は観測事実と結論を自然に述べ、推論の弱点を「だけで」で自白しない', () => {
+  for (const attack of AUTHOR_ATTACK_CHOICES) {
+    const config = createSelectionConfiguration(request([attack.id]), catalog);
+    const generationInput = validateScenarioConfiguration(config, catalog).technical.generationInput;
+    const scenario = buildScenarioTemplate({ configuration: config, generationInput });
+    const plans = scenario.evidenceRequirements.requirements.filter(item => item.investigationStage);
+    for (const { investigationStage: stage } of plans) {
+      assert.equal(hasSelfDisclosingShortcut(stage.claim), false, `${attack.id}: ${stage.claim}`);
+    }
+    if (attack.id === 'stored_xss') {
+      assert.match(plans[0].investigationStage.claim, /投稿.*保存/);
+      assert.match(plans[0].investigationStage.claim, /ブラウザ.*実行.*判断/);
+    }
+  }
+  for (const [attackId, profile] of Object.entries(EXTENDED_ATTACK_LEARNING)) {
+    assert.equal(hasSelfDisclosingShortcut(profile.claim), false, `${attackId}: ${profile.claim}`);
+  }
+
+  const config = createSelectionConfiguration(request(['stored_xss']), catalog);
+  const generationInput = validateScenarioConfiguration(config, catalog).technical.generationInput;
+  const scenario = buildScenarioTemplate({ configuration: config, generationInput });
+  scenario.evidenceRequirements.requirements.find(item => item.investigationStage)
+    .investigationStage.claim = 'Webサーバーに投稿が保存されていた。それだけで、ブラウザで実行された証拠になりますね。';
+  assert.ok(validateStageRequirements(config, generationInput, scenario)
+    .some(item => item.code === 'INVESTIGATION_STAGE_PLAN_INVALID' && item.reason.includes('不自然な表現')));
 });
 
 for (const setting of SCENARIO_SETTINGS) test(`舞台 ${setting.label} を自動設定へ反映する`, () => {

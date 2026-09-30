@@ -6,7 +6,7 @@ import { buildScenarioGenerationInputs } from './scenario-interface.js';
 import { requestedCourtIssueCount } from './court-issues.js';
 import { AUTHOR_ATTACK_CHOICES, SCENARIO_SETTINGS } from './author-options.js';
 import { buildIncidentOverview } from './incident-report.js';
-import { incidentDefinitions } from './incident-design.js';
+import { INCIDENT_DESIGN, incidentDefinitions } from './incident-design.js';
 
 export const INVESTIGATION_TYPES = Object.freeze({
   WEB_LOG: { label: 'Webアクセスログ', actionId: 'action_audit_log' },
@@ -75,13 +75,14 @@ export function createManualAttackPreset(attackIds, catalog) {
     has('unauthorized_login') && 'unauthorized_login', has('stored_xss') && 'stored_xss'].filter(Boolean);
   const configuration = createDefaultConfiguration({ attackIds: [], difficulty: attackIds.length,
     incidentDate: '2026-09-18' });
+  configuration.incidentDesign = INCIDENT_DESIGN;
   if (has('unauthorized_login')) {
     configuration.incidentContext.victimSystem = '社内ポータル（認証連携・投稿機能）';
     configuration.incidentContext.initialSuspicionReason =
-      '調査担当者が認証成功のアカウントを被告人の利用と結び付けたため。アカウントと人物の対応は疑う側の主張であり、技術記録からは未確認。';
+      '検察側調査官が認証成功のアカウントを被告人の利用と結び付けたため。アカウントと人物の対応は検察側の主張であり、技術記録からは未確認。';
   } else if (has('stored_xss')) {
     configuration.incidentContext.initialSuspicionReason =
-      '調査担当者が投稿の閲覧記録を被告人による投稿と結び付けたため。閲覧者と投稿者の同一性や、被告人との対応は未確認。';
+      '検察側調査官が投稿の閲覧記録を被告人による投稿と結び付けたため。閲覧者と投稿者の同一性や、被告人との対応は未確認。';
   }
   const { network } = configuration;
   if (has('unauthorized_login')) {
@@ -111,7 +112,7 @@ export function createManualAttackPreset(attackIds, catalog) {
       evidenceAnswer: 'メールの表示URLと実際のhrefが異なり、偽フォームへの送信記録は正規サービスでの認証成功とは別であること。',
       notes: 'リンク誘導に加え、偽フォームへの資格情報入力・送信・受信を明示した教材。送信記録は調査可能な合成資料で秘密値を含めない。認証先はauth-service。クリックだけで窃取とはしない。' },
     unauthorized_login: { investigationTypes: ['AUTH_LOG'], investigationSourceNodeId: 'auth-host',
-      evidenceAnswer: '認証ログとWeb側のセッション監査は同じアカウントの認証・投稿権限を示すが、それだけで実際の操作者を被告人と特定できないこと。',
+      evidenceAnswer: '認証ログとWeb側のセッション監査は同じアカウントの認証・投稿権限を示す。一方、これらの記録が示すアカウントと実際の操作者は区別して判断すること。',
       notes: `${capture ? '前段の偽フォームで取得した' : '初期条件として取得済みの'}有効な資格情報を悪用する。認証先auth-service、投稿先web-service。教材はパスワードのみの認証・投稿権限に限定し、MFA突破や管理者権限は仮定しない。` },
     stored_xss: { investigationTypes: ['APPLICATION_LOG', 'WEB_LOG'], investigationSourceNodeId: 'web-host',
       evidenceAnswer: '保存投稿と後の閲覧記録・ブラウザの動作記録を照合するとStored XSSの実行を確認できるが、閲覧端末の利用記録は投稿者の特定にはならないこと。',
@@ -201,6 +202,7 @@ export function scenarioCreationBootstrap(catalog, networkPresets = []) {
   const defaultManualConfiguration = createDefaultConfiguration({
     mode: 'MANUAL', difficulty: 1, attackIds: ['phishing'], incidentDate: '2026-09-18',
   });
+  defaultManualConfiguration.incidentDesign = INCIDENT_DESIGN;
   const defaultNetworkPreset = networkPresets.find(item => item.id === 'corporate-flat');
   const phishingDefinition = catalog.find(item => item.id === 'phishing');
   if (defaultNetworkPreset && phishingDefinition) {

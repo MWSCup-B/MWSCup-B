@@ -42,7 +42,7 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
       purpose: ['TIMELINE_PROOF', 'EXONERATION_PROOF'] }),
     artifact(evidenceGenerationInput, { evidenceId: 'evidence_testimony', type: 'TESTIMONY',
       title: '証言者の供述',
-      publicContent: '架空の証言者は「その操作を直接見た」「記録の時刻も確認した」と発言した。',
+      publicContent: '検察側調査官は「その操作を直接見た」「記録の時刻も確認した」と発言した。',
       sourceRefs: [contradictionGround], requirementIds: ['requirement_contradiction'],
       purpose: ['CONTRADICTION_PROOF'], testimony: { witnessCharacterId: 'character_witness',
         statements: [{ statementId: 'statement_seen_operation', spokenContent: 'その操作を直接見た',
@@ -81,7 +81,7 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
       '{"query_id":"training-query-01","statement":"SELECT title FROM training_records WHERE category = \'public\'"}'],
     stored_content_record: ['APPLICATION_LOG', '保存投稿の監査資料',
       '{"post_id":"training-post-01","stored_content":"<script>/* synthetic inert sample */</script>"}'],
-    credential_submission_record: ['APPLICATION_LOG', '偽フォームの送信受信計測',
+    credential_submission_record: ['APPLICATION_LOG', '偽フォームの送信受信記録',
       '{"timestamp":"2026-09-18T09:10:00+09:00","destination":"https://lure.example.invalid/form","correlation_id":"training-form-01"}'],
     authentication_record: ['AUTHENTICATION_LOG', '認証監査記録',
       '{"timestamp":"2026-09-18T09:10:00+09:00","account":"training-editor","result":"success","source_ip":"203.0.113.10"}'],
@@ -139,7 +139,7 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
     });
     const spokenContent = '提示された技術資料だけで、被告人が自分の意思で対象の操作を行ったと特定できる。';
     const testimony = evidenceArtifacts[2];
-    testimony.publicContent = `架空の調査担当者の主張: 「${spokenContent}」`;
+    testimony.publicContent = `検察側調査官の主張: 「${spokenContent}」`;
     testimony.testimony.statements = [{ statementId: 'statement_seen_operation', spokenContent,
       technicalAssessment: 'CONTRADICTED', groundTruthRefs: [contradictionGround.sourceId],
       contradictionCandidate: true }];

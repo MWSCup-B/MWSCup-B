@@ -189,11 +189,13 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
   };
   await play({ action: 'begin' }); let game = await play({ action: 'continue' });
   assert.equal(game.collectedEvidence.length, 0);
-  for (const plan of plans) for (const [index, step] of plan.steps.entries()) game = await play({ action: 'inspect-material', materialId: plan.evidenceId,
-    methodId: procedureMethods(plan, index).find(item => item.index === step.correctOptionIndex).methodId });
   const collectedTypes = new Set();
   const rounds = game.totalRounds;
   for (let round = 1; round <= rounds; round += 1) {
+    for (const plan of plans) {
+      game = await play({ action: 'workspace-read', materialId: plan.evidenceId });
+      game = await play({ action: 'save-fact', materialId: plan.evidenceId, line: 1 });
+    }
     assert.ok(game.investigationTargets.length > 1);
     for (const item of game.collectedEvidence) collectedTypes.add(item.type);
     assert.ok(game.currentEvidenceIds.every(id => game.collectedEvidence.some(item => item.evidenceId === id)));

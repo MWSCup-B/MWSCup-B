@@ -89,6 +89,12 @@ export class MockCodexRunner {
         verificationResult: agent.verificationResult,
         scenarioPackage: agent.scenarioVerificationInput.scenarioPackage }).evidencePackage;
       for (const artifact of draft.evidenceArtifacts) delete artifact.integrity;
+      const titleCounts = new Map();
+      for (const artifact of draft.evidenceArtifacts.filter(item => item.type !== 'TESTIMONY')) {
+        const count = (titleCounts.get(artifact.title) ?? 0) + 1;
+        titleCounts.set(artifact.title, count);
+        if (count > 1) artifact.title = `${artifact.title}（取得資料${count}）`;
+      }
       for (const artifact of draft.evidenceArtifacts.filter(item => item.type.endsWith('_LOG'))) {
         const example = JSON.parse(artifact.publicContent.split('\n')[0]);
         const count = artifact.publicContent.trim().split('\n').length;

@@ -62,7 +62,7 @@ function evidencePackage(input = generationInput()) {
       requirementIds: ['requirement_timeline', 'requirement_exoneration'],
       purpose: ['TIMELINE_PROOF', 'EXONERATION_PROOF'] }),
     artifact(input, { evidenceId: 'evidence_testimony', type: 'TESTIMONY', title: '証言者の供述',
-      publicContent: '架空の証言者は「その操作を直接見た」と発言した。', sourceRefs: [contradictionGround],
+      publicContent: '検察側調査官は「その操作を直接見た」と発言した。', sourceRefs: [contradictionGround],
       requirementIds: ['requirement_contradiction'], purpose: ['CONTRADICTION_PROOF'],
       testimony: { witnessCharacterId: 'character_witness', statements: [{
         statementId: 'statement_seen_operation', spokenContent: 'その操作を直接見た',
@@ -285,6 +285,14 @@ test('存在しないEvidence Requirement参照をINVALIDにする', () => {
   assert.ok(result.errors.some(item => item.code === 'BROKEN_EVIDENCE_REQUIREMENT_REFERENCE'));
 });
 
+test('別の技術資料に同じ表示名を付けることを拒否する', () => {
+  const input = generationInput(); const pkg = evidencePackage(input);
+  pkg.evidenceArtifacts[1].title = pkg.evidenceArtifacts[0].title;
+  const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
+  assert.equal(result.status, 'INVALID');
+  assert.ok(result.errors.some(item => item.code === 'DUPLICATE_EVIDENCE_TITLE'));
+});
+
 test('存在しないGround Truth参照をINVALIDにする', () => {
   const input = generationInput(); const pkg = evidencePackage(input);
   pkg.contradictions[0].groundTruthRefs = ['fact_missing'];
@@ -358,6 +366,30 @@ test('ContradictionのTESTIMONY・statement・競合Evidence参照を検証す�
   const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
   assert.equal(result.status, 'INVALID');
   assert.ok(result.errors.some(item => item.code === 'BROKEN_CONFLICTING_EVIDENCE_REFERENCE'));
+});
+
+test('反駁対象の証言が「それだけで」で推論の弱点を自白する文体を拒否する', () => {
+  const input = generationInput(); const pkg = evidencePackage(input);
+  const testimony = pkg.evidenceArtifacts.find(item => item.evidenceId === 'evidence_testimony');
+  const spokenContent = '投稿が保存されていました。それだけで、ブラウザで実行された証拠になります。';
+  testimony.testimony.statements[0].spokenContent = spokenContent;
+  testimony.publicContent = `検察側調査官は「${spokenContent}」と発言した。`;
+  updateDigest(testimony);
+  const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
+  assert.equal(result.status, 'INVALID');
+  assert.ok(result.errors.some(item => item.code === 'TESTIMONY_CLAIM_STYLE_UNNATURAL'));
+});
+
+test('記録・セッション・人物を混同する曖昧な証言を拒否する', () => {
+  const input = generationInput(); const pkg = evidencePackage(input);
+  const testimony = pkg.evidenceArtifacts.find(item => item.evidenceId === 'evidence_testimony');
+  const spokenContent = '虚偽の投稿が被告人の利用セッションに記録されたため、被告人が投稿したと判断しました。';
+  testimony.testimony.statements[0].spokenContent = spokenContent;
+  testimony.publicContent = `検察側調査官は「${spokenContent}」と発言した。`;
+  updateDigest(testimony);
+  const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
+  assert.equal(result.status, 'INVALID');
+  assert.ok(result.errors.some(item => item.code === 'TESTIMONY_RECORD_ATTRIBUTION_AMBIGUOUS'));
 });
 
 test('ExonerationのGround Truthと複数Evidence根拠不足を拒否する', () => {

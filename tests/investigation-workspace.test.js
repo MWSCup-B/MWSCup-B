@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { executeMaterialCommand, commandTemplates, workspaceAction, workspaceMaterial, investigationProgress }
+import { executeMaterialCommand, commandTemplates, workspaceAction, workspaceMaterial, investigationProgress, requiredCourtEvidence }
   from '../server/generation/investigation-workspace.js';
 import { buildTechnicalEvidenceCatalog, technicalEvidenceCoverageIssues } from '../server/generation/technical-evidence-catalog.js';
 import { AutoGenerationManager, createAutoAuthorSession } from '../server/auto-generation-service.js';
@@ -49,7 +49,13 @@ test('observations never collect evidence and forged facts are rejected; complet
   assert.throws(() => workspaceAction(session, game, { action: 'save-observation', materialId: 'auth', field: 'source_ip', value: '192.0.2.20' }), { code: 'OBSERVATION_NOT_SEEN' });
   workspaceAction(session, game, { action: 'save-fact', materialId: 'auth', line: 1 });
   assert.equal(investigationProgress(session, game).complete, false);
-  session.collectedEvidenceIds.push('policy'); assert.equal(investigationProgress(session, game).complete, true);
+  workspaceAction(session, game, { action: 'remove-fact', materialId: 'auth', line: 1 });
+  assert.equal(session.collectedEvidenceIds.includes('auth'), true);
+  assert.equal(session.roundCollectedEvidenceIds.includes('auth'), false);
+  assert.deepEqual(workspaceMaterial(session, log).savedFacts, []);
+  workspaceAction(session, game, { action: 'save-fact', materialId: 'auth', line: 1 });
+  session.collectedEvidenceIds.push('policy'); session.roundCollectedEvidenceIds.push('policy');
+  assert.equal(investigationProgress(session, game).complete, true);
   const unusual = structuredClone(game);
   unusual.detective.evidence[0].evidenceId = 'constructor';
   unusual.detective.evidenceDiscoveryRules[0].evidenceId = 'constructor';
@@ -91,6 +97,10 @@ for (const attacks of [['unauthorized_login'], ['password_spray'], ['password_sp
     const saved = structuredClone(session.savedObservations ?? []);
     assert.deepEqual(generatedPlayerView(session, runtime).workbench.savedObservations, saved);
     for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round++) {
+      for (const materialId of requiredCourtEvidence(runtime.gameCase, round)) {
+        actGenerated(session, runtime, { action: 'workspace-read', materialId });
+        actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
+      }
       assert.equal(generatedPlayerView(session, runtime).workbench.progress.complete, true);
       const pair = currentCorrectPair(runtime, round);
       const court = actGenerated(session, runtime, { action: 'retrial', ...pair });
@@ -98,7 +108,12 @@ for (const attacks of [['unauthorized_login'], ['password_spray'], ['password_sp
         assert.deepEqual(item.savedFacts, session.savedFacts[item.evidenceId]);
         assert.equal(item.publicContent, session.savedFacts[item.evidenceId].map(fact => fact.text).join('\n'));
       }
-      actGenerated(session, runtime, { action: 'objection', ...pair });
+      const result = actGenerated(session, runtime, { action: 'objection', ...pair });
+      if (round < runtime.gameCase.progression.courtRoundCount) {
+        assert.deepEqual(session.roundCollectedEvidenceIds, []);
+        assert.deepEqual(session.savedFacts, {});
+        assert.ok(result.dialogue.some(line => line.text === result.investigationClaim.spokenContent));
+      }
     }
     assert.equal(session.currentState, 'ACQUITTED');
     const fresh = createGeneratedGame(runtime); actGenerated(fresh, runtime, { action: 'begin' });

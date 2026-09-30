@@ -66,7 +66,7 @@ function contract(result = graphResult()) {
   const timeline = {
     schemaVersion: '1.0', timelineId: 'timeline_fixture', scenarioId,
     attackGraphRef: { ...attackGraphRef }, events,
-    narrativeTimestamps: [{ eventId: events[0].eventId, displayTimestamp: '架空時刻・午前' }],
+    narrativeTimestamps: [{ eventId: events[0].eventId, displayTimestamp: '教材時刻・午前' }],
   };
   const learningObjectives = {
     schemaVersion: '1.0', learningObjectiveSetId: 'objectives_fixture', scenarioId,
@@ -196,7 +196,7 @@ test('Timelineをgraph nodeと根拠付き依存関係へ完全一致させる',
   assert.equal(validateScenarioContract(self).issues[0].code, 'BROKEN_REFERENCE');
 
   const narrative = contract();
-  narrative.timeline.narrativeTimestamps[0].displayTimestamp = '順序判定に使用しない架空表示';
+  narrative.timeline.narrativeTimestamps[0].displayTimestamp = '順序判定に使用しない教材用表示';
   assert.equal(validateScenarioContract(narrative).status, 'VALID');
 });
 

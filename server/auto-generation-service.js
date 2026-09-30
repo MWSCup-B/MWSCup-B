@@ -41,6 +41,7 @@ import { stageEvidenceProblems } from './generation/scenario-stage-plan.js';
 import { buildQuestionBackground } from './generation/investigation-lessons.js';
 import { buildTechnicalEvidenceCatalog, technicalEvidenceCoverageIssues } from './generation/technical-evidence-catalog.js';
 import { buildIncidentConclusion } from './generation/incident-conclusion.js';
+import { INCIDENT_DESIGN, groundIncidentQuestionExplanations } from './generation/incident-design.js';
 import { LEARNING_OBSERVATION_FIELDS } from './generation/learning-observations.js';
 // 2026-09-20 修正前: Scenario設計の技術境界検証を導入する
 // import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
@@ -302,6 +303,10 @@ function buildAutomaticProgression(session, courtQuestions, materialInvestigatio
   // staged testimony to the opening source instead of quoting a later claim.
   const openingStatementId = statements.find(item => set.contradictions
     .some(contradiction => contradiction.statementRef === item.statementId))?.statementId ?? statements[0].statementId;
+  const finalStatementId = statements.filter(item => set.contradictions
+    .some(contradiction => contradiction.statementRef === item.statementId)).at(-1)?.statementId;
+  const groundedCourtQuestions = groundIncidentQuestionExplanations(courtQuestions,
+    session.scenarioPackage.groundTruth.incidentNarratives, finalStatementId);
   return buildGameProgressionPlan({ scenarioId: set.scenarioId,
     evidenceSetId: set.evidenceSetId, attackGraphRef: set.attackGraphRef,
     initialCourtEvidenceIds: openingEvidence.map(item => item?.evidenceId),
@@ -313,7 +318,8 @@ function buildAutomaticProgression(session, courtQuestions, materialInvestigatio
     retrialStatementIds: statements.map(item => item.statementId),
     returnToCourtCondition: 'CURRENT_TARGET_EVIDENCE_COLLECTED',
     courtRoundCount: stages.length, investigationMode: 'OPEN_MATERIALS',
-    courtIssueMode: 'DISTINCT_CLAIMS', courtQuestions, materialInvestigations, objectionRules,
+    courtIssueMode: 'DISTINCT_CLAIMS', courtQuestions: groundedCourtQuestions,
+    materialInvestigations, objectionRules,
     retryPolicy: { maxCourtAttempts: 3, onFailure: 'RETURN_TO_INVESTIGATION',
       onLimitReached: 'BLOCKED' },
     publicMessages: {
@@ -870,6 +876,7 @@ export class AutoGenerationManager {
         result.configuration.mode = 'MAKOTOMARU';
         result.configuration.difficulty = session.makotomaruRequest.difficulty;
         result.configuration.evidenceCount = session.makotomaruRequest.difficulty;
+        result.configuration.incidentDesign = INCIDENT_DESIGN;
         result.configuration = normalizeScenarioConfiguration(result.configuration, catalog);
         const validation = validateScenarioConfiguration(result.configuration, catalog);
         errors = validation.errors;

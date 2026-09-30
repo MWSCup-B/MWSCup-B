@@ -5,6 +5,7 @@ import {
   validateScenarioVerificationInput,
   validateScenarioVerificationResult,
 } from './scenario-verifier.js';
+import { hasAmbiguousRecordAttribution, hasSelfDisclosingShortcut } from './court-claim-style.js';
 
 export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -182,6 +183,7 @@ export function validateEvidenceConsistency(evidencePackage, input) {
   const facts = new Set(input.groundTruth.technicalFacts.map(item => item.factId));
   const characters = new Map(input.characters.characters.map(item => [item.characterId, item]));
   const artifacts = new Map();
+  const technicalTitles = new Map();
   for (const artifact of evidencePackage.evidenceArtifacts) {
     try { validateEvidenceArtifact(artifact); } catch (error) {
       issues.push(issue(error.code ?? 'INVALID_EVIDENCE_ARTIFACT', error.field ?? 'evidenceArtifacts',
@@ -196,6 +198,15 @@ export function validateEvidenceConsistency(evidencePackage, input) {
       continue;
     }
     artifacts.set(artifact.evidenceId, artifact);
+    if (artifact.type !== 'TESTIMONY') {
+      const visibleTitle = artifact.title.normalize('NFKC').trim().replace(/\s+/g, ' ');
+      const previous = technicalTitles.get(visibleTitle);
+      if (previous) issues.push(issue('DUPLICATE_EVIDENCE_TITLE', `evidenceArtifacts.${artifact.evidenceId}.title`,
+        `別の資料 ${previous} と表示名が重複しています。`,
+        '同じ取得元・同じ内容なら一つのEvidenceとして扱い、別資料なら取得元・対象・記録種別が分かる固有名にしてください。',
+        [`evidence:${previous}`, `evidence:${artifact.evidenceId}`], artifact.evidenceId));
+      else technicalTitles.set(visibleTitle, artifact.evidenceId);
+    }
     add(issues, artifact.provenance.verificationId !== input.verificationResult.verificationId
       || artifact.provenance.scenarioId !== input.scenarioImportPackage.scenarioDraft.scenarioId
       || !sameValues(artifact.provenance.attackGraphRef, input.attackGraph.graphId
@@ -254,6 +265,17 @@ export function validateEvidenceConsistency(evidencePackage, input) {
           `evidenceArtifacts.${artifact.evidenceId}.testimony.statements.${statement.statementId}`,
           '技術評価とContradiction候補フラグが一致しません。',
           'CONTRADICTEDだけをcontradictionCandidate=trueにしてください。',
+          [`evidence:${artifact.evidenceId}`], artifact.evidenceId);
+        add(issues, statement.technicalAssessment === 'CONTRADICTED'
+          && hasSelfDisclosingShortcut(statement.spokenContent), 'TESTIMONY_CLAIM_STYLE_UNNATURAL',
+        `evidenceArtifacts.${artifact.evidenceId}.testimony.statements.${statement.statementId}.spokenContent`,
+        '検察側の反駁対象が、観測事実と結論を「だけで」で直結し、自ら推論の弱点を説明する台詞になっています。',
+        '観測された事実を具体的に述べた後、検察側の結論を別の文で自然に主張してください。技術的な推論の誤りは維持してください。',
+        [`evidence:${artifact.evidenceId}`], artifact.evidenceId);
+        add(issues, hasAmbiguousRecordAttribution(statement.spokenContent), 'TESTIMONY_RECORD_ATTRIBUTION_AMBIGUOUS',
+          `evidenceArtifacts.${artifact.evidenceId}.testimony.statements.${statement.statementId}.spokenContent`,
+          '証言が、記録された処理、記録項目、アカウントやセッションと人物との関係を曖昧に表現しています。',
+          '何の記録にどの識別情報が残ったのかを明記し、アカウント・セッション・実行アカウントを実際の操作者と区別してください。',
           [`evidence:${artifact.evidenceId}`], artifact.evidenceId);
       }
     }

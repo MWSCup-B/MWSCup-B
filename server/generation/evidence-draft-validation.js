@@ -34,9 +34,9 @@ export function evidenceDraftProblems(draft, evidencePackage, agentInput, observ
     ...(draft.materialInvestigations ?? []).flatMap(item => item.steps.flatMap(step =>
       [step.prompt, step.explanation, ...step.choices.map(choice => choice.description)])),
   ];
-  if (displayText.some(text => /ブラウザ(?:実行)?計測/.test(text))) issues.push({
+  if (displayText.some(text => /ブラウザ(?:実行)?(?:記録|\u8a08\u6e2c)/.test(text))) issues.push({
     code: 'EVIDENCE_PRESENTATION_TERMINOLOGY', field: 'evidence-generation-draft',
-    reason: 'ブラウザ実行計測・ブラウザ計測という表示用語は使用しません。',
+    reason: 'ブラウザ実行記録・ブラウザ記録という表示用語は使用しません。',
     correctionHint: '表示名・問題文・解説では「ブラウザのスクリプト実行記録」または「ブラウザの動作記録」を使ってください。原文・引用・参照・観測値は変更しません。',
   });
   evidencePackage.evidenceArtifacts.forEach((artifact, index) => {

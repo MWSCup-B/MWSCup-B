@@ -17,6 +17,16 @@
     "targetServiceBinding": "web",
     "investigationServiceBinding": "web"
   },
+  "incidentNarrative": {
+    "impactEffectPredicate": "restricted_rows_disclosed",
+    "requiredArtifactIds": ["web_access_record", "database_statement_record", "application_response_record"],
+    "attackerAction": "被告人とは別の攻撃者が、外部からWebサービスへSQLの構造を変える入力を含むHTTP要求を送信した。アプリケーションはその入力をSQL命令へ組み込み、アプリケーション自身のDB接続用アカウントで実行した。",
+    "impact": "Webサービスを通じ、非公開レコードが本来許可されていない要求元へ返却された。",
+    "allegation": "漏えい時のSQLが、被告人も利用者の一人だった検索サービスの共通DB接続用アカウントで実行されたことを根拠として、検察側は、被告人がそのSQLを直接入力したと主張している。",
+    "prosecutionKnowledge": "検察側は、非公開レコードの返却、問題のSQLの実行、DB接続用アカウントを把握している。一方、そのアカウントが利用者本人ではなくWebアプリケーションの実行アカウントであることと、HTTP要求からSQL実行までの因果関係を把握せず、被告人の直接DB操作だと誤認している。",
+    "causalRefutation": "HTTP要求、SQL実行、結果返却を要求IDとクエリIDで照合し、DB監査のstatement欄からSQL構造の改変を確認する。これにより、漏えいは別の攻撃者が送った入力をアプリケーションがSQL文へ組み込んだ結果であり、Webアプリケーション共通のDB接続用アカウントの記録は、被告人自身による直接のSQL操作を示すものではないことが分かる。",
+    "verdictBasis": "被害を発生させた入力と処理経路は、被告人とは別の攻撃者からWebアプリケーションを経由したものである。被告人が直接SQLを入力して被害を起こしたという検察側の構成とは両立しない。この事実は、弁護側が被告人に無罪判決を求める根拠となる。"
+  },
   "bindings": [
     {
       "id": "attacker",

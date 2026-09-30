@@ -32,7 +32,7 @@ test('every selected attack has an obtainable comparison of its own distinct obs
       assert.ok(requirement.grounds.every(ground => available.has(key(ground))));
     }
     for (const node of generationInput.technicalInput.attackGraph.nodes) {
-      const profile = learningProfile(node);
+      const profile = learningProfile(node, generationInput.technicalInput.attackDefinitions);
       const comparison = requirements.find(requirement => profile.sources.every(sourceId => requirement.grounds
         .some(ground => ground.attackNodeId === node.nodeId && ground.sourceId === sourceId)));
       assert.ok(comparison, node.attackDefinitionId);

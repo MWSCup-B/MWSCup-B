@@ -91,7 +91,7 @@ test('Phishing ★1でもメールとWeb記録を全論証の根拠とし、取�
   }
   const requirements = scenarioPackage.evidenceRequirements.requirements;
   assert.match(requirements.find(item => item.requirementId === 'requirement_timeline').description,
-    /narrativeTimestampsは架空の表示時刻/);
+    /narrativeTimestampsは教材用の表示時刻/);
   assert.match(requirements.find(item => item.requirementId === 'requirement_contradiction').description,
     /character_witnessによる資料の解釈を基に、character_defendantを対象/);
   const observations = requirements.filter(item => item.requirementId.startsWith('requirement_observation_'));

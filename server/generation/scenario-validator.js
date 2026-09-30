@@ -1,7 +1,7 @@
 import { validateCatalog } from './catalog.js';
 import { validateAttackGraphResult } from './attack-graph.js';
 import { fail, validateDocument, ValidationError } from './schema.js';
-import { INCIDENT_PROFILES } from './incident-design.js';
+import { incidentProfile } from './incident-design.js';
 
 class ScenarioContractError extends ValidationError {
   constructor(code, field, message, suggestion, relatedIds = []) {
@@ -39,7 +39,7 @@ function ensureScenarioId(actual, expected, field) {
     '同じScenarioに属する成果物だけを組み合わせてください。', [actual, expected]);
 }
 
-function validateGroundTruth(groundTruth, graph, characters) {
+function validateGroundTruth(groundTruth, graph, characters, definitions) {
   ensureUnique(groundTruth.technicalFacts, item => item.factId, 'ground-truth.technicalFacts.factId');
   ensureUnique(groundTruth.technicalFacts,
     item => JSON.stringify([item.sourceType, item.attackNodeId, item.sourceId]),
@@ -94,14 +94,19 @@ function validateGroundTruth(groundTruth, graph, characters) {
       'Character Setに明示されたcharacterIdとroleを指定してください。', [ref.characterId, ref.role]);
   }
   for (const narrative of groundTruth.incidentNarratives ?? []) {
-    const node = nodes.get(narrative.attackNodeId), profile = INCIDENT_PROFILES[node?.attackDefinitionId];
+    const node = nodes.get(narrative.attackNodeId), profile = incidentProfile(definitions, node?.attackDefinitionId);
     const effect = node?.effects.find(item => item.effectId === narrative.impactEffectId);
-    if (!profile || effect?.predicate !== profile.effect || node.state !== 'SATISFIED'
+    if (!profile || effect?.predicate !== profile.impactEffectPredicate || node.state !== 'SATISFIED'
       || narrative.attackerCharacterId === narrative.defendantCharacterId
       || !characterMap.get(narrative.attackerCharacterId)?.roles.includes('attacker')
       || !characterMap.get(narrative.defendantCharacterId)?.roles.includes('defendant')
-      || profile.requiredArtifacts.length !== narrative.requiredArtifactIds.length
-      || profile.requiredArtifacts.some(id => !narrative.requiredArtifactIds.includes(id)
+      || narrative.attackerAction !== profile.attackerAction
+      || narrative.impact !== profile.impact || narrative.allegation !== profile.allegation
+      || narrative.prosecutionKnowledge !== profile.prosecutionKnowledge
+      || narrative.causalRefutation !== profile.causalRefutation
+      || narrative.verdictBasis !== profile.verdictBasis
+      || profile.requiredArtifactIds.length !== narrative.requiredArtifactIds.length
+      || profile.requiredArtifactIds.some(id => !narrative.requiredArtifactIds.includes(id)
         || !node.artifactEvaluations.some(item => item.artifactId === id && item.state === 'SATISFIED'))) {
       stop('INCIDENT_NARRATIVE_UNGROUNDED', 'ground-truth.incidentNarratives',
         '事件の被害・人物・必要資料が検証対象の攻撃と一致しません。',
@@ -330,7 +335,7 @@ export function validateScenarioContract(input) {
     }
 
     validateCharacters(characters, graph);
-    validateGroundTruth(groundTruth, graph, characters);
+    validateGroundTruth(groundTruth, graph, characters, definitions);
     validateTimeline(timeline, graph);
     validateObjectives(learningObjectives, graph, definitions);
     validateEvidence(evidenceRequirements, graph, groundTruth, characters, timeline, learningObjectives);

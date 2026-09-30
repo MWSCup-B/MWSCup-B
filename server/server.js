@@ -61,6 +61,7 @@ const generatedActionFields = new Map([
   ['workspace-read', ['action', 'materialId']],
   ['save-observation', ['action', 'materialId', 'field', 'value']],
   ['save-fact', ['action', 'materialId', 'line']],
+  ['remove-fact', ['action', 'materialId', 'line']],
   ['collect', ['action', 'evidenceId']], ['retrial', ['action', 'interpretationChoiceId', 'evidenceId']], ['investigation', ['action']],
   ['objection', ['action', 'statementId', 'evidenceId', 'interpretationChoiceId']], ['retry', ['action']],
 ]);

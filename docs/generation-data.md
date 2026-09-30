@@ -140,7 +140,7 @@ Contradictionの`groundTruthRefs`は非空で、`testimonyEvidenceId`内の`stat
 
 Evidence生成は限定修正も含めて最大2回であり、別の無制限ループを追加しない。進捗とGENERATING_EVIDENCEの最終エラーにはEvidence自身の実行回数を記録し、Scenarioの試行番号を流用しない。Schema・Import・法廷選択肢の全条件を満たした回のProgressionだけを後続へ渡す。直前のImportがVALIDでも、選択肢不足や次回の非JSON出力を成功として扱わない。
 
-`difficulty`、`evidenceCount`は調査チェーンの基準であり、取得資料総数の上限ではない。新しい自動生成の法廷は調査対象ごとに1回行う。既存取得元NodeとTarget Typeが同じ資料を一つの対象にまとめる。証言は報告書・問題・法廷に表示し、技術資料の調査先には数えない。`narrativeTimestamps`は架空の表示設定であり、観測時刻の裏付けとして使用しない。人物は証言の発言者と対象として対応付け、端末の操作者や積極的な非関与を資料なしに設定しない。
+`difficulty`、`evidenceCount`は調査チェーンの基準であり、取得資料総数の上限ではない。新しい自動生成の法廷は調査対象ごとに1回行う。既存取得元NodeとTarget Typeが同じ資料を一つの対象にまとめる。証言は報告書・問題・法廷に表示し、技術資料の調査先には数えない。`narrativeTimestamps`は教材用の表示設定であり、観測時刻の裏付けとして使用しない。人物は証言の発言者と対象として対応付け、端末の操作者や積極的な非関与を資料なしに設定しない。
 
 Investigation は versioned Action、Target、Discovery Rule、Result と合成 Evidence public content を使用する。実 OS、実 filesystem、実 network、外部 command を実行しない。
 
@@ -224,7 +224,7 @@ Player API は `POST /api/start` と `POST /api/action` である。Author token
 | --- | --- | --- | --- |
 | 保存メール | `email_record` | Mail serviceのNode → メール確認 | 表示URL、HTMLソースのhref、本文・ヘッダー。保存されているだけではクリックを証明しない |
 | Webアクセス記録 | `web_access_record` | Web serviceのNode → 監査ログ確認 | 対象リクエストと記録時刻。操作人物・意図・クリック原因は確定しない |
-| 架空の調査担当者の供述 | 既存witness / defendant | 提示された供述資料 → ファイル調査 | 発言した内容。技術的事実とは別に評価する |
+| 検察側調査官の供述 | 既存witness / defendant | 提示された供述資料 → ファイル調査 | 発言した内容。技術的事実とは別に評価する |
 
 「メール文のリンク先と実際に遷移するリンク先が異なること」を調べるためのメール資料例。本文のHTMLは実行せず、ソースを文字列として提示する:
 
@@ -249,8 +249,8 @@ Web記録の例:
 
 この例の時刻は教材用合成値であり、実測値ではない。合成資料の表示はログ本文ではなくUIの資料枠が担う。この例では表示文字列の`/help`とhrefの`/notice?ref=training-01`が異なり、Web記録は後者を対象にしている。同一の検証済みWeb対象に対応する教材用URLとして扱い、新しいホストや到達性を追加しない。302応答やLocationヘッダーは作らず、HTTPリダイレクトが起きたとも断定しない。メールと記録の対象が一致しても、そのメールからのクリックや操作者の特定までは証明しない。
 
-反駁対象の架空の供述は「メールの誘導先とWebアクセスの対象が一致するので、この二つの記録だけで被告人が自分の意思でリクエストを送ったと特定できる」とする。主張の対象は被告人だが、被告人と利用端末・アカウントの対応を新たな技術factにしない。
+反駁対象となる検察側調査官の供述は「メールの誘導先とWebアクセスの対象が一致するので、この二つの記録から被告人が自分の意思でリクエストを送ったと特定できる」とする。主張の対象は被告人だが、被告人と利用端末・アカウントの対応を新たな技術factにしない。
 
 学習者は両資料の対象と利用可能な時刻を比較し、記録されたリクエストと、操作者・意図の特定が異なることを確認する。メールの配送・クリック時刻が未記録なら、その前後関係は未確認とする。到達する結論は「この資料だけでは当該人物・意図を特定する主張を支持できない」であり、「被告人は操作しなかった」「別の人物が実行した」という未提示の事実を結論にしない。
 
-Package化する際は、メールとWeb資料の`sourceRefs`に各Requirementの既存artifact groundをコピーし、対応する全`requirementIds`とpurposeを割り当てる。架空の供述はTESTIMONYのstatementとして分離し、Contradictionはそのstatement・競合する技術資料・既存Ground Truthを参照する。Exonerationは既存被告人、両技術資料、Ground Truthへ追跡可能にする。失敗通知1件でこれらを代用しない。実際のセッションに対応する参照がない状態で、この例をそのままインポートできるPackageとはしない。
+Package化する際は、メールとWeb資料の`sourceRefs`に各Requirementの既存artifact groundをコピーし、対応する全`requirementIds`とpurposeを割り当てる。検察側調査官の供述はTESTIMONYのstatementとして分離し、Contradictionはそのstatement・競合する技術資料・既存Ground Truthを参照する。Exonerationは既存被告人、両技術資料、Ground Truthへ追跡可能にする。失敗通知1件でこれらを代用しない。実際のセッションに対応する参照がない状態で、この例をそのままインポートできるPackageとはしない。

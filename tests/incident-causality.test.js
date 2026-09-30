@@ -6,6 +6,8 @@ import { createDefaultConfiguration, validateScenarioConfiguration } from '../se
 import { buildScenarioTemplate, validateScenarioDesignBoundary } from '../server/generation/scenario-template.js';
 import { buildIncidentConclusion } from '../server/generation/incident-conclusion.js';
 import { buildIncidentOverview } from '../server/generation/incident-report.js';
+import { buildIncidentNarratives } from '../server/generation/incident-design.js';
+import { buildCaseStudy } from '../server/generation/material-investigation.js';
 import { validateLearningObservations } from '../server/generation/learning-observations.js';
 import { validateGeneratedLogFormats, validateExplorableWebLogs } from '../server/generation/evidence-log-format.js';
 import { AutoGenerationManager, createAutoAuthorSession } from '../server/auto-generation-service.js';
@@ -13,6 +15,27 @@ import { createGeneratedGame, actGenerated } from '../server/generated-game.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 
 const catalog = await loadCatalog();
+test('all registered attacks define an affirmative alternative-attacker acquittal', () => {
+  for (const definition of catalog) {
+    const profile = definition.incidentNarrative;
+    assert.ok(profile, `${definition.id}: incidentNarrative`);
+    assert.match(profile.attackerAction, /別の攻撃者/, `${definition.id}: attackerAction`);
+    assert.match(profile.allegation, /検察側/, `${definition.id}: allegation`);
+    assert.match(profile.prosecutionKnowledge, /検察側/, `${definition.id}: prosecutionKnowledge`);
+    assert.match(profile.verdictBasis, /弁護側が被告人に無罪判決を求める根拠/, `${definition.id}: verdictBasis`);
+    assert.doesNotMatch(profile.verdictBasis, /攻撃者の実名|被告人を無罪とする/, `${definition.id}: verdictBasis`);
+  }
+});
+
+test('incident narratives use explicit and natural Japanese for records and identities', () => {
+  const ambiguous = /利用セッションに記録|成功試行|利用アカウント|主体で記録|アプリケーション主体|セッション受入れ|識別子の下で|一続き|に連なる実行記録|共有DB接続主体|スクリプトを開始元|資格情報持出し|外部持出し/;
+  for (const definition of catalog) {
+    const text = Object.values(definition.incidentNarrative ?? {}).filter(value => typeof value === 'string').join('\n');
+    assert.doesNotMatch(text, ambiguous, definition.id);
+    assert.doesNotMatch(text, /スクリプトが被告人のセッションで実行/, `${definition.id}: browser execution and web session`);
+  }
+});
+
 for (const attackIds of [['stored_xss'], ['sql_injection'], ['phishing', 'unauthorized_login', 'stored_xss']]) {
   test(`new ${attackIds.join('/')} games ground concrete harm, acquire all causal records and keep answers private`, async () => {
     const manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
@@ -24,6 +47,9 @@ for (const attackIds of [['stored_xss'], ['sql_injection'], ['phishing', 'unauth
     assert.ok(pkg.groundTruth.incidentNarratives.length);
     const narrative = pkg.groundTruth.incidentNarratives[0];
     assert.notEqual(narrative.attackerCharacterId, narrative.defendantCharacterId);
+    assert.match(narrative.attackerAction, /別の攻撃者/);
+    assert.match(narrative.prosecutionKnowledge, /検察側/);
+    assert.match(narrative.verdictBasis, /無罪/);
     const final = pkg.evidenceRequirements.requirements.filter(item => item.investigationStage).at(-1);
     assert.match(final.investigationStage.claim, /被告人.*手動|被告人.*直接/);
     for (const id of narrative.requiredArtifactIds) assert.ok(final.grounds.some(ref => ref.sourceId === id), id);
@@ -33,6 +59,11 @@ for (const attackIds of [['stored_xss'], ['sql_injection'], ['phishing', 'unauth
     assert.ok(conclusion.includes(narrative.impact));
     manager.approve(session); await manager.waitForIdle();
     assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));
+    const study = buildCaseStudy(session.runtime);
+    assert.ok(study.issues.at(-1).explanation.includes(narrative.attackerAction));
+    assert.ok(study.issues.at(-1).explanation.includes(narrative.verdictBasis));
+    assert.doesNotMatch(study.issues.at(-1).explanation,
+      /その処理を被告人が行ったと判断できない|送信者の氏名や未記録の入力本文/);
     const artifacts = session.evidenceImportResult.evidenceSet.evidenceArtifacts;
     validateGeneratedLogFormats(artifacts); validateExplorableWebLogs(artifacts); validateLearningObservations(artifacts);
     if (attackIds.length === 1 && attackIds[0] === 'stored_xss') {
@@ -75,6 +106,24 @@ test('legacy SQL scenarios do not require a search range or harm that the attack
   assert.match(stage.claim, /入力は値としてだけ|SQL.*構造/);
   assert.doesNotMatch(stage.claim, /指定された一つ|非公開レコード|漏えい/);
   assert.match(stage.expectedInference, /構造/);
+});
+
+test('incident narrative can be added through attack metadata without an attack-id branch', () => {
+  const definition = { id: 'future_attack', incidentNarrative: {
+    impactEffectPredicate: 'verified_harm', requiredArtifactIds: ['record_a', 'record_b'],
+    attackerAction: '別の攻撃者が検証済みの操作を行った。', impact: '検証済みの被害が発生した。',
+    allegation: '検察側は被告人の処理だと主張した。', prosecutionKnowledge: '検察側は被害だけを把握した。',
+    causalRefutation: '二つの資料から別の攻撃経路を確認した。',
+    verdictBasis: '別の攻撃者による経路は検察側の説明と両立せず、弁護側が被告人に無罪判決を求める根拠となる。' } };
+  const graph = { nodes: [{ nodeId: 'attack_future', attackDefinitionId: 'future_attack', state: 'SATISFIED',
+    effects: [{ effectId: 'effect_future', predicate: 'verified_harm' }], artifactEvaluations: [
+      { artifactId: 'record_a', state: 'SATISFIED' }, { artifactId: 'record_b', state: 'SATISFIED' }] }] };
+  const narratives = buildIncidentNarratives({ incidentDesign: 'ATTACK_CAUSED_HARM_V1' }, graph, [definition]);
+  assert.equal(narratives.length, 1);
+  assert.equal(narratives[0].attackerAction, definition.incidentNarrative.attackerAction);
+  assert.deepEqual(narratives[0].requiredArtifactIds, ['record_a', 'record_b']);
+  assert.throws(() => buildIncidentNarratives({ incidentDesign: 'ATTACK_CAUSED_HARM_V1' }, graph,
+    [{ id: 'future_attack' }]), { code: 'INCIDENT_NARRATIVE_MISSING' });
 });
 
 test('obsolete browser wording is repaired without rewriting evidence records', async () => {

@@ -10,7 +10,7 @@ export const DEFAULT_INVESTIGATION_ACTIONS = Object.freeze([
     displayName: '監査ログを確認', description: '保存されたログを読み、主張と照らし合わせます。',
     allowedTargetTypes: ['SERVER', 'LOG_SOURCE', 'APPLICATION'] },
   { schemaVersion: '1.0', actionId: 'action_inspect_device', actionType: 'INSPECT_DEVICE',
-    displayName: '端末を調査', description: '端末の状態や、取得できる計測資料を読みます。',
+    displayName: '端末を調査', description: '端末の状態や、取得できる記録資料を読みます。',
     allowedTargetTypes: ['ENDPOINT', 'SERVER', 'NETWORK_DEVICE'] },
   { schemaVersion: '1.0', actionId: 'action_check_email', actionType: 'CHECK_EMAIL',
     displayName: 'メールを確認', description: '本文とヘッダーを読み比べます。リンクは開きません。',

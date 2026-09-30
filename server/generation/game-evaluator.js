@@ -8,6 +8,7 @@ import { validateScenarioVerificationResult } from './scenario-verifier.js';
 import { ValidationError, fail, validateDocument } from './schema.js';
 import { correctCourtChoiceId, publicCourtQuestion } from './court-questions.js';
 import { isSequential, isOpenMaterials, stageEvidenceIds } from './sequential-investigation.js';
+import { requiredCourtEvidence } from './investigation-workspace.js';
 
 const CATEGORIES = ['UPSTREAM_INTEGRITY', 'NORMAL_PLAYTHROUGH', 'RETRY_PLAYTHROUGH',
   'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY', 'INVESTIGATION_DISCLOSURE',
@@ -125,11 +126,19 @@ function enterInvestigation(session, runtime) {
 
 function discoverEvidence(session, runtime, evidenceIds) {
   if (isOpenMaterials(runtime.gameCase)) {
-    for (const materialId of evidenceIds) {
-      actGenerated(session, runtime, { action: 'workspace-read', materialId });
-      actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
+    const pending = new Set(evidenceIds);
+    for (let pass = 0; pending.size && pass <= evidenceIds.length; pass += 1) {
+      for (const materialId of [...pending]) {
+        try {
+          actGenerated(session, runtime, { action: 'workspace-read', materialId });
+          actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
+          pending.delete(materialId);
+        } catch (error) {
+          if (error.code !== 'MATERIAL_PREREQUISITES_REQUIRED') throw error;
+        }
+      }
     }
-    return evidenceIds.every(id => session.discoveredEvidenceIds.includes(id));
+    return pending.size === 0;
   }
   const wanted = new Set(evidenceIds);
   const maximum = runtime.gameCase.detective.investigationTargets.length
@@ -159,7 +168,8 @@ function returnToCourt(session, runtime, pair = correctPair(runtime.gameCase, se
 }
 
 function collectForCourt(session, runtime, extraIds = [], pair) {
-  const required = isSequential(runtime.gameCase) ? stageEvidenceIds(runtime.gameCase, session.currentRound)
+  const required = isOpenMaterials(runtime.gameCase) ? requiredCourtEvidence(runtime.gameCase, session.currentRound)
+    : isSequential(runtime.gameCase) ? stageEvidenceIds(runtime.gameCase, session.currentRound)
     : runtime.gameCase.progression.investigation.requiredForCourtIds;
   const ids = [...new Set([...required, ...extraIds])];
   if (!discoverEvidence(session, runtime, ids)) throw new Error('Evidence discovery failed');

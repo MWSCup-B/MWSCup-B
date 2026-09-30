@@ -12,10 +12,20 @@
   ],
   "authoring": {
     "preferredInvestigationType": "WEB_LOG",
-    "evidenceAnswer": "Webアクセス記録から反射された入力を含む対象リクエストを確認し、端末の実行計測記録と対応付ける。",
+    "evidenceAnswer": "Webアクセス記録から反射された入力を含む対象リクエストを確認し、端末の実行観測記録と対応付ける。",
     "sourceNodeBinding": "client",
     "targetServiceBinding": "web",
     "investigationServiceBinding": "web"
+  },
+  "incidentNarrative": {
+    "impactEffectPredicate": "script_executed_in_origin",
+    "requiredArtifactIds": ["web_access_record", "browser_execution_record"],
+    "attackerAction": "被告人とは別の攻撃者が、Web応答へ反射される入力を含むURLを作成して被告人のブラウザに開かせた。Webアプリケーションがその入力を安全に処理せず応答へ含めたため、攻撃者のスクリプトが被告人のブラウザで対象オリジンの権限により実行された。",
+    "impact": "別の攻撃者が用意した反射入力に由来するスクリプトが、被告人のブラウザで対象Webオリジンのスクリプトとして実行された。",
+    "allegation": "スクリプト実行記録に、被告人が使用していたブラウザの識別情報と、被告人のアカウントで認証されたWebセッションの識別子が残っていたため、検察側は、被告人が当該スクリプトを作成して直接実行したと主張している。",
+    "prosecutionKnowledge": "検察側は、被告人のブラウザからのWeb要求とスクリプト実行を把握している。一方、要求に含まれた反射入力、Web応答、ブラウザ実行の対応を評価せず、実行されたブラウザの利用者をスクリプトの作成者と取り違えている。",
+    "causalRefutation": "Webアクセス記録の要求ID・要求先・反射入力識別子と、ブラウザのスクリプト実行記録の実行ID・対象オリジン・ソース位置を照合する。これにより、スクリプトは別の攻撃者が用意した入力からWeb応答を経由して実行され、被告人がスクリプトを作成して直接起動したものではないことが分かる。",
+    "verdictBasis": "スクリプトを用意して実行経路を作ったのは別の攻撃者であり、被告人はその入力を処理したブラウザの利用者である。被告人によるスクリプトの作成・直接実行という検察側の構成とは両立しない。この事実は、弁護側が被告人に無罪判決を求める根拠となる。"
   },
   "bindings": [
     {
@@ -163,7 +173,7 @@
         "$request"
       ],
       "value": true,
-      "description": "当該応答についてJavaScript設定・CSP等の実効制御がスクリプト実行を阻止しない。"
+      "description": "当該応答について、ブラウザのJavaScript設定やCSPなどの実行時のセキュリティ制御が、スクリプトの実行を阻止しない。"
     },
     {
       "source": "authenticationConditions",

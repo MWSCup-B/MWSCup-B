@@ -7,6 +7,7 @@ import { readyGameCaseFixture } from './helpers/ready-game-case.js';
 import { AutoGenerationManager, autoAuthorBootstrap, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { currentCorrectPair } from './helpers/court-issues.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
+import { requiredCourtEvidence } from '../server/generation/investigation-workspace.js';
 
 async function setup(t, result = readyGameCaseFixture().gameCaseResult) {
   const server = createAppServer({ mode: 'GENERATED', gameCaseResult: result });
@@ -135,6 +136,10 @@ test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解�
       const plan = author.runtime.gameCase.progression.materialInvestigations.find(item => item.evidenceId === rule.evidenceId);
       for (const [index, step] of plan.steps.entries()) game = await action({ action: 'inspect-material', materialId: rule.evidenceId,
         methodId: procedureMethods(plan, index).find(item => item.index === step.correctOptionIndex).methodId });
+    }
+    for (const materialId of requiredCourtEvidence(author.runtime.gameCase, round)) {
+      game = await action({ action: 'workspace-read', materialId });
+      game = await action({ action: 'save-fact', materialId, line: 1 });
     }
     const evidenceId = currentCorrectPair(author.runtime, round).evidenceId;
     assert.equal(game.workbench.materials.find(item => item.materialId === evidenceId).question.choices.length, 4);

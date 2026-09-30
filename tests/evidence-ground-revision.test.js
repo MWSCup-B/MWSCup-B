@@ -33,7 +33,7 @@ function executionClaim(draft, input) {
   testimony.publicContent = testimony.publicContent.replace(statement.spokenContent, claim);
   statement.spokenContent = claim; statement.groundTruthRefs = [executionFact.factId];
   contradiction.contradictionId = 'contradiction_execution';
-  // 検証済み段階の保存・閲覧・実行計測への参照は維持し、Ground Truth参照だけを壊す。
+  // 検証済み段階の保存・閲覧・実行記録への参照は維持し、Ground Truth参照だけを壊す。
   assert.ok(contradiction.conflictingEvidenceIds.includes(evidence.evidenceId));
   contradiction.groundTruthRefs = [executionFact.factId];
   contradiction.reason = 'ブラウザのスクリプト実行記録資料が存在しないという主張と競合する。';
@@ -120,7 +120,16 @@ for (const side of ['contradiction', 'statement']) {
     assert.deepEqual(set.contradictions, validDraft.contradictions);
     assert.deepEqual(set.exonerations, validDraft.exonerations);
     assert.deepEqual(set.evidenceArtifacts.map(({ integrity, ...artifact }) => artifact), validDraft.evidenceArtifacts);
-    assert.deepEqual(session.progressionPlan.courtQuestions, validDraft.courtQuestions);
+    const withoutExplanation = question => {
+      const { explanation, ...rest } = question; return rest;
+    };
+    assert.deepEqual(session.progressionPlan.courtQuestions.map(withoutExplanation),
+      validDraft.courtQuestions.map(withoutExplanation));
+    const grounded = session.progressionPlan.courtQuestions.filter((question, index) =>
+      question.explanation !== validDraft.courtQuestions[index].explanation);
+    assert.equal(grounded.length, 1);
+    assert.match(grounded[0].explanation, /事件で確認されたこと：.*別の攻撃者/s);
+    assert.match(grounded[0].explanation, /弁護側の結論：.*無罪判決を求める根拠/s);
     assert.doesNotMatch(JSON.stringify(autoAuthorView(session)), /evidenceGroundRevision|unexpectedGroundTruthRefs/);
 
     // The invalid first draft is still rejected by the unchanged canonical Import.

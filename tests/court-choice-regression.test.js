@@ -20,7 +20,7 @@ function appendGroundedObservation(draft) {
   artifact.testimony.statements.push({ statementId: observationId, spokenContent,
     technicalAssessment: 'CONSISTENT', contradictionCandidate: false,
     groundTruthRefs: [...artifact.testimony.statements[0].groundTruthRefs] });
-  artifact.publicContent += `\n架空の調査担当者の発言: 「${spokenContent}」`;
+  artifact.publicContent += `\n検察側調査官の発言: 「${spokenContent}」`;
 }
 
 async function generate({ difficulty = 1, alreadyPlayable = false, repair = appendGroundedObservation } = {}) {

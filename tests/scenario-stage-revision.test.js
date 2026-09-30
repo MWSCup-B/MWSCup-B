@@ -50,8 +50,9 @@ test('3攻撃5調査先の争点と資料を具体化し、送受信・実行・
   assert.match(requirements[2].investigationStage.expectedInference, /投稿完了までは示さない/);
   assert.ok(requirements[3].grounds.some(item => item.sourceId === 'application_session_record'));
   assert.ok(requirements[3].grounds.every(item => item.sourceId !== 'browser_execution_record'));
-  assert.match(requirements[3].investigationStage.claim, /アカウントとWeb側のセッション.*どんな操作/);
-  assert.match(requirements[3].investigationStage.expectedInference, /資格情報の受理、セッション利用、投稿完了/);
+  assert.match(requirements[3].investigationStage.claim,
+    /認証記録上のアカウントとWebアプリケーション側のセッション.*被告人が対象のWebサービスを操作/);
+  assert.match(requirements[3].investigationStage.expectedInference, /認証成功、セッション利用、投稿完了/);
   assert.ok(requirements[4].grounds.some(item => item.sourceId === 'browser_execution_record'));
   assert.match(requirements[4].investigationStage.expectedInference, /保存・閲覧要求だけでは実行成功は分からない/);
   assert.match(requirements[4].investigationStage.limitedRefutation, /別の法廷を追加しない/);

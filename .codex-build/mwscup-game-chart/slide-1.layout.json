@@ -1,0 +1,487 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/k4fkns",
+    "id": "k4fkns",
+    "slide": 1,
+    "layoutId": "b02b9d08-51e7-48f7-988d-6aa6118c1c57",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "b3ba6edf-ef0b-418a-bc91-45d666ddff5d",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Noto Sans JP"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "b02b9d08-51e7-48f7-988d-6aa6118c1c57",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "b3ba6edf-ef0b-418a-bc91-45d666ddff5d",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "b3ba6edf-ef0b-418a-bc91-45d666ddff5d",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zqx8j2xw",
+      "id": "1",
+      "bbox": [
+        68,
+        42,
+        1144,
+        62
+      ],
+      "geometry": "rect",
+      "text": "ゲーム形式の作品は2025年に急増",
+      "textPreview": "ゲーム形式の作品は2025年に急増",
+      "resolvedFontSize": 34,
+      "resolvedTextStyle": {
+        "fontSize": 34,
+        "typeface": "Noto Sans JP",
+        "color": "#18242F",
+        "bold": true,
+        "alignment": "left",
+        "autoFit": "none",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ゲーム形式の作品は2025年に急増"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ゲーム形式の作品は2025年に急増",
+          "resolvedTextStyle": {
+            "fontSize": 34,
+            "typeface": "Noto Sans JP",
+            "color": "#18242F",
+            "bold": true
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ゲーム形式の作品は2025年に急増",
+              "fontSize": 34,
+              "typeface": "Noto Sans JP",
+              "color": "#18242F",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0r6pc7yh",
+      "id": "2",
+      "bbox": [
+        70,
+        108,
+        900,
+        38
+      ],
+      "geometry": "rect",
+      "text": "公開作品を網羅して確認できる2022～2025年を比較",
+      "textPreview": "公開作品を網羅して確認できる2022～2025年を比較",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "fontSize": 18,
+        "typeface": "Noto Sans JP",
+        "color": "#5C6B76",
+        "alignment": "left",
+        "autoFit": "none",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "公開作品を網羅して確認できる2022～2025年を比較"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "公開作品を網羅して確認できる2022～2025年を比較",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Noto Sans JP",
+            "color": "#5C6B76"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "公開作品を網羅して確認できる2022～2025年を比較",
+              "fontSize": 18,
+              "typeface": "Noto Sans JP",
+              "color": "#5C6B76"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "chart",
+      "scope": "slide",
+      "aid": "ch/5wjits7a",
+      "id": "3",
+      "bbox": [
+        70,
+        168,
+        885,
+        405
+      ],
+      "chartType": "bar"
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qlo76xgf",
+      "id": "4",
+      "bbox": [
+        980,
+        222,
+        240,
+        116
+      ],
+      "geometry": "rect",
+      "text": "50%以上",
+      "textPreview": "50%以上",
+      "resolvedFontSize": 40,
+      "resolvedTextStyle": {
+        "fontSize": 40,
+        "typeface": "Noto Sans JP",
+        "color": "#2563EB",
+        "bold": true,
+        "alignment": "center",
+        "autoFit": "none",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "50%以上"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "50%以上",
+          "resolvedTextStyle": {
+            "fontSize": 40,
+            "typeface": "Noto Sans JP",
+            "color": "#2563EB",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "50%以上",
+              "fontSize": 40,
+              "typeface": "Noto Sans JP",
+              "color": "#2563EB",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/rmxof2h0",
+      "id": "5",
+      "bbox": [
+        980,
+        326,
+        240,
+        98
+      ],
+      "geometry": "rect",
+      "text": "2025年は少なくとも\n半数がゲーム形式",
+      "textPreview": "2025年は少なくとも | 半数がゲーム形式",
+      "resolvedFontSize": 20,
+      "resolvedTextStyle": {
+        "fontSize": 20,
+        "typeface": "Noto Sans JP",
+        "color": "#18242F",
+        "bold": true,
+        "alignment": "center",
+        "autoFit": "none",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "2025年は少なくとも"
+          },
+          {
+            "index": 2,
+            "text": "半数がゲーム形式"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "2025年は少なくとも",
+          "resolvedTextStyle": {
+            "fontSize": 20,
+            "typeface": "Noto Sans JP",
+            "color": "#18242F",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "2025年は少なくとも",
+              "fontSize": 20,
+              "typeface": "Noto Sans JP",
+              "color": "#18242F",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "半数がゲーム形式",
+          "resolvedTextStyle": {
+            "fontSize": 20,
+            "typeface": "Noto Sans JP",
+            "color": "#18242F",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "半数がゲーム形式",
+              "fontSize": 20,
+              "typeface": "Noto Sans JP",
+              "color": "#18242F",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cn6p87y5",
+      "id": "6",
+      "bbox": [
+        88,
+        580,
+        1110,
+        38
+      ],
+      "geometry": "rect",
+      "text": "ゲーム作品数／全公開作品数　2022：0／13　　2023：0／12　　2024：1／9　　2025：9以上／18",
+      "textPreview": "ゲーム作品数／全公開作品数　2022：0／13　　2023：0／12　　2024：1／9　　2025：9以上／18",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Noto Sans JP",
+        "color": "#18242F",
+        "alignment": "center",
+        "autoFit": "none",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ゲーム作品数／全公開作品数　2022：0／13　　2023：0／12　　2024：1／9　　2025：9以上／18"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ゲーム作品数／全公開作品数　2022：0／13　　2023：0／12　　2024：1／9　　2025：9以上／18",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Noto Sans JP",
+            "color": "#18242F",
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ゲーム作品数／全公開作品数　2022：0／13　　2023：0／12　　2024：1／9　　2025：9以上／18",
+              "fontSize": 16,
+              "typeface": "Noto Sans JP",
+              "color": "#18242F",
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dofqhcfq",
+      "id": "7",
+      "bbox": [
+        70,
+        642,
+        1140,
+        44
+      ],
+      "geometry": "rect",
+      "text": "注：タイトル・説明でゲーム形式を確認できた作品を保守的に集計。2020・2021年は全提出作品の内訳を確認できないため除外。",
+      "textPreview": "注：タイトル・説明でゲーム形式を確認できた作品を保守的に集計。2020・2021年は全提出作品の内訳を確認できないため除外。",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "fontSize": 13,
+        "typeface": "Noto Sans JP",
+        "color": "#5C6B76",
+        "alignment": "left",
+        "autoFit": "none",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "注：タイトル・説明でゲーム形式を確認できた作品を保守的に集計。2020・2021年は全提出作品の内訳を確認できないため除外。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "注：タイトル・説明でゲーム形式を確認できた作品を保守的に集計。2020・2021年は全提出作品の内訳を確認できないため除外。",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "Noto Sans JP",
+            "color": "#5C6B76"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "注：タイトル・説明でゲーム形式を確認できた作品を保守的に集計。2020・2021年は全提出作品の内訳を確認できないため除外。",
+              "fontSize": 13,
+              "typeface": "Noto Sans JP",
+              "color": "#5C6B76"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

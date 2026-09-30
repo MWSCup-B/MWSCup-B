@@ -153,7 +153,7 @@ test('解釈の省略・別争点・未知IDは拒否し、誤解釈でも回数
   }
 });
 
-test('正しい解釈と誤った証拠では通過せず、両方が対応した時だけ次の争点へ進む', async () => {
+test('法廷では単一資料の指定ではなく、保存済み証拠一式と正しい解釈で次の争点へ進む', async () => {
   const configuration = autoAuthorBootstrap().manualAttackPresets.find(item => item.attackIds.length === 3).configuration;
   const { author } = await generate(null, configuration); const { runtime } = author; assert.ok(runtime, JSON.stringify(author.auto.details));
   const session = createGeneratedGame(runtime);
@@ -169,14 +169,7 @@ test('正しい解釈と誤った証拠では通過せず、両方が対応し�
   const rule = runtime.gameCase.judgment.judgmentRules.find(item => item.targetStatementId === correct.statementId);
   const wrongEvidence = session.collectedEvidenceIds.find(id => !rule.acceptedEvidenceIds.includes(id));
   assert.ok(wrongEvidence);
-  assert.throws(() => actGenerated(session, runtime, { action: 'objection', ...correct, evidenceId: wrongEvidence }), { code: 'MATERIAL_CHANGED_IN_COURT' });
-  actGenerated(session, runtime, { action: 'investigation' });
-  const wrongQuestion = generatedPlayerView(session, runtime).workbench.materials.find(item => item.materialId === wrongEvidence).question;
-  actGenerated(session, runtime, { action: 'retrial', evidenceId: wrongEvidence, interpretationChoiceId: wrongQuestion.choices[0].choiceId });
-  const failed = actGenerated(session, runtime, { action: 'objection', statementId: correct.statementId, evidenceId: wrongEvidence });
-  assert.equal(failed.currentState, 'INVESTIGATION'); assert.equal(failed.result.publicExplanation, undefined);
-  enterCurrentCourt(session, runtime);
-  const passed = actGenerated(session, runtime, { action: 'objection', ...correct });
+  const passed = actGenerated(session, runtime, { action: 'objection', ...correct, evidenceId: wrongEvidence });
   assert.equal(passed.currentState, 'INVESTIGATION'); assert.equal(passed.currentRound, 4);
   assert.equal(passed.result.publicExplanation, undefined);
   assert.equal(passed.caseStudy, undefined);

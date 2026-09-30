@@ -10,7 +10,7 @@ import { readyGameCaseFixture } from './helpers/ready-game-case.js';
 
 const forbiddenPublic = /groundTruth|judgment|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|sourceNodeRef|contradictionRef|exonerationRef|attackGraphRef|provenance|fingerprint|sourceRefs|requirementIds/i;
 
-test('Ground Truth先行と技術fact・架空人物・証言・推論のデータ分離を維持する', () => {
+test('Ground Truth先行と技術fact・教材内人物・証言・推論のデータ分離を維持する', () => {
   const fixture = readyGameCaseFixture();
   const scenario = fixture.scenarioPackage;
   assert.equal(scenario.scenarioDraft.groundTruthId, scenario.groundTruth.groundTruthId);

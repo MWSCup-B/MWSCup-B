@@ -13,10 +13,20 @@
   ],
   "authoring": {
     "preferredInvestigationType": "FILE",
-    "evidenceAnswer": "対象実行ファイルの所有者・setuidビットと計測時点を確認する。 / 実行計測の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
+    "evidenceAnswer": "対象実行ファイルの所有者・setuidビットと記録時点を確認する。 / 実行記録の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
     "sourceNodeBinding": "host",
     "targetServiceBinding": "service",
     "investigationServiceBinding": "service"
+  },
+  "incidentNarrative": {
+    "impactEffectPredicate": "privileged_execution",
+    "requiredArtifactIds": ["setuid_metadata_record", "setuid_execution_record"],
+    "attackerAction": "被告人とは別の攻撃者が、対象ホストで得ていた一般利用者の権限を足掛かりに、安全でない処理を持つsetuid root実行ファイルを悪用した。その結果、攻撃者が操作できるプロセスがroot実効UIDで起動した。",
+    "impact": "設定不備のあるsetuid実行ファイルを通じ、別の攻撃者が対象ホスト上でroot実効UIDのプロセスを操作できる状態になった。",
+    "allegation": "root実効UIDのプロセスが、被告人のアカウントから開始されたプロセス系列の一部として記録されていたため、検察側は、被告人がroot権限で処理を直接実行したと主張している。",
+    "prosecutionKnowledge": "検察側は、対象プロセスがroot実効UIDで起動したことを把握している。一方、実行ファイルの所有者・setuidビット・安全でない処理と親子プロセスの関係を評価せず、実効UIDまたは開始ユーザーを実際の操作者と取り違えている。",
+    "causalRefutation": "setuid実行ファイルの所有者・モード・記録時点と、実行記録の親子関係・開始ユーザー・実効UID・時刻を照合する。これにより、root処理は別の攻撃者が設定不備を悪用して得たものであり、被告人が正規の管理操作として直接起動したものではないことが分かる。",
+    "verdictBasis": "rootプロセスを成立させたのは設定不備を悪用した別の攻撃者であり、root実効UIDは被告人本人を示すものではない。被告人による直接の管理者操作という検察側の構成とは両立しない。この事実は、弁護側が被告人に無罪判決を求める根拠となる。"
   },
   "bindings": [
     {
@@ -81,7 +91,7 @@
         "$host"
       ],
       "value": true,
-      "description": "対象ファイルを実行でき、nosuid・no_new_privs等でsetuidが抑止されず、実効制御が昇格後の処理を許可する。"
+      "description": "対象ファイルを実行でき、nosuidやno_new_privsなどの実行時のセキュリティ制御によってsetuidの効果や昇格後の処理が阻止されない。"
     }
   ],
   "requiredPrivileges": [
@@ -112,7 +122,7 @@
   "observableArtifacts": [
     {
       "id": "setuid_metadata_record",
-      "description": "対象実行ファイルの所有者・setuidビットと計測時点を確認する。",
+      "description": "対象実行ファイルの所有者・setuidビットと記録時点を確認する。",
       "acquisition": {
         "binding": "host",
         "logSource": "FILE",
@@ -127,13 +137,13 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     },
     {
       "id": "setuid_execution_record",
-      "description": "実行計測の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
+      "description": "実行記録の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
       "acquisition": {
         "binding": "host",
         "logSource": "DEVICE",
@@ -148,7 +158,7 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     }

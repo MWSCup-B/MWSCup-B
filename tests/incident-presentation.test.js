@@ -114,6 +114,22 @@ test('two-person courtroom dialogue preserves testimony attribution and the unju
   assert.deepEqual(game, original);
 });
 
+test('the defense closing argument is spoken prose and leaves the verdict to the judge', () => {
+  const explanation = [
+    '事件で確認されたこと：別の攻撃者が外部から要求を送信した。',
+    '検察側の把握と主張：検察側は処理結果を被告人の直接操作だと主張した。',
+    '資料を照合して分かること：要求と処理記録は別の攻撃経路を示している。',
+    '弁護側の結論：この事実は、弁護側が被告人に無罪判決を求める根拠となる。',
+  ].join('\n');
+  const lines = generatedSceneDialogue({ currentState: 'ACQUITTED', result: { publicExplanation: explanation } });
+  const defense = lines.filter(line => line.role === 'defense');
+  assert.match(defense[0].text, /調査で確認した事実を申し上げます/);
+  assert.doesNotMatch(defense[0].text, /事件で確認されたこと：|検察側の把握と主張：|判決理由：/);
+  assert.doesNotMatch(defense.map(line => line.text).join('\n'), /被告人を無罪とする/);
+  assert.match(defense.at(-1).text, /被告人に無罪判決を求めます/);
+  assert.match(lines.find(line => line.role === 'prosecutor').text, /追加の反論はありません/);
+});
+
 test('suspicion never quotes native values or testimony and stays within schema bounds', () => {
   const native = '{"timestamp":"2026-09-21T10:00:00Z","account":"staff-a","id":9007199254740993}';
   const summary = buildProsecutionOpening([{ type: 'AUTHENTICATION_LOG', title: '認証記録', publicContent: native }],

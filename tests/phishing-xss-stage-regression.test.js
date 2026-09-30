@@ -62,7 +62,7 @@ test('共有Web取得元ではフィッシングを比較し、XSSの実行比�
   assert.deepEqual(validateScenarioEvidenceCoverage(value), []);
 });
 
-test('XSS単独の保存資料の段階も、未取得の実行計測との比較完了を要求しない', () => {
+test('XSS単独の保存資料の段階も、未取得の実行記録との比較完了を要求しない', () => {
   const value = fixture(['stored_xss']); const plans = requirements(value.scenarioPackage);
   assert.doesNotMatch(plans[0].description, /必要資料をすべて取得済み|対応するブラウザのスクリプト実行記録を照合する/);
   assert.match(plans[0].investigationStage.expectedInference, /実行成功は分からない/);

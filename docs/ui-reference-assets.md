@@ -2,7 +2,7 @@
 
 ## 2026-09-21 追加素材
 
-タイトルは利用者指定の `image/title.png` を加工せず `public/assets/title/title.png` へコピーして使用する。`image/選択肢.png` は証拠カード・選択状態・資料枠のHTML/CSSの参考とし、描き込まれた架空のUSBや鍵をゲームの証拠に追加しない。
+タイトルは利用者指定の `image/title.png` を加工せず `public/assets/title/title.png` へコピーして使用する。`image/選択肢.png` は証拠カード・選択状態・資料枠のHTML/CSSの参考とし、描き込まれた見本のUSBや鍵をゲームの証拠に追加しない。
 
 助手は組み込み `image_gen` ツール（`imagegen` スキル）で `image/助手.png` から抽出し、透過PNGを `public/assets/characters/assistant-portrait-v1.png` に保存した。会話と名前札はHTMLで表示する。
 

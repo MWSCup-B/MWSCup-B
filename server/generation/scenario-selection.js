@@ -2,7 +2,7 @@ import { AUTHOR_ATTACK_CHOICES, SCENARIO_SETTINGS } from './author-options.js';
 import { createDefaultConfiguration, createManualAttackPreset, validateScenarioConfiguration }
   from './scenario-configuration.js';
 import { validateDocument, fail, ValidationError } from './schema.js';
-import { INCIDENT_DESIGN, INCIDENT_PROFILES, incidentDefinitions } from './incident-design.js';
+import { INCIDENT_DESIGN, incidentDefinitions, incidentProfile } from './incident-design.js';
 
 // These are explicit, recorded teaching defaults, not repairs to a submitted network.
 // The legacy full-configuration API continues to validate its input without filling gaps.
@@ -31,7 +31,7 @@ export function createSelectionConfiguration(request, catalog) {
   }
   if (selected.has('clickfix') || selected.has('ransomware')) {
     network.services.push({ serviceId: 'endpoint-telemetry', nodeId: 'client-host',
-      label: '端末計測（教材）', serviceType: 'logging', platform: 'logging' });
+      label: '端末記録（教材）', serviceType: 'logging', platform: 'logging' });
   }
   if (selected.has('ransomware')) network.services.push({ serviceId: 'endpoint-files',
     nodeId: 'client-host', label: '端末内の教材ファイル', serviceType: 'file', platform: 'file' });
@@ -43,8 +43,8 @@ export function createSelectionConfiguration(request, catalog) {
   const specs = {
     // 2026-09-24: ブラウザ経由の攻撃は選択済み端末をSourceとして明示する。
     clickfix: { sourceNodeId: 'client-host', investigationTypes: ['WEB_LOG'], investigationSourceNodeId: 'web-host',
-      evidenceAnswer: '偽の修復案内と端末の実行計測を区別する。案内の表示だけでは端末上の実行や操作者の意図を特定できない。',
-      notes: '偽案内の制御、利用者による端末操作、一般利用者権限での実行許可を明示する。メール誘導が選択されている場合だけ、その到達を使う。実行可能なコマンド・窃取・権限昇格は含めない。' },
+      evidenceAnswer: '偽の修復案内と端末の実行記録を区別する。案内の表示だけでは端末上の実行や操作者の意図を特定できない。',
+      notes: '偽案内の制御、利用者による端末操作、一般利用者の権限での実行許可を明示する。メール誘導が選択されている場合だけ、その到達を使う。実行可能なコマンド・窃取・権限昇格は含めない。' },
     sql_injection: { investigationTypes: ['WEB_LOG'], investigationSourceNodeId: 'web-host',
       evidenceAnswer: 'Web記録の時刻・要求対象と、対応するDB監査の実行SQLの識別情報を照合する。DB記録のSQLの条件・構造を読み、要求の到達とSQLの実行を区別する。Web入力本文の記録は前提にしない。実行されたSQLもアプリケーションのDB権限内であり、操作者の特定やOS実行の証明ではない。',
       notes: '入力が安全にパラメータ化されていない処理、WebからDBへの到達、当該DB主体の接続・クエリ実行権限、DB監査の保持を明示する。非公開レコードの返却はincidentDesignの明示条件に限定する。OS実行や権限昇格は追加しない。' },
@@ -55,10 +55,10 @@ export function createSelectionConfiguration(request, catalog) {
     ransomware: { sourceNodeId: 'client-host', targetNodeId: 'client-host', targetServiceId: 'endpoint-files',
       investigationTypes: ['DEVICE'], investigationSourceNodeId: 'client-host',
       evidenceAnswer: 'プロセス起動とファイル暗号化の確認結果を照合する。起動・拡張子変更だけで暗号化完了とはせず、影響範囲や実際の操作者を過大に断定しない。',
-      notes: `${selected.has('clickfix') ? '選択したClickFixによる実行' : '初期条件として取得済みの一般利用者権限の実行環境'}を使用。端末内で読み書き可能な教材ファイルに限定。暗号化確認計測と合成の身代金要求文を保持する。横展開・情報窃取・バックアップ破壊は含めない。` },
+      notes: `${selected.has('clickfix') ? '選択したClickFixによる実行' : '初期条件として取得済みの一般利用者の権限による実行環境'}を使用。端末内で読み書き可能な教材ファイルに限定。暗号化確認記録と合成の身代金要求文を保持する。横展開・情報窃取・バックアップ破壊は含めない。` },
     unrestricted_file_upload: { investigationTypes: ['APPLICATION_LOG'], investigationSourceNodeId: 'web-host',
       evidenceAnswer: '申告された拡張子・Content-Typeと保存ファイルの内容検査を照合する。許可外ファイルの保存とサーバーでのコード実行は別である。',
-      notes: '機能利用権限と書込み可能な保存先を初期条件として明示。内容検証が不足し許可外ファイルが保存される。保存領域は非実行。Webシェル・OS実行・追加のXSSは生成しない。' },
+      notes: '機能利用権限と書き込み可能な保存先を初期条件として明示。内容検証が不足し許可外ファイルが保存される。保存領域は非実行。Webシェル・OS実行・追加のXSSは生成しない。' },
   };
   for (const attackId of request.attackIds.filter(id => !legacyIds.includes(id))) {
     const definition = catalog.find(item => item.id === attackId);
@@ -68,7 +68,7 @@ export function createSelectionConfiguration(request, catalog) {
   }
   if (selected.has('password_spray') && selected.has('unauthorized_login')) {
     const login = configuration.attacks.find(item => item.attackId === 'unauthorized_login');
-    login.notes = '選択した資格情報取得の前段と対応する有効なアカウントで、認証とWeb側の投稿権限受入れを確認する。認証はパスワードのみ。MFA突破や管理者権限は含めない。';
+    login.notes = '選択した資格情報取得の前段と対応する有効なアカウントについて、認証成功、Webアプリケーション側でのセッション確立、投稿権限の付与を確認する。認証はパスワードのみ。MFA突破や管理者権限は含めない。';
   }
   // The user chooses a causal sequence, not an unordered set. Never reorder a
   // reversed request to make it pass. Keep the existing phishing variant explicit.
@@ -81,18 +81,19 @@ export function createSelectionConfiguration(request, catalog) {
   const setting = SCENARIO_SETTINGS.find(item => item.id === request.settingId);
   Object.assign(configuration.incidentContext, { organizationName: setting.organizationName,
     victimSystem: setting.victimSystem, accusedRole: setting.accusedRole,
-    initialSuspicionReason: '調査担当者は記録に現れた端末やアカウントを被告人の操作と結び付けています。これは疑う側の主張であり、実際の操作者との対応はまだ確かめられていません。' });
+    initialSuspicionReason: '検察側調査官は、記録に現れた端末やアカウントを被告人の操作と結び付けています。これは検察側の主張であり、実際の操作者との対応はまだ確かめられていません。' });
   network.subnets.find(subnet => subnet.subnetId === 'internal-net').label = setting.networkLabel;
   configuration.incidentDesign = INCIDENT_DESIGN;
   const impactCatalog = incidentDefinitions(catalog, configuration);
   for (const attack of configuration.attacks) {
-    const profile = INCIDENT_PROFILES[attack.attackId];
+    const profile = incidentProfile(impactCatalog, attack.attackId);
     if (!profile) continue;
     attack.expectedEffect = impactCatalog.find(item => item.id === attack.attackId).effects.at(-1).description;
-    attack.evidenceAnswer = profile.refutation;
+    attack.evidenceAnswer = profile.causalRefutation;
     attack.notes += ` 被害: ${profile.impact} 被害成立・監査の取得条件はincidentDesignに定義した明示的な制作既定値。`;
   }
-  const allegations = configuration.attacks.map(attack => INCIDENT_PROFILES[attack.attackId]?.allegation).filter(Boolean);
+  const allegations = configuration.attacks.map(attack =>
+    incidentProfile(impactCatalog, attack.attackId)?.allegation).filter(Boolean);
   if (allegations.length) configuration.incidentContext.initialSuspicionReason = allegations.join('\n');
   validateSelectionChain(configuration, catalog);
   return configuration;

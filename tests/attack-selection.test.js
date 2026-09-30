@@ -8,6 +8,7 @@ import { buildEvidenceInvestigationPlan } from '../server/generation/investigati
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { startAuthorDom } from './helpers/author-dom.js';
 import { SCENARIO_PROMPT_TEMPLATE } from '../server/generation/scenario-interface.js';
+import { buildCaseStudy } from '../server/generation/material-investigation.js';
 
 const bootstrap = autoAuthorBootstrap(), catalog = await loadCatalog();
 // 2026-09-24 修正前: mainの9攻撃用構成。
@@ -28,6 +29,9 @@ test('コメント保存した旧生成指示をAIへ送信しない', async () 
   manager.startMakotomaru(session, { schemaVersion: '1.0', difficulty: 1, attackCategory: 'ANY', complexity: 'STANDARD' });
   await manager.waitForIdle();
   assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
+  assert.equal(session.configuration.incidentDesign, 'ATTACK_CAUSED_HARM_V1');
+  assert.equal(session.scenarioPackage.groundTruth.incidentNarratives.length,
+    session.configuration.attacks.length);
   assert.doesNotMatch(SCENARIO_PROMPT_TEMPLATE, /<!--|grounds`不足を指摘された場合/);
 });
 function configuration(ids) {
@@ -45,10 +49,20 @@ for (const ids of [...catalog.map(a => [a.id]), ['sql_injection', 'reflected_xss
     const input = configuration(ids), manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
     const session = createAutoAuthorSession(); manager.submitManual(session, input); await manager.waitForIdle();
     assert.equal(session.auto.state, 'SCENARIO_PREVIEW', JSON.stringify(session.auto.details));
+    const narratives = session.scenarioPackage.groundTruth.incidentNarratives;
+    assert.equal(narratives.length, ids.length, ids.join(' / '));
+    assert.ok(narratives.every(item => /別の攻撃者/.test(item.attackerAction)
+      && /弁護側が被告人に無罪判決を求める根拠/.test(item.verdictBasis)));
     manager.approve(session); await manager.waitForIdle();
     assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));
     assert.equal(session.evaluationResult.status, 'ACCEPTED');
     assert.deepEqual(session.configuration, input);
+    const explanation = buildCaseStudy(session.runtime).issues.at(-1).explanation;
+    for (const narrative of narratives) {
+      assert.ok(explanation.includes(narrative.attackerAction), narrative.attackNodeId);
+      assert.ok(explanation.includes(narrative.verdictBasis), narrative.attackNodeId);
+    }
+    assert.doesNotMatch(explanation, /その処理を被告人が行ったと判断できない/);
   });
 }
 test('単独の権限昇格は初期権限を明示し、SSH連鎖なら効果を使う', () => {

@@ -35,7 +35,8 @@ test('ClickFix has distinct observation and comparison disputes, with the full p
     .filter(requirement => requirement.investigationStage);
   assert.equal(requirements.length, 2);
   assert.deepEqual(requirements[0].grounds.map(item => item.sourceId), ['clickfix_page_record']);
-  assert.match(requirements[0].investigationStage.claim, /表示されたなら/);
+  assert.match(requirements[0].investigationStage.claim, /修復案内.*表示/);
+  assert.match(requirements[0].investigationStage.claim, /案内どおりの処理.*実行.*みるべき/);
   const final = requirements[1];
   assert.deepEqual(new Set(final.grounds.map(item => item.sourceId)), new Set(['clickfix_page_record', 'process_execution_record']));
   assert.match(final.investigationStage.claim, /要求IDと端末のプロセスID/);

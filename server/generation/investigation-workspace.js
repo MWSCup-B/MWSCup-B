@@ -108,10 +108,19 @@ export function requiredCourtEvidence(gameCase, round) {
     ...(issue?.question?.supportingQuotes.map(quote => quote.evidenceId) ?? [])])];
 }
 
+// `collectedEvidenceIds` is the acquisition history.  Court submission is
+// deliberately scoped to the current issue so an earlier issue cannot
+// accidentally satisfy a later one.
+export function activeCourtEvidenceIds(session) {
+  return session.roundCollectedEvidenceIds ?? session.collectedEvidenceIds ?? [];
+}
+
 export function investigationProgress(session, gameCase) {
   const required = requiredCourtEvidence(gameCase, session.currentRound);
-  const collected = required.filter(id => session.collectedEvidenceIds.includes(id));
-  return { required: required.length, collected: collected.length, complete: required.length > 0 && required.length === collected.length };
+  const active = activeCourtEvidenceIds(session);
+  const collected = required.filter(id => active.includes(id));
+  return { required: required.length, collected: collected.length,
+    complete: required.length > 0 && required.length === collected.length };
 }
 
 export function workspaceMaterial(session, item) {
@@ -158,5 +167,18 @@ export function workspaceAction(session, gameCase, { action, materialId, command
     if (!facts.some(fact => fact.line === line)) facts.push({ line, text: sourceLines(item)[line - 1] });
     if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
     if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
+    session.roundCollectedEvidenceIds ??= [];
+    if (!session.roundCollectedEvidenceIds.includes(materialId)) session.roundCollectedEvidenceIds.push(materialId);
+  } else if (action === 'remove-fact') {
+    if (!Number.isInteger(line)) throw new GameError('INVALID_FACT_LINE', 'line', '保存を取り消す行を選んでください。');
+    session.savedFacts ??= {};
+    const facts = ownList(session.savedFacts, materialId);
+    if (!facts.some(fact => fact.line === line))
+      throw new GameError('FACT_NOT_SAVED', 'line', '保存済みの証拠行を選んでください。');
+    session.savedFacts[materialId] = facts.filter(fact => fact.line !== line);
+    if (session.savedFacts[materialId].length === 0) {
+      delete session.savedFacts[materialId];
+      session.roundCollectedEvidenceIds = activeCourtEvidenceIds(session).filter(id => id !== materialId);
+    }
   }
 }

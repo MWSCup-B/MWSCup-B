@@ -5,6 +5,7 @@ import { createGeneratedGame, actGenerated, generatedPlayerView } from '../serve
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { currentCorrectPair } from './helpers/court-issues.js';
 import { validateExplorableWebLogs } from '../server/generation/evidence-log-format.js';
+import { requiredCourtEvidence } from '../server/generation/investigation-workspace.js';
 
 for (const state of ['FAILED', 'CANCELLED', 'READY', 'MODE_SELECTION']) {
   test(`${state}から制作条件を保持して戻り、失敗した成果物を再利用しない`, () => {
@@ -56,6 +57,10 @@ for (const attack of ['sql_injection', 'stored_xss']) {
       if (item.type.endsWith('_LOG')) assert.ok(item.publicContent.trim().split('\n').length >= 100);
     }
     for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round++) {
+      for (const materialId of requiredCourtEvidence(runtime.gameCase, round)) {
+        actGenerated(session, runtime, { action: 'workspace-read', materialId });
+        actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
+      }
       const view = generatedPlayerView(session, runtime);
       const questions = view.workbench.materials.map(item => item.question);
       assert.ok(questions.every(question => JSON.stringify(question) === JSON.stringify(questions[0])));

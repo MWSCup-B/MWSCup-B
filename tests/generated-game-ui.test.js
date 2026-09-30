@@ -9,12 +9,14 @@ import { actGenerated, createGeneratedGame, generatedPlayerView } from '../serve
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { procedureMethods } from '../server/generation/investigation-procedures.js';
 import { currentCorrectPair } from './helpers/court-issues.js';
+import { requiredCourtEvidence } from '../server/generation/investigation-workspace.js';
 
 const source = await readFile(new URL('../public/generated-view.js', import.meta.url), 'utf8');
 import { renderInvestigationWorkspace } from '../public/investigation-workspace.js';
 function ui(initial, onAction) {
   const screen = new Element('section'); const calls = [];
-  const document = { createElement: tag => new Element(tag), body: { classList: { add() {} } } };
+  const document = { createElement: tag => new Element(tag), createElementNS: (_namespace, tag) => new Element(tag),
+    body: { classList: { add() {} } } };
   const render = runInNewContext(`${source.replace(/^import[^\n]+\n/gm, '').replaceAll('export function', 'function')}\nrenderGeneratedGame;`,
     { document, assetPath, renderInvestigationWorkspace, setTimeout() {},
       gameAudio: { forGame() {}, setScene() {}, attach() {} } });
@@ -44,25 +46,19 @@ test('submission and court display only saved excerpts with their original line 
     investigationTargets: [], canReturnToCourt: true, collectedEvidence: [saved],
     workbench: { workspaceVersion: '1.0', progress: { complete: true, collected: 1, required: 1 },
       materials: [{ materialId: 'mail', label: '保存メール', collected: true, savedFacts, question: { choices } }] } });
-  await page.click('提出する証拠を決める');
-  assert.match(page.screen.querySelector('.case-court-document').textContent, /保存した証拠（元資料の行番号）/);
-  assert.match(page.screen.querySelector('.case-court-source').textContent, /行3: <script>not executed<\/script>/);
+  await page.click('保存した証拠を基に反論を考える');
+  assert.match(page.screen.querySelector('.case-saved-evidence-set').textContent, /保存した証拠/);
+  assert.match(page.screen.querySelector('.case-saved-evidence-source').textContent, /行3: <script>not executed<\/script>/);
   await page.click(choices[0].text.replace(/^/, 'A. '));
-  await page.click('この資料と主張で法廷へ');
-  assert.deepEqual(page.calls, [{ action: 'retrial', evidenceId: 'mail', interpretationChoiceId: choices[0].choiceId }]);
+  await page.click('この反論で法廷へ');
+  assert.deepEqual(page.calls, [{ action: 'retrial', interpretationChoiceId: choices[0].choiceId }]);
   page.change({ ...base, currentState: 'RETRIAL_COURT', investigationMode: 'OPEN_MATERIALS',
-    pendingInterpretation: { evidenceId: 'mail', statementId: 'claim', ...choices[0] }, presentableEvidence: [saved] });
-  let shown = '';
-  for (let guard = 0; guard < 20; guard++) {
-    shown += page.screen.querySelector('.case-court-source').textContent;
-    const next = page.screen.querySelectorAll('button').find(item => item.textContent === '次のページ');
-    if (next.disabled) break;
-    await page.click('次のページ');
-  }
-  assert.equal(shown, '行3: <script>not executed</script>\n行19: 保存した別の行');
+    pendingInterpretation: { statementId: 'claim', ...choices[0] }, presentableEvidence: [saved] });
+  assert.equal(page.screen.querySelector('.case-saved-evidence-source').textContent,
+    '行3: <script>not executed</script>\n行19: 保存した別の行');
   assert.equal(page.screen.querySelectorAll('script').length, 0);
-  await page.click('この証拠を提示する');
-  assert.deepEqual(page.calls.at(-1), { action: 'objection', statementId: 'claim', evidenceId: 'mail', interpretationChoiceId: choices[0].choiceId });
+  await page.click('保存した証拠一式を提示する');
+  assert.deepEqual(page.calls.at(-1), { action: 'objection', statementId: 'claim', interpretationChoiceId: choices[0].choiceId });
 });
 
 test('調査は全文を開いて複数候補へ絞り込み、資料を替えても検察側の主張は固定される', async () => {
@@ -89,6 +85,54 @@ test('調査は全文を開いて複数候補へ絞り込み、資料を替え�
   assert.equal(page.calls.length, 0);
 });
 
+test('workspace separates the prosecutor claim from staged hints and exposes the network diagram', async () => {
+  const claim = 'Webサーバーに対象の投稿が保存され、その後の処理も被告人の操作によるものです。';
+  const targetName = 'Webサーバー：保存投稿・Web要求・告知投稿の監査記録';
+  const networkDiagram = {
+    subnets: [{ subnetId: 'external', label: '外部', cidr: '203.0.113.0/24', trustBoundaryId: 'external' },
+      { subnetId: 'internal', label: '社内', cidr: '10.0.0.0/24', trustBoundaryId: 'internal' }],
+    nodes: [{ nodeId: 'outside', subnetId: 'external', label: '外部端末', nodeType: 'EXTERNAL', ip: '203.0.113.10', os: 'linux', roles: [] },
+      { nodeId: 'web', subnetId: 'internal', label: 'Webサーバー', nodeType: 'WEB_SERVER', ip: '10.0.0.10', os: 'linux', roles: [] }],
+    services: [], connections: [{ fromNodeId: 'outside', toNodeId: 'web' }],
+  };
+  const page = ui({ ...base, gameCaseId: 'workspace_auxiliary', currentState: 'INVESTIGATION',
+    investigationMode: 'OPEN_MATERIALS', investigationClaim: { spokenContent: claim }, networkDiagram,
+    investigationTargets: [{ targetId: 'web', displayName: targetName }], canReturnToCourt: false, collectedEvidence: [],
+    workbench: { workspaceVersion: '1.0', help: '', canChooseEvidence: false,
+      progress: { complete: false, collected: 0, required: 2 }, savedObservations: [],
+      materials: [{ materialId: 'post', targetId: 'web', label: `掲示板の保存投稿監査 — ${targetName}`,
+        capabilities: { console: false }, collected: false, history: [], savedFacts: [] }] } });
+  await page.click('Talk');
+  assert.match(page.screen.textContent, new RegExp(claim));
+  assert.doesNotMatch(page.screen.textContent, /IPアドレスやアカウントの一致だけでは/);
+  await page.click('Hint');
+  assert.match(page.screen.textContent, /Hint1/); assert.doesNotMatch(page.screen.textContent, /Hint2/);
+  await page.click('次のHintを表示');
+  assert.match(page.screen.textContent, /Hint2/); assert.doesNotMatch(page.screen.textContent, /Hint3/);
+  await page.click('ネットワーク構成図');
+  assert.ok(page.screen.querySelector('.workspace-network-scroll')?.querySelector('svg'));
+  await page.click('現場へ戻る');
+  assert.equal(page.screen.querySelector('[data-material-id="post"]').textContent, '▤ 掲示板の保存投稿監査');
+});
+
+test('workspace fact picker shows only the original rows in the active filtered result', async () => {
+  const page = ui({ ...base, gameCaseId: 'workspace_filtered_facts', currentState: 'INVESTIGATION',
+    investigationMode: 'OPEN_MATERIALS', investigationTargets: [{ targetId: 'web', displayName: 'Webサーバー' }],
+    canReturnToCourt: false, collectedEvidence: [], workbench: { workspaceVersion: '1.0', help: '',
+      canChooseEvidence: false, progress: { complete: false, collected: 0, required: 1 }, savedObservations: [],
+      materials: [{ materialId: 'web_log', targetId: 'web', label: 'Webアクセス記録 — Webサーバー',
+        capabilities: { console: true }, collected: false, savedFacts: [],
+        history: [{ command: 'cat material.txt', output: 'first\nsecond', lines: [1, 2], matchedRecords: 2, totalRecords: 2 },
+          { command: 'grep -F "second" material.txt', output: 'second', lines: [2], matchedRecords: 1, totalRecords: 2 }],
+        facts: [{ line: 1, text: 'first' }, { line: 2, text: 'second' }], templates: [] }] } });
+  await page.screen.querySelector('[data-material-id="web_log"]').dispatch('click');
+  assert.equal(page.screen.querySelector('.workspace-console').textContent, 'second');
+  await page.click('原文を証拠として保存');
+  const overlay = page.screen.querySelector('.workspace-overlay');
+  assert.match(overlay.textContent, /2: second/);
+  assert.doesNotMatch(overlay.textContent, /1: first/);
+});
+
 test('the case file omits the incident-summary item and keeps entry to the report', async () => {
   const page = ui({ ...base, currentState: 'TITLE' });
   assert.doesNotMatch(page.screen.textContent, /事件のあらまし/);
@@ -112,23 +156,13 @@ test('court pages retain all untrusted source text, selection and presentation w
   const records = Array.from({ length: 7 }, (_, index) => ({ ...email, evidenceId: `mail_${index}`, title: `資料${index}`, publicContent: content }));
   const page = ui({ ...base, currentState: 'RETRIAL_COURT', presentableEvidence: records,
     pendingInterpretation: { statementId: 'claim', choiceId: 'hypothesis', text: '操作した人物は確定できない。' } });
-  await page.screen.querySelector('[data-evidence-id="mail_0"]').dispatch('click');
-  let restored = '';
-  for (let guard = 0; guard < 100; guard += 1) {
-    restored += page.screen.querySelector('.case-court-source').textContent;
-    const next = page.screen.querySelectorAll('button').find(node => node.textContent === '次のページ');
-    if (next.disabled) break;
-    await next.dispatch('click');
-  }
-  assert.equal(restored, content);
+  const sources = page.screen.querySelectorAll('.case-saved-evidence-source');
+  assert.equal(sources.length, records.length);
+  assert.ok(sources.every(item => item.textContent === content));
   assert.equal(page.calls.length, 0);
   assert.equal(page.screen.querySelectorAll('script').length, 0);
-  await page.click('次の資料一覧');
-  assert.equal(page.screen.querySelectorAll('.case-file').length, 3);
-  await page.screen.querySelector('[data-evidence-id="mail_6"]').dispatch('click');
-  assert.ok(content.startsWith(page.screen.querySelector('.case-court-source').textContent));
-  await page.click('この証拠を提示する');
-  assert.deepEqual(page.calls, [{ action: 'objection', statementId: 'claim', interpretationChoiceId: 'hypothesis', evidenceId: 'mail_6' }]);
+  await page.click('保存した証拠一式を提示する');
+  assert.deepEqual(page.calls, [{ action: 'objection', statementId: 'claim', interpretationChoiceId: 'hypothesis' }]);
 });
 
 test('quoted testimony is a separate reference while preserving its attribution', () => {
@@ -188,7 +222,7 @@ test('one investigation evidence needs no switcher and still puts inference belo
 
 test('generated court uses original portraits, paged dialogue and explicit statement/evidence presentation', async () => {
   const page = ui({ ...base, currentState: 'RETRIAL_COURT', canInvestigate: true,
-    testimonies: [{ speaker: { displayName: '架空の証言者' }, statements: [
+    testimonies: [{ speaker: { displayName: '検察側調査官' }, statements: [
       { statementId: 'claim', spokenContent: '表示と指定先は同じです。' },
       { statementId: 'observation', spokenContent: '記録を確認しました。' }] }], presentableEvidence: [email] });
   assert.match(page.screen.className, /case-court/);
@@ -235,7 +269,7 @@ test('court-to-investigation transition and unsuccessful presentation provide a 
 
 test('opening report shows overview, allegations and documents on one page before investigation', async () => {
   const page = ui({ ...base, currentState: 'INITIAL_COURT', initialCourt: {
-    incidentOverview: '社内ポータルの利用を巡る架空の事件です。',
+    incidentOverview: '社内ポータルの利用を巡る教材用の事件です。',
     prosecutionOpening: '検察側はメールを根拠に関与を主張しています。',
     presentedEvidence: [email], prosecutionStatements: [{ spokenContent: '表示と指定先は同じです。' }],
     publicRuling: 'ほかの記録を調べてください。',
@@ -269,7 +303,7 @@ test('entering the incident report never reveals the first dispute or transition
   assert.ok(page.screen.querySelector('.case-issue-track'));
 });
 
-test('court requires an explicit interpretation and evidence choice, and resets them between issues', async () => {
+test('court requires an explicit interpretation, shows the complete saved evidence set, and resets between issues', async () => {
   const choices = ['表示文字と指定先が異なる。', '指定先は同じである。', '人物まで確定できる。', 'クリックを証明できる。']
     .map((text, index) => ({ choiceId: `choice_${index}`, text }));
   const game = { ...base, answerMode: 'INTERPRETATION_AND_EVIDENCE', currentState: 'RETRIAL_COURT',
@@ -281,21 +315,18 @@ test('court requires an explicit interpretation and evidence choice, and resets 
   assert.equal(page.screen.querySelector('.case-next-step'), null);
   assert.equal(page.screen.querySelector('pre').textContent, email.publicContent);
   assert.equal(page.screen.querySelectorAll('.case-file').length, 0);
-  await page.click('解釈と証拠を提示'); assert.equal(page.calls.length, 0);
+  await page.click('反論と保存した証拠一式を提示'); assert.equal(page.calls.length, 0);
   await page.click('A. 表示文字と指定先が異なる。');
   assert.equal(page.screen.querySelector('.case-next-step'), null);
-  assert.equal(page.screen.querySelectorAll('.case-file').length, 1);
-  await page.click('解釈と証拠を提示'); assert.equal(page.calls.length, 0);
-  await page.click('メール · 保存メール');
+  assert.equal(page.screen.querySelectorAll('.case-saved-evidence').length, 1);
   await page.click('B. 指定先は同じである。');
-  await page.click('解釈と証拠を提示'); assert.equal(page.calls.length, 0);
-  await page.click('メール · 保存メール'); await page.click('解釈と証拠を提示');
+  await page.click('反論と保存した証拠一式を提示');
   assert.deepEqual(page.calls, [{ action: 'objection', statementId: 'claim',
-    interpretationChoiceId: 'choice_1', evidenceId: 'mail' }]);
+    interpretationChoiceId: 'choice_1' }]);
   page.change({ ...game, currentRound: 2,
     courtQuestion: { ...game.courtQuestion, statementId: 'next_claim' } });
-  await page.click('解釈と証拠を提示'); assert.equal(page.calls.length, 1);
-  assert.equal(page.screen.querySelectorAll('.case-file').length, 0);
+  await page.click('反論と保存した証拠一式を提示'); assert.equal(page.calls.length, 1);
+  assert.equal(page.screen.querySelectorAll('.case-saved-evidence').length, 0);
   await page.click('提示せず追加調査へ'); assert.equal(page.calls.at(-1).action, 'investigation');
 });
 
@@ -328,6 +359,8 @@ test('generated renderer remains text-only for evidence and offers responsive re
   assert.match(css, /prefers-reduced-motion/); assert.match(css, /max-width: 720px/);
   assert.match(css, /backgrounds\/courtroom-v2.png/); assert.match(css, /backgrounds\/investigation-v2.png/);
   assert.match(css, /case-cinematic/); assert.match(css, /case-evidence-workbench/);
+  assert.match(css, /minmax\(min\(100%, 48rem\), 1fr\)/);
+  assert.match(css, /workspace-device button[^}]*min-height: 5\.5rem/s);
 });
 
 test('each speaker cut shows exactly one portrait and always identifies the defense as the player', async () => {
@@ -344,7 +377,7 @@ test('each speaker cut shows exactly one portrait and always identifies the defe
   assert.equal(page.screen.querySelectorAll('img').length, 1);
   assert.equal(page.screen.querySelector('img').src, assetPath('defense_penguin_v1'));
   assert.equal(page.screen.querySelector('.case-stage').dataset.speakerRole, 'defense');
-  await page.click('証拠を選ぶ');
+  await page.click('証拠を確認する');
   assert.equal(page.screen.querySelectorAll('img').length, 1);
   assert.match(page.screen.querySelector('.case-dialogue').textContent, /弁護士（あなた）/);
 });
@@ -452,12 +485,12 @@ test('sequential investigation chooses a hypothesis before court and presents it
   assert.match(page.screen.querySelector('.case-reference').textContent, /弁護人.*表示と指定先は同じ/);
   assert.match(page.screen.querySelector('.case-reference').getAttribute('aria-label'), /まだ確認前/);
   assert.equal(page.screen.querySelector('.case-dialogue'), null, '推理の注記をキャラのセリフとして表示しない');
-  await page.click('証拠を選ぶ');
+  await page.click('証拠を確認する');
   assert.equal(page.screen.querySelector('.case-reference').querySelector('.case-eyebrow'), null);
   assert.equal(page.screen.querySelector('.case-reference').querySelector('h2').textContent, '弁護士（あなた）');
-  await page.click('この証拠を提示する'); assert.equal(page.calls.length, 1);
-  await page.click('メール · 保存メール'); await page.click('この証拠を提示する');
-  assert.deepEqual(page.calls.at(-1), { action: 'objection', statementId: 'claim', interpretationChoiceId: 'choice_1', evidenceId: 'mail' });
+  assert.equal(page.screen.querySelectorAll('.case-saved-evidence').length, 1);
+  await page.click('保存した証拠一式を提示する');
+  assert.deepEqual(page.calls.at(-1), { action: 'objection', statementId: 'claim', interpretationChoiceId: 'choice_1' });
   page.change({ ...game, result: { outcome: 'FAILURE' }, remainingAttempts: 2 });
   await page.click('この推理で法廷へ'); assert.equal(page.calls.length, 2);
   assert.equal(page.screen.querySelectorAll('.case-target').length, 0);
@@ -485,30 +518,29 @@ test('generated script and UI play from the one-page report through a wrong answ
   for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round += 1) {
     await clickThrough('調査を始める');
     assert.equal(page.screen.querySelectorAll('.case-target').length, 0);
-    for (const plan of runtime.gameCase.progression.materialInvestigations) {
-      if (session.collectedEvidenceIds.includes(plan.evidenceId)) continue;
+    const requiredThisRound = new Set(requiredCourtEvidence(runtime.gameCase, round));
+    for (const plan of runtime.gameCase.progression.materialInvestigations.filter(item => requiredThisRound.has(item.evidenceId))) {
       await page.screen.querySelector(`[data-material-id="${plan.evidenceId}"]`).dispatch('click');
       const input = page.screen.querySelector('.workspace-composer')?.querySelector('input');
       if (input) { input.value = 'cat material.txt'; await input.dispatch('input'); await page.click('実行'); }
       assert.ok(page.screen.querySelector('.workspace-console'));
-      assert.ok(!session.collectedEvidenceIds.includes(plan.evidenceId));
-      await page.click('原文の事実を証拠保存');
+      assert.ok(!session.roundCollectedEvidenceIds.includes(plan.evidenceId));
+      await page.click('原文を証拠として保存');
       await page.click('行1を証拠として保存');
       assert.ok(session.collectedEvidenceIds.includes(plan.evidenceId));
       await page.click('現場へ戻る');
     }
     const pair = currentCorrectPair(runtime, round);
     for (const wrong of round === 1 ? [true, false] : [false]) {
-      await page.click('提出する証拠を決める');
-      await page.screen.querySelector(`[data-material-id="${pair.evidenceId}"]`).dispatch('click');
+      await page.click('保存した証拠を基に反論を考える');
       const question = generatedPlayerView(session, runtime).workbench.materials.find(item => item.materialId === pair.evidenceId).question;
       const choice = wrong ? question.choices.find(item => item.choiceId !== pair.interpretationChoiceId).choiceId : pair.interpretationChoiceId;
       await page.screen.querySelector(`[data-choice-id="${choice}"]`).dispatch('click');
-      await page.click('この資料と主張で法廷へ');
+      await page.click('この反論で法廷へ');
       assert.equal(session.currentState, 'RETRIAL_COURT');
-      await clickThrough('証拠を選ぶ');
-      await page.screen.querySelector(`[data-evidence-id="${pair.evidenceId}"]`).dispatch('click');
-      await page.click('この証拠を提示する');
+      await clickThrough('証拠を確認する');
+      assert.equal(page.screen.querySelectorAll('.case-saved-evidence').length, requiredThisRound.size);
+      await page.click('保存した証拠一式を提示する');
       if (wrong) {
         assert.equal(session.currentState, 'INVESTIGATION'); assert.equal(session.currentRound, round);
         assert.match(page.screen.querySelector('.case-dialogue').textContent, /同じ調査先に戻って/);
@@ -526,6 +558,10 @@ test('generated script and UI play from the one-page report through a wrong answ
   assert.equal(page.screen.querySelector('.case-study-reader'), null);
   await page.click('解説を開く');
   assert.ok(page.screen.querySelector('.case-study-reader'));
+  const explanationPoints = page.screen.querySelector('.case-explanation-points');
+  assert.ok(explanationPoints);
+  assert.deepEqual(explanationPoints.querySelectorAll('strong').slice(-4).map(item => item.textContent),
+    ['事件で確認されたこと', '検察側の把握と主張', '資料を照合して分かること', '弁護側の結論']);
   await page.click('判決へ戻る');
   assert.equal(page.screen.querySelector('.case-study-reader'), null);
 });
@@ -546,7 +582,7 @@ test('closing dialogue precedes the complete one-page verdict without consuming 
   const explanation = '記録が示す範囲を区別しました。';
   const page = ui({ ...base, currentState: 'ACQUITTED',
     dialogue: [{ role: 'defense', speaker: '弁護士', text: last, badge: '確認できたこと' },
-      { role: 'prosecutor', speaker: '検察官', text: '無罪との判断を受け入れます。' }],
+      { role: 'prosecutor', speaker: '検察官', text: '弁護側が示した記録について、追加の反論はありません。' }],
     result: { outcome: 'SUCCESS', publicExplanation: last },
     acquittal: { publicRuling: ruling, publicExplanation: explanation } });
   assert.ok(page.screen.querySelector('.case-cinematic'));
@@ -554,7 +590,7 @@ test('closing dialogue precedes the complete one-page verdict without consuming 
   assert.equal(page.screen.querySelector('.case-verdict-scene'), null);
   await page.click('次の台詞');
   assert.equal(page.screen.querySelector('.case-dialogue').querySelector('h2').textContent, '検察官');
-  assert.match(page.screen.textContent, /無罪との判断を受け入れます/);
+  assert.match(page.screen.textContent, /追加の反論はありません/);
   await page.click('判決を確認する');
   assert.equal(page.screen.querySelector('.case-cinematic'), null);
   assert.deepEqual(page.screen.querySelector('.case-verdict-scene').querySelectorAll('p').map(p => p.textContent), [ruling, explanation]);

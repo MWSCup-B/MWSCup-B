@@ -50,7 +50,7 @@ function scenarioPackage(input, suffix = 'fixture') {
   }));
   const characters = {
     schemaVersion: '1.0', characterSetId: `characters_${suffix}`, scenarioId, attackGraphRef: ref,
-    characters: [{ characterId: `character_${suffix}`, displayName: '完全架空の調査対象者',
+    characters: [{ characterId: `character_${suffix}`, displayName: '調査対象者',
       provenance: 'AI_GENERATED_SYNTHETIC', roles: ['defendant'], bindingRefs: [] }],
   };
   const groundTruth = {

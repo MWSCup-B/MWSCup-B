@@ -40,7 +40,8 @@ legend { font-weight: bold; }
 .network-diagram-scroll { max-width: 100%; max-height: 65vh; overflow: auto; overscroll-behavior: contain; }
 .diagram-subnet { fill: #eaf2f8; stroke: #71879b; stroke-width: 2; }
 .diagram-node { fill: #fff; stroke: #24709a; stroke-width: 2; }
-.diagram-connection { stroke: #985324; stroke-width: 2.5; fill: none; stroke-linejoin: round; }
+.diagram-connection { stroke: #985324; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.diagram-arrowhead { fill: #985324; }
 .diagram-node-title, .diagram-subnet-title { font-size: 14px; font-weight: 700; fill: #183549; }
 .diagram-caption { font-size: 11px; fill: #405063; }
 .gate-notice, .assistant-message { padding: .8rem 1rem; border-left: 4px solid #2778a5; background: #eef8ff; color: #172431; }

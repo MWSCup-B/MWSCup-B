@@ -1,0 +1,12 @@
+{"kind":"deck","id":"pr/9j2cvs","name":"Deck"}
+{"kind":"layout","layoutId":"b3ba6edf-ef0b-418a-bc91-45d666ddff5d","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"b02b9d08-51e7-48f7-988d-6aa6118c1c57","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/k4fkns","slide":1,"title":"ゲーム形式の作品は2025年に急増","textShapes":6}
+{"kind":"textbox","id":"sh/zqx8j2xw","slide":1,"text":"ゲーム形式の作品は2025年に急増","textPreview":"ゲーム形式の作品は2025年に急増","textChars":17,"textLines":1,"bbox":[68,42,1144,62]}
+{"kind":"textbox","id":"sh/0r6pc7yh","slide":1,"text":"公開作品を網羅して確認できる2022～2025年を比較","textPreview":"公開作品を網羅して確認できる2022～2025年を比較","textChars":27,"textLines":1,"bbox":[70,108,900,38]}
+{"kind":"textbox","id":"sh/qlo76xgf","slide":1,"text":"50%以上","textPreview":"50%以上","textChars":5,"textLines":1,"bbox":[980,222,240,116]}
+{"kind":"textbox","id":"sh/rmxof2h0","slide":1,"text":"2025年は少なくとも\n半数がゲーム形式","textPreview":"2025年は少なくとも | 半数がゲーム形式","textChars":20,"textLines":2,"bbox":[980,326,240,98]}
+{"kind":"textbox","id":"sh/cn6p87y5","slide":1,"text":"ゲーム作品数／全公開作品数　2022：0／13　　2023：0／12　　2024：1／9　　2025：9以上／18","textPreview":"ゲーム作品数／全公開作品数　2022：0／13　　2023：0／12　　2024：1／9　　2025：9以上／18","textChars":57,"textLines":1,"bbox":[88,580,1110,38]}
+{"kind":"textbox","id":"sh/dofqhcfq","slide":1,"text":"注：タイトル・説明でゲーム形式を確認できた作品を保守的に集計。2020・2021年は全提出作品の内訳を確認できないため除外。","textPreview":"注：タイトル・説明でゲーム形式を確認できた作品を保守的に集計。2020・2021年は全提出作品の内訳を確認できないため除外。","textChars":62,"textLines":1,"bbox":[70,642,1140,44]}
+{"kind":"chart","id":"ch/5wjits7a","slide":1,"name":"","chartType":"bar","bbox":[70,168,885,405]}
+{"kind":"notes","id":"nt/k4fkns","slide":1,"text":"出典：MWS Cup公式サイトおよび公式YouTubeプレイリスト。\n2022 https://www.youtube.com/playlist?list=PL8oKzzuKda41qxRh4UEIr_EcgLeMQRAOg\n2023 https://www.youtube.com/playlist?list=PL8oKzzuKda41aSgeoPKDX5g1iUNZvNgiC\n2024 https://www.youtube.com/playlist?list=PL8oKzzuKda43Fp7xdklHuEBKeuEu4sf_v\n2025 https://www.youtube.com/playlist?list=PL8oKzzuKda42npg-MS4P28JobQEoFuguT\n判定基準：タイトルまたは説明にゲームと明記、あるいはMinecraft・カードゲーム等のゲーム形式、ミッション・勝敗・挑戦・報酬等の進行を確認できた作品。2025年は内容不明作品をゲーム数に含めず、下限値として9件を採用。"}

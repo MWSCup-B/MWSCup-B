@@ -23,6 +23,12 @@ export function validateScenarioDesignBoundary(template, proposed) {
     fail('SCENARIO_DESIGN_BOUNDARY_CHANGED', 'scenario-import-package',
       '変更できるのは人物名と学習目標・証拠要件のdescriptionだけです。技術構造と全参照を維持してください。');
   }
+  const prosecutionInvestigator = proposed.characters?.characters
+    ?.find(character => character.characterId === 'character_witness');
+  if (!prosecutionInvestigator?.displayName?.includes('検察側')) {
+    fail('SCENARIO_PROSECUTION_INVESTIGATOR_ROLE_UNCLEAR', 'characters.character_witness.displayName',
+      '検察側の主張を述べる人物だと画面上で判別できるよう、表示名に「検察側」を含めてください。');
+  }
 }
 
 export function buildScenarioTemplate({ generationInput, configuration }) {
@@ -33,11 +39,11 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
   const characters = {
     schemaVersion: '1.0', characterSetId: `characters_${suffix}`, scenarioId, attackGraphRef,
     characters: [
-      { characterId: 'character_defendant', displayName: `架空の${configuration.incidentContext.accusedRole}`,
+      { characterId: 'character_defendant', displayName: configuration.incidentContext.accusedRole,
         provenance: 'AI_GENERATED_SYNTHETIC', roles: ['defendant'], bindingRefs: [] },
-      { characterId: 'character_attacker', displayName: '架空の攻撃者',
+      { characterId: 'character_attacker', displayName: '別の攻撃者',
         provenance: 'AI_GENERATED_SYNTHETIC', roles: ['attacker'], bindingRefs: [] },
-      { characterId: 'character_witness', displayName: '架空の調査担当者',
+      { characterId: 'character_witness', displayName: '検察側調査官',
         provenance: 'AI_GENERATED_SYNTHETIC', roles: ['witness'], bindingRefs: [] },
     ],
   };
@@ -53,7 +59,8 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
       characterId: character.characterId, role: character.roles[0],
     })),
   };
-  const incidentNarratives = buildIncidentNarratives(configuration, graph);
+  const incidentNarratives = buildIncidentNarratives(configuration, graph,
+    generationInput.technicalInput.attackDefinitions);
   if (incidentNarratives.length) {
     groundTruth.incidentNarratives = incidentNarratives;
     for (const narrative of incidentNarratives) groundTruth.technicalFacts.push({
@@ -124,10 +131,10 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
     : '各資料の対象と記録時刻・記録範囲を照合する。')
     + (hasLogin ? ' 認証サービスの認証記録とWeb側のセッション監査をアカウントの合成識別子・時刻・記録範囲で照合する。認証成功、投稿権限、実際の投稿は別の事実で、認証記録は人物同定ではない。' : '')
     + (hasStored ? ' 保存投稿の識別子と非実行ソース抜粋、後の閲覧要求、ブラウザのスクリプト実行記録を照合する。保存が閲覧に先行する関係を維持し、反射型XSSとは区別する。アクセス成功だけでスクリプト実行を証明しない。' : '')
-    + (selectedIds.has('credential_phishing') ? ' 偽フォームと正規ポータルは別サービスである。偽フォームへの送信・受信は取得可能な専用計測資料で照合する。秘密値を記録せず、リンク誘導だけから資格情報取得を推定しない。' : '')
+    + (selectedIds.has('credential_phishing') ? ' 偽フォームと正規ポータルは別サービスである。偽フォームへの送信・受信は取得可能な専用記録資料で照合する。秘密値を記録せず、リンク誘導だけから資格情報取得を推定しない。' : '')
     + (selectedIds.has('reflected_xss') || selectedIds.has('sql_injection')
-      ? ' アクセス記録だけでスクリプト実行やSQL実行を証明せず、確認済みの実行計測・DB記録と区別する。' : '');
-  const allegation = 'これらの技術記録だけで被告人が自分の意思で対象の操作を行ったと特定できる。';
+      ? ' アクセス記録だけでスクリプト実行やSQL実行を証明せず、確認済みの実行記録・DB記録と区別する。' : '');
+  const allegation = 'これらの技術記録は、被告人が自分の意思で対象の操作を行ったことを示している。';
   const issueDesign = ' 段階ごとの具体的な主張・対象人物・4択の論点・使用資料・反駁範囲はrequirement_stage_*のinvestigationStageとgroundsで定義する。そのorder順に各調査先一争点とし、これ以外の法廷を追加しない。各段階のgroundsはその段階の必要資料であり、全体要件の全資料を最初から要求するものではない。最後だけ取得済み全資料を統合する。';
   const evidenceRequirements = {
     schemaVersion: '1.0', evidenceRequirementSetId: `requirements_${suffix}`, scenarioId,
@@ -137,16 +144,19 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
           + comparison + phishingMaterialPolicy(firstAttack.attackId) + ` 難易度${configuration.difficulty}・evidenceCount=${configuration.evidenceCount}は調査チェーンの基準で、法廷は調査対象に対応する${requestedCourtIssueCount(configuration, generationInput)}争点。取得資料総数の上限ではない。補助資料も個別の取得要件に従い通常プレイで取得する。`,
         grounds: structuredClone(artifactGrounds), learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_timeline', purpose: 'TIMELINE_PROOF',
-        description: comparison + ' Timeline eventは照合対象の文脈である。narrativeTimestampsは架空の表示時刻で、観測記録による裏付けではない。教材の合成時刻は合成値と明記し、実測値・時計同期・因果関係を捏造しない。時刻・識別情報が不足する比較は未確認とする。',
+        description: comparison + ' Timeline eventは照合対象の文脈である。narrativeTimestampsは教材用の表示時刻で、観測記録による裏付けではない。教材の合成時刻は合成値と明記し、実測値・時計同期・因果関係を捏造しない。時刻・識別情報が不足する比較は未確認とする。',
         grounds: [...structuredClone(artifactGrounds), ...events.map(event => ({
           sourceType: 'TIMELINE_EVENT', sourceId: event.eventId, attackNodeId: null }))],
         learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_contradiction', purpose: 'CONTRADICTION_PROOF',
-        description: `事件全体では、架空の証言者character_witnessによる資料の解釈を基に、character_defendantを対象に「${allegation}」とする検察側の立場を検討する。各法廷の反駁対象はinvestigationStageの攻撃固有の記録解釈とし、全体の主張を追加の争点として水増ししない。発言はTESTIMONYとして技術的事実から分離する。資料に裏付けられる観測内容の発言と、人物・意図を断定する主張は別statementとし、反駁が成立する部分と成立しない部分を資料から区別できるようにする。被告人の端末・アカウントとの対応は主張から事実化しない。資料が記録する内容と人物・意図を特定できるという推論の飛躍を反駁し、被告人が操作しなかったという事実には置き換えない。` + issueDesign,
+        description: `事件全体では、検察側調査官character_witnessによる資料の解釈を基に、character_defendantを対象に「${allegation}」とする検察側の立場を検討する。各法廷の反駁対象はinvestigationStageの攻撃固有の記録解釈とし、全体の主張を追加の争点として水増ししない。発言はTESTIMONYとして技術的事実から分離する。資料に裏付けられる観測内容の発言と、人物・意図を断定する主張は別statementとし、反駁が成立する部分と成立しない部分を資料から区別できるようにする。被告人の端末・アカウントとの対応は、検察側の主張だけから事実化しない。Ground TruthのincidentNarrativesに別の攻撃者による因果経路が定義されている場合は、取得資料によってその経路を具体的に示し、被告人による直接操作説と両立しないことを反駁の結論とする。資料にない人物、アリバイ、攻撃経路は追加しない。` + issueDesign,
         grounds: [...factGrounds, ...structuredClone(artifactGrounds), ...characterGrounds],
         learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_exoneration', purpose: 'EXONERATION_PROOF',
-        description: comparison + ' 別々に取得した2件以上の技術資料を比較し、character_witnessによるcharacter_defendantの人物・意図の特定は提示資料だけでは支えられない、という限定的な結論を示す。人物・Ground Truth参照は論証の対象と技術的文脈であり観測資料の代用ではない。人物対応、アリバイ、真犯人、積極的な非関与を補完しない。必要な補助資料を内部専用にせず、通常プレイですべて取得・閲覧可能にする。',
+        description: comparison + (incidentNarratives.length
+          ? ' 別々に取得した2件以上の技術資料を比較し、Ground TruthのincidentNarrativesに定義された別の攻撃者による因果経路を具体的に示す。その経路が、character_defendantによる直接操作という検察側の説明と両立しないことを無罪の根拠とする。'
+          : ' 別々に取得した2件以上の技術資料を比較し、character_witnessによるcharacter_defendantの人物・意図の特定は提示資料だけでは支えられない、という限定的な結論を示す。')
+          + ' 人物・Ground Truth参照は論証の対象と技術的文脈であり、観測資料の代用ではない。定義されていない人物対応、アリバイ、攻撃経路を補完しない。必要な補助資料を内部専用にせず、通常プレイですべて取得・閲覧可能にする。',
         grounds: [...characterGrounds, ...structuredClone(artifactGrounds), ...factGrounds],
         learningObjectiveIds: ['objective_trace'] },
       // 2026-09-24 修正前: 先頭以外だけ別要件へ保存していた。

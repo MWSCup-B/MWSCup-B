@@ -207,8 +207,8 @@ export function importScenarioPackage({ generationInput, scenarioPackage }) {
   if (scenarioPackage.characters.characters.some(character => character.provenance !== 'AI_GENERATED_SYNTHETIC')) {
     const issue = {
       code: 'NON_SYNTHETIC_CHARACTER', field: 'character.characters.provenance',
-      reason: '外部Scenario Generatorが出力した人物は完全な架空人物として明示する必要があります。',
-      correctionHint: '生成した全人物のprovenanceをAI_GENERATED_SYNTHETICにし、架空の表示名だけを使用してください。',
+      reason: '外部Scenario Generatorが出力した人物は、実在人物と混同しない教材内人物として明示する必要があります。',
+      correctionHint: '生成した全人物のprovenanceをAI_GENERATED_SYNTHETICにし、実在人物と混同しない表示名だけを使用してください。',
     };
     return invalidResult(ref, scenarioId, expectedGraphRef, 'CONSISTENCY_VALIDATION',
       { schema: 'PASSED', consistency: 'FAILED' }, [issue]);

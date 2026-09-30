@@ -13,10 +13,20 @@
   ],
   "authoring": {
     "preferredInvestigationType": "CONFIGURATION",
-    "evidenceAnswer": "対象ユーザーに適用されるsudoersの許可と実効設定を確認する。 / 端末計測の親子プロセスと実効UIDからrootでの起動を確認する。",
+    "evidenceAnswer": "対象ユーザーに適用されるsudoersの許可と実効設定を確認する。 / 端末記録の親子プロセスと実効UIDからrootでの起動を確認する。",
     "sourceNodeBinding": "host",
     "targetServiceBinding": "service",
     "investigationServiceBinding": "service"
+  },
+  "incidentNarrative": {
+    "impactEffectPredicate": "privileged_execution",
+    "requiredArtifactIds": ["sudo_policy_record", "sudo_execution_record"],
+    "attackerAction": "被告人とは別の攻撃者が、対象ホストで得ていた一般利用者の権限を足掛かりに、危険なsudo許可を悪用した。その結果、攻撃者が操作できるプロセスがroot実効UIDで起動した。",
+    "impact": "危険なsudo許可を通じ、別の攻撃者が対象ホスト上でroot権限のプロセスを操作できる状態になった。",
+    "allegation": "sudo実行記録に、被告人のアカウントが開始ユーザーとして、rootが実効UIDとして残っていたため、検察側は、被告人が管理者権限で処理を直接実行したと主張している。",
+    "prosecutionKnowledge": "検察側は、被告人のアカウントを開始ユーザーとしてrootプロセスが起動した記録を把握している。一方、事件時に適用された危険なsudo許可と親子プロセスの関係を評価せず、記録上の開始アカウントを実際の操作者と取り違えている。",
+    "causalRefutation": "事件時のsudoers許可・適用対象・記録時点と、端末記録の親子プロセス・開始ユーザー・実効UID・時刻を照合する。これにより、root処理は別の攻撃者がsudo設定不備を悪用して起動したものであり、被告人による正規の直接管理操作ではないことが分かる。",
+    "verdictBasis": "root処理を成立させたのは危険なsudo許可を悪用した別の攻撃者であり、開始アカウントは操作者本人の署名ではない。被告人が管理者権限で直接実行したという検察側の構成とは両立しない。この事実は、弁護側が被告人に無罪判決を求める根拠となる。"
   },
   "bindings": [
     {
@@ -128,13 +138,13 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     },
     {
       "id": "sudo_execution_record",
-      "description": "端末計測の親子プロセスと実効UIDからrootでの起動を確認する。",
+      "description": "端末記録の親子プロセスと実効UIDからrootでの起動を確認する。",
       "acquisition": {
         "binding": "host",
         "logSource": "DEVICE",
@@ -149,7 +159,7 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     }

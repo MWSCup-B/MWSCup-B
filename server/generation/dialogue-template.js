@@ -7,11 +7,11 @@ export const COURT_DIALOGUE_TEMPLATE = Object.freeze([
 export const COURT_SPEAKERS = Object.freeze(['JUDGE', 'PROSECUTOR', 'DEFENSE']);
 
 const fixedLines = Object.freeze({
-  judgeOpen: 'では、記録を確かめましょう。何が起きたのか、一つずつ。',
+  judgeOpen: 'では、記録を確認し、何が起きたのかを一つずつ明らかにしましょう。',
   prosecutorEvidence: 'こちらの証拠をご覧ください。',
-  defenseOpen: '記録はある。けれど、そこから何が言える？ 一つずつ確かめよう。',
+  defenseOpen: '記録はある。だが、そこから何が分かるのか。一つずつ確かめよう。',
   objection: 'この記録から、確かめていただきたい点があります。',
-  acquitted: '合理的な疑いが残るため、被告人を無罪とします。',
+  acquitted: '被害は、被告人とは別の攻撃者による経路で発生しており、被告人が直接操作したという検察側の説明とは両立しません。よって、被告人を無罪とします。',
 });
 
 // LLMへ自由会話を作らせず、検証済み成果物から固定slotだけを割り当てる。
@@ -43,6 +43,39 @@ export function assignDialogueTemplate({ configuration, scenarioPackage, evidenc
         ?? slots.defenseEvidence.at(-1) ?? '技術記録', objection: fixedLines.objection })) };
 }
 
+const explanationLabels = Object.freeze({
+  '事件で確認されたこと': 'fact',
+  '実際に起きたこと': 'fact',
+  '検察側の把握と主張': 'prosecution',
+  '検察側が把握していた範囲': 'prosecution',
+  '資料を照合して分かること': 'causality',
+  '資料から確認した因果関係': 'causality',
+  '弁護側の結論': 'conclusion',
+  '判決理由': 'conclusion',
+});
+
+function closingArgument(explanation) {
+  const blocks = String(explanation ?? '').split(/\n{2,}/).map(block => {
+    const values = {};
+    for (const line of block.split('\n')) {
+      const match = /^([^：]+)：(.*)$/s.exec(line.trim());
+      const key = explanationLabels[match?.[1]];
+      if (key) values[key] = match[2].trim();
+    }
+    return values;
+  }).filter(values => values.fact || values.prosecution || values.causality || values.conclusion);
+  if (!blocks.length) return String(explanation ?? '')
+    .replaceAll('被告人を無罪とする', '弁護側は被告人に無罪判決を求めます')
+    .replaceAll('攻撃者の実名までログから特定することは、この結論の要件ではない。', '');
+  return blocks.map((values, index) => [
+    index === 0 ? '調査で確認した事実を申し上げます。' : 'さらに、別の攻撃経路についても確認されています。',
+    values.fact,
+    values.prosecution ? `一方、${values.prosecution}` : '',
+    values.causality ? `しかし、資料を照合すると、${values.causality}` : '',
+    values.conclusion,
+  ].filter(Boolean).join('')).join('\n\n');
+}
+
 // Only public, already earned information enters a scene. No private slot is serialized.
 export function generatedSceneDialogue(game) {
   const line = (speaker, role, text, badge = '会話') => ({ speaker, role, text, badge });
@@ -52,8 +85,11 @@ export function generatedSceneDialogue(game) {
       ? [line('検察官', 'prosecutor', game.result.publicFeedback, '提示の結果'),
         defense('結論を急いだ。記録のどこまでが根拠になるのか、もう一度見よう。')]
       : game.result?.outcome === 'SUCCESS'
-        ? [line('検察官', 'prosecutor', 'その点は認めます。ですが、次の記録も説明できますか。'),
-          defense('一つ、主張の穴が見えた。次の記録も確かめよう。')]
+        ? [line('検察官', 'prosecutor', 'その点は認めます。ですが、次の点について検察側はこう主張します。'),
+          ...(game.investigationClaim?.spokenContent
+            ? [line(game.investigationClaim.speaker?.displayName ?? '検察官', 'prosecutor', game.investigationClaim.spokenContent, '検察側の主張')]
+            : []),
+          defense('次の争点に移る前に、この主張を裏付ける記録を確かめよう。')]
         : [defense(fixedLines.defenseOpen)];
     if (game.investigationMode === 'OPEN_MATERIALS') return opening;
     const target = game.investigationTargets[0];
@@ -71,8 +107,8 @@ export function generatedSceneDialogue(game) {
       defense(fixedLines.objection, '根拠となる証拠を提示しよう')];
   }
   if (game.currentState === 'ACQUITTED') return [
-    ...(game.result?.publicExplanation ? [defense(game.result.publicExplanation, '証拠から確認できたこと')] : []),
-    line('検察官', 'prosecutor', '……この記録だけでは、被告人が操作したとは言い切れません。有罪の主張は維持できません。無罪との判断を受け入れます。'),
-    defense('記録が示すことを、最後まで確かめた。あとは、判決を待とう。')];
+    ...(game.result?.publicExplanation ? [defense(closingArgument(game.result.publicExplanation), '弁護側の最終主張')] : []),
+    line('検察官', 'prosecutor', '……弁護側が示した記録のつながりについて、検察側から追加の反論はありません。'),
+    defense('以上の理由から、弁護側は被告人に無罪判決を求めます。')];
   return [];
 }

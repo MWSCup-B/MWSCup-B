@@ -26,7 +26,7 @@ const READINGS = Object.freeze({
   database_statement_record: 'SQLのSELECTは読み出す項目、WHEREは選ぶ条件を表します。',
   credential_submission_record: '送信先は情報を送った相手、相関IDは対応する処理を探す目印です。',
   authentication_record: 'accountはアカウント名、source_ipは接続元の住所、resultは成否です。',
-  application_session_record: 'セッションの受入れはログイン状態が使えたかを、権限はできる操作の範囲を示します。',
+  application_session_record: 'セッションの確立はログイン状態が作られたことを、付与された権限はそのセッションで実行できる操作の範囲を示します。',
   clickfix_page_record: '保存された案内は、画面で何をするよう求めたかを読む資料です。',
   // 2026-09-24 修正前: parent_refは起動元とだけ説明。
   // process_execution_record: 'プロセスは動いているプログラムの単位です。process_refはその識別子、parent_refは起動元、user_refは実行アカウント、start_resultは起動結果です。',

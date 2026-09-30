@@ -427,6 +427,25 @@ function projectTestimonies(input, selectedStatementIds, ids) {
 }
 
 export function deriveGameCaseParts(input) {
+  const sourceNetwork = input.scenarioGenerationInput.technicalInput.network;
+  const networkDiagram = {
+    subnets: (sourceNetwork.subnets ?? sourceNetwork.trustZones).map(item => ({
+      subnetId: item.subnetId ?? item.id, label: item.label, cidr: item.cidr ?? '—',
+      trustBoundaryId: item.trustBoundaryId ?? item.id,
+    })),
+    nodes: sourceNetwork.nodes.map(item => ({
+      nodeId: item.nodeId ?? item.id, subnetId: item.subnetId ?? item.trustZone,
+      label: item.label ?? item.id, nodeType: item.nodeType ?? item.type,
+      ip: item.ip ?? '—', os: item.os, roles: [...(item.roles ?? [])],
+    })),
+    services: sourceNetwork.services.map(item => ({
+      serviceId: item.serviceId ?? item.id, nodeId: item.nodeId,
+      label: item.label ?? item.id, serviceType: item.serviceType ?? item.type,
+    })),
+    connections: sourceNetwork.connections.map(item => ({
+      fromNodeId: item.fromNodeId ?? item.from, toNodeId: item.toNodeId ?? item.to,
+    })),
+  };
   const artifacts = new Map(input.evidenceSet.evidenceArtifacts.map(item => [item.evidenceId, item]));
   const ids = publicIds(input);
   const testimonySpeakerIds = new Set(input.evidenceSet.evidenceArtifacts
@@ -497,8 +516,8 @@ export function deriveGameCaseParts(input) {
       returnToCourtCondition: input.progressionPlan.returnToCourtCondition },
     retrialCourt: { testimonies: structuredClone(testimonies),
       presentableEvidenceIds: [...presentableEvidenceIds] },
-    objection: { action: 'OBJECTION', requiredInputs: ['statementId', 'evidenceId',
-      ...(input.progressionPlan.courtQuestions ? ['interpretationChoiceId'] : [])],
+    objection: { action: 'OBJECTION', requiredInputs: input.progressionPlan.courtQuestions
+      ? ['statementId', 'interpretationChoiceId'] : ['statementId', 'evidenceId'],
       successState: 'ACQUITTED', failureState: input.progressionPlan.investigationMode ? 'INVESTIGATION' : 'GUILTY_RETRY' },
     retryState: { previouslyPresentedStatementId: null, previouslyPresentedEvidenceId: null,
       attemptCount: 0, publicFailureFeedback: input.progressionPlan.publicMessages.failureFeedback,
@@ -510,7 +529,7 @@ export function deriveGameCaseParts(input) {
     guiltyRetry: { state: 'GUILTY_RETRY',
       publicRuling: input.progressionPlan.publicMessages.failureFeedback,
       nextState: 'INVESTIGATION' } } };
-  return { characters, detective: { evidence,
+  return { characters, networkDiagram, detective: { evidence,
     investigationActions: structuredClone(input.progressionPlan.investigationActions),
     investigationTargets: structuredClone(input.progressionPlan.investigationTargets),
     evidenceDiscoveryRules: structuredClone(input.progressionPlan.evidenceDiscoveryRules) },
@@ -522,6 +541,7 @@ export function gameCaseCore(gameCase) {
   return { scenarioId: gameCase.scenarioId, verificationId: gameCase.verificationId,
     evidenceSetId: gameCase.evidenceSetId, attackGraphRef: gameCase.attackGraphRef,
     title: gameCase.title, synopsis: gameCase.synopsis, characters: gameCase.characters,
+    ...(gameCase.networkDiagram ? { networkDiagram: gameCase.networkDiagram } : {}),
     detective: gameCase.detective, courtroom: gameCase.courtroom,
     progression: gameCase.progression, judgment: gameCase.judgment,
     provenance: gameCase.provenance };
@@ -547,6 +567,7 @@ function projectPublicProgression(progression) {
 export function projectPublicGameCase(gameCase) {
   return { schemaVersion: '1.0', gameCaseId: gameCase.gameCaseId, title: gameCase.title,
     synopsis: gameCase.synopsis, characters: structuredClone(gameCase.characters),
+    ...(gameCase.networkDiagram ? { networkDiagram: structuredClone(gameCase.networkDiagram) } : {}),
     detective: { investigationActions: gameCase.detective.investigationActions.map(publicInvestigationAction) },
     courtroom: structuredClone(gameCase.courtroom),
     progression: projectPublicProgression(gameCase.progression) };
@@ -651,8 +672,8 @@ export function validateGameCase(gameCase) {
     }
   }
   validateSequentialGame(gameCase);
-  const expectedInputs = ['statementId', 'evidenceId',
-    ...(gameCase.progression.courtIssues?.some(issue => issue.question) ? ['interpretationChoiceId'] : [])];
+  const expectedInputs = gameCase.progression.courtIssues?.some(issue => issue.question)
+    ? ['statementId', 'interpretationChoiceId'] : ['statementId', 'evidenceId'];
   if (!sameValues(gameCase.progression.objection.requiredInputs, expectedInputs)) fail(
     'INVALID_OBJECTION_INPUTS', 'game-case.progression.objection.requiredInputs', 'ゲームの解答方式と必須入力が一致しません。');
   const expected = digest(gameCaseCore(gameCase));
@@ -674,8 +695,8 @@ export function validatePublicGameCase(publicGameCase, input = null) {
   validateDocument('public-game-case', publicGameCase);
   validateDocument('public-game-progression', publicGameCase.progression);
   validateReturnCondition(publicGameCase.progression.investigationMode, publicGameCase.progression.investigation.returnToCourtCondition);
-  const expectedInputs = ['statementId', 'evidenceId',
-    ...(publicGameCase.progression.courtQuestions ? ['interpretationChoiceId'] : [])];
+  const expectedInputs = publicGameCase.progression.courtQuestions
+    ? ['statementId', 'interpretationChoiceId'] : ['statementId', 'evidenceId'];
   if (!sameValues(publicGameCase.progression.objection.requiredInputs, expectedInputs)) fail(
     'INVALID_OBJECTION_INPUTS', 'public-game-progression.objection.requiredInputs', '公開された解答方式と必須入力が一致しません。');
   const forbidden = /^(groundTruth|verificationResult|sourceRefs|sourceNodeRef|provenance|fingerprint|progressionFingerprint|contradictionRef|exonerationRef|judgment|attackGraphRef|requirementIds|technicalAssessment|groundTruthRefs|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|initiallyAvailable|retryPolicy|correctOptionIndex|correctChoiceId|supportingQuotes)$/i;
@@ -764,11 +785,13 @@ export function evaluateObjection(gameCase, { statementId, evidenceId, interpret
     fail('INTERPRETATION_CHOICE_REQUIRED', 'objection.interpretationChoiceId', '現在の争点の4択から解釈を選んでください。');
   }
   const nextAttemptCount = attemptCount + 1;
+  const hasSufficientEvidenceSet = !issue
+    || issue.requiredEvidenceIds.every(id => collectedEvidenceIds.includes(id));
   const matchedRule = gameCase.judgment.judgmentRules.find(rule =>
     (!issue || issue.judgmentRuleIds.includes(rule.ruleId))
     && (!issue?.question || interpretationChoiceId === correctCourtChoiceId(issue.question))
     && rule.targetStatementId === statementId && rule.acceptedEvidenceIds.includes(evidenceId)
-    && (!issue || issue.requiredEvidenceIds.every(id => collectedEvidenceIds.includes(id))));
+    && hasSufficientEvidenceSet);
   if (matchedRule) return { outcome: 'SUCCESS', state: 'ACQUITTED', nextState: 'ACQUITTED',
     attemptCount: nextAttemptCount, judgmentRuleId: matchedRule.ruleId };
   const common = { outcome: 'FAILURE', state: 'GUILTY_RETRY', attemptCount: nextAttemptCount,

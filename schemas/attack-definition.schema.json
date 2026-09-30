@@ -97,6 +97,45 @@
       ],
       "additionalProperties": false
     },
+    "incidentNarrative": {
+      "type": "object",
+      "properties": {
+        "impactEffectPredicate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "requiredArtifactIds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          }
+        },
+        "attackerAction": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "impact": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "allegation": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "prosecutionKnowledge": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "causalRefutation": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "verdictBasis": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": [
+        "impactEffectPredicate",
+        "requiredArtifactIds",
+        "attackerAction",
+        "impact",
+        "allegation",
+        "prosecutionKnowledge",
+        "causalRefutation",
+        "verdictBasis"
+      ],
+      "additionalProperties": false
+    },
     "bindings": {
       "type": "array",
       "items": {
