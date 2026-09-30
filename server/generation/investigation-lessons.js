@@ -19,6 +19,10 @@ const BASICS = Object.freeze({
 });
 
 const READINGS = Object.freeze({
+  file_operation_record: 'pidは端末内のプロセス番号、executableは実行ファイル、operationは操作種別です。同じ長さの時間帯を比較し、書込み・改名・作成の対象を確認します。PIDは再利用されるため、端末・時刻・process_refも照合します。',
+  damaged_file_record: '拡張子は名前の一部であり内容の形式ではありません。detected_formatは検査した形式、sha256は内容のハッシュ、header_hexは先頭バイトの16進表記です。',
+  original_file_record: '正常版は攻撃前の保全資料です。file_refと元の端末・パスで対応する被害側を探し、両方を読んでから形式・ハッシュ・先頭データを比較します。',
+  ransom_note_record: '要求文のbodyは文書を書いた側の主張です。復旧と引換えの金銭要求を読み、ファイル操作や検査と照合します。',
   email_record: '保存メールは案内やリンクの内容を示す資料です。リンクの記載と実際のアクセス記録は別です。HTML資料を比較する場合、hrefはリンクが指定する行き先です。',
   web_access_record: '要求は、ブラウザなどがページを取り寄せるために送る連絡です。',
   stored_content_record: '投稿IDは保存された投稿を見分ける番号、保存内容は投稿の元の文字列です。',
@@ -29,9 +33,9 @@ const READINGS = Object.freeze({
   application_session_record: 'セッションの受入れはログイン状態が使えたかを、権限はできる操作の範囲を示します。',
   clickfix_page_record: '保存された案内は、画面で何をするよう求めたかを読む資料です。',
   // 2026-09-24 修正前: parent_refは起動元とだけ説明。
-  // process_execution_record: 'プロセスは動いているプログラムの単位です。process_refはその識別子、parent_refは起動元、user_refは実行アカウント、start_resultは起動結果です。',
+  // process_execution_record: 'プロセスは動いているプログラムの単位です。親子関係とは、あるプロセスが別のプロセスを起動する関係です。process_refはその識別子、parent_refは起動元、user_refは実行アカウント、start_resultは起動結果です。',
   // 2026-09-24 修正後: kawata-workの学習要件に合わせ親子関係と人物帰属の限界を説明。
-  process_execution_record: 'プロセスは動いているプログラムの単位です。親子関係とは、あるプロセスが別のプロセスを起動する関係です。process_refはその識別子、parent_refは起動元、user_refは実行アカウント、start_resultは起動結果です。アカウントは実際の人物とは限りません。',
+  process_execution_record: 'プロセスは動いているプログラムの単位です。親子関係とは、あるプロセスが別のプロセスを起動する関係です。process_refとparent_refはプロセス相関IDと親の相関IDであり、OSのPIDとは区別します。pidとparent_pidが記録されていれば同じ端末・時刻・相関IDと合わせて親を追跡します。user_refは実行アカウント、start_resultは起動結果です。アカウントは実際の人物とは限りません。',
   spray_authentication_record: 'accountは試されたアカウント、source_ipは接続元、resultは成否です。',
   authentication_policy_record: '認証設定は、確認方法や試行制限の条件を記した資料です。',
   file_encryption_record: 'ハッシュはファイルの内容から計算する検査値です。',

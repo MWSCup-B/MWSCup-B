@@ -1,6 +1,7 @@
 import { publicInvestigationQuestion } from './court-questions.js';
 import { procedureMethods } from './investigation-procedures.js';
 import { investigationProgress, workspaceMaterial, COMMAND_HELP } from './investigation-workspace.js';
+import { observedFileComparisons } from './ransomware-observations.js';
 
 const labels = { EMAIL: '保存メール', WEB_ACCESS_LOG: 'Webアクセスログ', AUTHENTICATION_LOG: '認証ログ',
   APPLICATION_LOG: 'アプリケーションログ', DATABASE_LOG: 'DB監査ログ', NETWORK_LOG: '通信ログ',
@@ -34,9 +35,8 @@ export function materialMethods(item) {
 export function materialEntries(gameCase) {
   return gameCase.detective.evidence.filter(item => item.type !== 'TESTIMONY').map((item, index) => {
     const rule = gameCase.detective.evidenceDiscoveryRules.find(rule => rule.evidenceId === item.evidenceId);
-    const target = gameCase.detective.investigationTargets.find(target => target.targetId === rule?.targetId);
     return { materialId: item.evidenceId, targetId: rule?.targetId,
-      label: `${String(index + 1).padStart(2, '0')} ${labels[item.type] ?? '調査資料'} — ${target?.displayName ?? '資料保管先'}`,
+      label: `${String(index + 1).padStart(2, '0')} ${item.title || labels[item.type] || '調査資料'}`,
       type: item.type, methods: materialMethods(item) };
   });
 }
@@ -49,6 +49,7 @@ export function materialQuestion(gameCase, materialId, round) {
 
 export function materialWorkbench(session, gameCase) {
   return { schemaVersion: '1.0', workspaceVersion: '1.0', help: COMMAND_HELP,
+    comparisons: observedFileComparisons(gameCase.detective.evidence, session.observedLines),
     progress: investigationProgress(session, gameCase), savedObservations: session.savedObservations ?? [],
     materials: materialEntries(gameCase).map(material => {
     const question = materialQuestion(gameCase, material.materialId, session.currentRound);

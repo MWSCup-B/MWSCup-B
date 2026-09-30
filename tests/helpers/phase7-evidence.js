@@ -2,6 +2,7 @@ import { buildEvidenceGenerationInput, importEvidencePackage }
   from '../../server/generation/evidence-interface.js';
 import { contentDigest } from '../../server/generation/evidence-validator.js';
 import { verifiedScenarioFixture } from './verified-scenario.js';
+import { ransomwareEvidence } from './ransomware-evidence.js';
 
 function artifact(input, values) {
   const publicContent = values.publicContent;
@@ -116,11 +117,12 @@ export function phase7Fixture(phase6 = verifiedScenarioFixture()) {
       const node = agent.attackGraph.nodes.find(item => item.nodeId === ground.attackNodeId);
       const observation = agent.attackDefinitions.find(item => item.id === node.attackDefinitionId)
         .observableArtifacts.find(item => item.id === ground.sourceId);
-      const [type, title, body] = kinds[ground.sourceId] ?? [observation.acquisition.type,
-        // 2026-09-24 修正前: observation.id, '教材用合成資料: ' + observation.description];
-        observation.id, JSON.stringify(extendedRecords[ground.sourceId])];
       const event = agent.timeline.events.find(item => item.attackNodeId === ground.attackNodeId);
       const timestamp = agent.timeline.narrativeTimestamps.find(item => item.eventId === event?.eventId);
+      const ransom = node.attackDefinitionId === 'ransomware' ? ransomwareEvidence(timestamp?.displayTimestamp) : {};
+      const [type, title, body] = ransom[ground.sourceId] ?? kinds[ground.sourceId] ?? [observation.acquisition.type,
+        // 2026-09-24 修正前: observation.id, '教材用合成資料: ' + observation.description];
+        observation.id, JSON.stringify(extendedRecords[ground.sourceId])];
       let publicContent = type === 'WEB_ACCESS_LOG' && timestamp
         ? JSON.stringify({ timestamp: timestamp.displayTimestamp, ...JSON.parse(body) }) : body;
       const impact = node.effects.some(effect => ['false_announcement_posted_by_script', 'restricted_rows_disclosed'].includes(effect.predicate));

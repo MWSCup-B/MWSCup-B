@@ -68,9 +68,9 @@ export const ATTACK_LEARNING = Object.freeze({
     limit: '秘密値を記録しない監査から同じパスワード候補を使ったことは確定できない。設定があるだけで全試行の遮断を主張しない。',
   },
   ransomware: {
-    name: 'ランサムウェア', sources: ['process_execution_record', 'file_encryption_record'],
-    comparison: 'プロセス起動とファイル検査の書込み処理の相関IDを照合する。対象パス・変更前後のハッシュ・暗号化確認結果・要求文から、起動、内容変更、暗号化による影響を区別する。',
-    limit: '改名やハッシュ変化だけで暗号化と断定しない。確認したファイル以外の被害、情報流出、横展開を補完しない。',
+    name: 'ランサムウェア', sources: ['file_operation_record', 'process_execution_record', 'damaged_file_record', 'original_file_record', 'ransom_note_record'],
+    comparison: '被害時間帯のファイル操作をPID・実行ファイル・操作種別で比較し、書込み・共通拡張子への改名・要求文作成を時系列で読む。同じ端末のプロセス相関IDとPIDから実行アカウント・実行ファイル・親PIDを調べ、記録された親子関係をたどる。同じfile_refの被害ファイルと正常版について形式・ハッシュ・先頭データを比較し、使用不能化と復旧への金銭要求を合わせ、ランサムウェア被害の可能性が非常に高いと判断する。',
+    limit: '改名・ハッシュ差・形式不明だけで暗号化と断定しない。アカウント利用は本人の操作や意図を証明しない。SSHは検証済み経路と認証記録がある場合のみ扱い、ClickFix等の前段を置き換えない。対象外被害・情報流出・横展開は補完しない。',
   },
   unrestricted_file_upload: {
     name: '不正ファイルアップロード', sources: ['upload_receipt_record', 'uploaded_file_record'],
@@ -80,6 +80,10 @@ export const ATTACK_LEARNING = Object.freeze({
 });
 
 const SOURCE_GUIDES = Object.freeze({
+  file_operation_record: ['ファイル操作ログ', '被害時間帯の操作をPID・実行ファイル・操作種別で比較し、対象パスと操作の順序を調べましょう。'],
+  damaged_file_record: ['被害ファイル', '実際の形式・ハッシュ・先頭データを確認しましょう。正常版との比較は両方を調べてから行います。'],
+  original_file_record: ['バックアップの元ファイル', '元の対象を示す識別子と形式・ハッシュ・先頭データを確認しましょう。'],
+  ransom_note_record: ['身代金要求文', '保存本文に何が要求されているかを読み、文書の主張と技術記録を区別しましょう。'],
   announcement_audit_record: ['告知投稿の監査記録', '投稿要求の識別子と処理結果を、要求の開始元の記録と照合しましょう。'],
   browser_request_initiator_record: ['ブラウザ通信の開始元記録', 'どのスクリプトから通信が発生したか、保存投稿・実行・投稿要求の識別子を確認しましょう。'],
   application_response_record: ['Web応答の監査記録', '要求・クエリの識別子と返却レコードの対応を、Web・DBの記録と照合しましょう。'],

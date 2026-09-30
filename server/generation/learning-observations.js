@@ -3,6 +3,10 @@ import { fail } from './schema.js';
 // Minimum observable fields from data/attacks/*.json, not vendor log assumptions.
 // Aliases permit existing product-neutral names; values are never filled here.
 export const LEARNING_OBSERVATION_FIELDS = Object.freeze({
+  file_operation_record: ['timestamp', 'device_id', 'user_ref', 'process_ref', 'pid', 'executable', 'operation', 'path'].map(key => [key]),
+  damaged_file_record: ['snapshot', 'timestamp', 'device_id', 'file_ref', 'original_path', 'path', 'detected_format', 'sha256', 'header_hex', 'readable', 'process_ref'].map(key => [key]),
+  original_file_record: ['snapshot', 'timestamp', 'device_id', 'file_ref', 'original_path', 'path', 'detected_format', 'sha256', 'header_hex', 'readable'].map(key => [key]),
+  ransom_note_record: ['timestamp', 'device_id', 'path', 'process_ref', 'body'].map(key => [key]),
   announcement_audit_record: [['timestamp', 'time'], ['request_id'], ['session_id'], ['post_id'], ['result']],
   browser_request_initiator_record: [['timestamp', 'time'], ['request_id'], ['view_request_id'], ['execution_id'], ['source_post_id'], ['initiator_type'], ['source_location']],
   application_response_record: [['timestamp', 'time'], ['request_id'], ['query_id'], ['record_refs', 'result_digest'], ['status']],

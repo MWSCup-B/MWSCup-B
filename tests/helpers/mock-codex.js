@@ -5,6 +5,7 @@ import { phase7Fixture } from './phase7-evidence.js';
 import { createDefaultConfiguration } from '../../server/generation/scenario-configuration.js';
 import { addCourtQuestions, addDistinctClaims, assignStageSupports } from './court-issues.js';
 import { observationAnchors } from '../../server/generation/court-questions.js';
+import { ransomwareLogSamples } from './ransomware-evidence.js';
 
 export class MockCodexRunner {
   constructor({ unavailable = false, reviewOutcomes = ['VERIFIED'], malformedScenario = false,
@@ -109,6 +110,8 @@ export class MockCodexRunner {
         });
         artifact.publicContent += '\n' + background.join('\n');
       }
+      const logBackgrounds = ransomwareLogSamples(draft.evidenceArtifacts);
+      if (logBackgrounds.length) draft.logBackgrounds = logBackgrounds;
       if (data.requestedCourtIssueCount) addDistinctClaims(draft, data.requestedCourtIssueCount);
       const stageRequirements = agent.scenarioVerificationInput.scenarioPackage.evidenceRequirements.requirements
         .filter(item => item.investigationStage);
