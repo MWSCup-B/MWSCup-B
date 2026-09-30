@@ -140,6 +140,12 @@ export function validateEvidenceArtifact(artifact) {
     fail('TESTIMONY_TYPE_MISMATCH', `evidence-artifact.${artifact.evidenceId}.testimony`,
       '技術証拠には証言情報を設定できません。');
   }
+  if (artifact.sourceRefs.some(ref => ref.sourceType === 'CASE_FACT')) fail(
+    'INTERNAL_CASE_FACT_EXPOSED', `evidence-artifact.${artifact.evidenceId}.sourceRefs`,
+    '内部設定の直接観察をプレイヤー向け証拠へ含めることはできません。');
+  if (Object.hasOwn(artifact, 'caseSupport')) fail(
+    'INTERNAL_CASE_REPORT_EXPOSED', `evidence-artifact.${artifact.evidenceId}.caseSupport`,
+    '内部用の調査報告をプレイヤー向け証拠へ含めることはできません。');
   return artifact;
 }
 
@@ -172,6 +178,7 @@ export function leakedInternalValue(content, input) {
   const internalIds = [input.groundTruth.groundTruthId, input.verificationResult.verificationId,
     input.evidenceAgentHandoff.handoffId, input.attackGraph.graphId,
     ...input.groundTruth.technicalFacts.flatMap(item => [item.factId, item.sourceId]),
+    ...(input.groundTruth.caseFacts ?? []).map(item => item.factId),
     ...input.evidenceRequirements.requirements.map(item => item.requirementId)];
   return internalIds.some(value => value && content.includes(value));
 }
@@ -215,11 +222,12 @@ export function validateEvidenceConsistency(evidencePackage, input) {
     'Evidence Artifactが別Scenario、Verification、またはAttack Graphを参照しています。',
     'Evidence Agent InputのverificationId、scenarioId、attackGraphRefを変更せず使用してください。',
     [`evidence:${artifact.evidenceId}`], artifact.evidenceId);
-    add(issues, leakedInternalValue(artifact.publicContent, input), 'GROUND_TRUTH_PUBLIC_LEAK',
-      `evidenceArtifacts.${artifact.evidenceId}.publicContent`,
-      'publicContentにGround Truthの内部識別子または正解を直接示す表現が含まれています。',
-      'プレイヤーが推論に使う観測内容だけを記載し、内部IDや正解表現を削除してください。',
-      [`evidence:${artifact.evidenceId}`], artifact.evidenceId);
+    for (const field of ['publicContent', 'title'])
+      add(issues, leakedInternalValue(artifact[field], input), 'GROUND_TRUTH_PUBLIC_LEAK',
+        `evidenceArtifacts.${artifact.evidenceId}.${field}`,
+        `${field}にGround Truthの内部識別子または正解を直接示す表現が含まれています。`,
+        'プレイヤーが推論に使う観測内容だけを記載し、内部IDや正解表現を削除してください。',
+        [`evidence:${artifact.evidenceId}`], artifact.evidenceId);
     for (const requirementId of artifact.requirementIds) {
       const requirement = requirements.get(requirementId);
       add(issues, !requirement, 'BROKEN_EVIDENCE_REQUIREMENT_REFERENCE',

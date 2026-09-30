@@ -87,7 +87,8 @@ export function buildInvestigationStages(configuration, generationInput) {
   const stages = [];
   // Graph nodes are identifier-ordered, which can put ClickFix before its email
   // entry. Follow the selected sequence and each attack's teaching source order.
-  // Grouping, hosts, actions and obtainable observations remain unchanged.
+  // Each issue owns one attack. Reusing a host does not merge unrelated claims;
+  // the original host, action and observable record remain unchanged.
   const ranks = new Map(generationInput.technicalInput.attackGraph.nodes.map(node => [node.nodeId, {
     attack: configuration.attacks.find(attack => attack.attackId === node.attackDefinitionId)?.order ?? Infinity,
     sources: learningProfile(node, generationInput.technicalInput.attackDefinitions)?.sources ?? [],
@@ -97,10 +98,12 @@ export function buildInvestigationStages(configuration, generationInput) {
     return left.attack - right.attack || left.sources.indexOf(a.ground.sourceId) - right.sources.indexOf(b.ground.sourceId);
   });
   for (const route of routes) {
-    let stage = stages.find(item => item.sourceNodeId === route.sourceNodeId
+    let stage = stages.find(item => item.attackNodeId === route.ground.attackNodeId
+      && item.sourceNodeId === route.sourceNodeId
       && item.targetType === route.targetType);
     if (!stage) {
-      stage = { targetId: `target_auto_${stages.length + 1}`, sourceNodeId: route.sourceNodeId,
+      stage = { targetId: `target_auto_${stages.length + 1}`, attackNodeId: route.ground.attackNodeId,
+        sourceNodeId: route.sourceNodeId,
         displayName: route.sourceLabel, targetType: route.targetType, routes: [] };
       stages.push(stage);
     }

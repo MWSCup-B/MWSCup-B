@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { quoteLineRanges } from '../server/generation/court-evidence.js';
 import { procedureMethods } from '../server/generation/investigation-procedures.js';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -194,7 +195,11 @@ test('MANUAL E2E: PreviewとUser Approvalを経てGAME READYになる', async t 
   for (let round = 1; round <= rounds; round += 1) {
     for (const plan of plans) {
       game = await play({ action: 'workspace-read', materialId: plan.evidenceId });
-      game = await play({ action: 'save-fact', materialId: plan.evidenceId, line: 1 });
+      const source = game.workbench.materials.find(item => item.materialId === plan.evidenceId);
+      const lines = [...new Set(questions.flatMap(question => question.supportingQuotes
+        .filter(quote => quote.evidenceId === plan.evidenceId)
+        .flatMap(quote => quoteLineRanges(source.history.at(-1).output, quote.quote)[0] ?? [])))];
+      for (const line of lines) game = await play({ action: 'save-fact', materialId: plan.evidenceId, line });
     }
     assert.ok(game.investigationTargets.length > 1);
     for (const item of game.collectedEvidence) collectedTypes.add(item.type);

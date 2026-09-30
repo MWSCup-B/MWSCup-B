@@ -1,12 +1,13 @@
 // Scenarioの参照構造はAIに自由生成させず、検証済みConfigurationからBackendで組み立てる。
 // AIは独立レビューと、指摘された記述・既存artifactへの不足参照の修正を担当する。
-import { buildEvidenceInvestigationPlan } from './investigation-registry.js';
+import { buildEvidenceInvestigationPlan, buildInvestigationStages } from './investigation-registry.js';
 import { buildStageRequirements, validateStageRequirements } from './scenario-stage-plan.js';
 import { fail } from './schema.js';
 import { requestedCourtIssueCount } from './court-issues.js';
 import { isDeepStrictEqual } from 'node:util';
 import { phishingMaterialPolicy, scenarioInvestigationGoal, phishingObservationRequirement } from './attack-learning.js';
 import { buildIncidentNarratives } from './incident-design.js';
+import { presentationWordingProblems } from './court-claim-style.js';
 
 // 2026-09-20 修正後: 記述の自由度と技術的な参照構造を分離する。
 export function validateScenarioDesignBoundary(template, proposed) {
@@ -14,6 +15,7 @@ export function validateScenarioDesignBoundary(template, proposed) {
     const copy = structuredClone(value);
     // CLI Structured Outputs spells an absent optional incident profile as null.
     if (copy.groundTruth?.incidentNarratives == null) delete copy.groundTruth?.incidentNarratives;
+    if (copy.groundTruth?.caseFacts == null) delete copy.groundTruth?.caseFacts;
     for (const character of copy.characters?.characters ?? []) delete character.displayName;
     for (const objective of copy.learningObjectives?.objectives ?? []) delete objective.description;
     for (const requirement of copy.evidenceRequirements?.requirements ?? []) delete requirement.description;
@@ -28,6 +30,11 @@ export function validateScenarioDesignBoundary(template, proposed) {
   if (!prosecutionInvestigator?.displayName?.includes('検察側')) {
     fail('SCENARIO_PROSECUTION_INVESTIGATOR_ROLE_UNCLEAR', 'characters.character_witness.displayName',
       '検察側の主張を述べる人物だと画面上で判別できるよう、表示名に「検察側」を含めてください。');
+  }
+  for (const person of proposed.characters?.characters ?? []) {
+    const problem = presentationWordingProblems(person.displayName)[0];
+    if (problem) fail('SCENARIO_PRESENTATION_TERMINOLOGY', `characters.${person.characterId}.displayName`,
+      problem.reason, { correctionHint: problem.correctionHint });
   }
 }
 
@@ -70,10 +77,13 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
       if (character.characterId === 'character_attacker') character.bindingRefs = graph.nodes.flatMap(node =>
         node.bindings.filter(binding => binding.name === 'attacker').map(binding => ({ attackNodeId: node.nodeId,
           bindingName: binding.name, entityId: binding.entityId })));
-      if (character.characterId === 'character_defendant') character.bindingRefs = graph.nodes
-        .filter(node => node.attackDefinitionId === 'stored_xss').flatMap(node =>
-          node.bindings.filter(binding => binding.name === 'victim').map(binding => ({ attackNodeId: node.nodeId,
-            bindingName: binding.name, entityId: binding.entityId })));
+      if (character.characterId === 'character_defendant') character.bindingRefs = graph.nodes.flatMap(node => {
+        // `victim` and `account` express an incident setting supplied by the
+        // validated graph. This association must not be inferred from a log.
+        const binding = node.bindings.find(item => item.name === 'victim')
+          ?? node.bindings.find(item => item.name === 'account');
+        return binding ? [{ attackNodeId: node.nodeId, bindingName: binding.name, entityId: binding.entityId }] : [];
+      });
     }
   }
 
@@ -135,7 +145,7 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
     + (selectedIds.has('reflected_xss') || selectedIds.has('sql_injection')
       ? ' アクセス記録だけでスクリプト実行やSQL実行を証明せず、確認済みの実行記録・DB記録と区別する。' : '');
   const allegation = 'これらの技術記録は、被告人が自分の意思で対象の操作を行ったことを示している。';
-  const issueDesign = ' 段階ごとの具体的な主張・対象人物・4択の論点・使用資料・反駁範囲はrequirement_stage_*のinvestigationStageとgroundsで定義する。そのorder順に各調査先一争点とし、これ以外の法廷を追加しない。各段階のgroundsはその段階の必要資料であり、全体要件の全資料を最初から要求するものではない。最後だけ取得済み全資料を統合する。';
+  const issueDesign = ' 段階ごとの具体的な主張・対象人物・4択の論点・使用資料・反駁範囲はrequirement_stage_*のinvestigationStageとgroundsで定義する。そのorder順に攻撃ごとの各調査先一争点とし、これ以外の法廷を追加しない。同じ機器を使う別の攻撃も争点を分ける。各段階のgroundsは担当する攻撃の取得済み技術資料とし、必要なメールやWebページ本文も含め、全体要件の全資料を一つの争点に要求しない。各攻撃の技術資料が揃った段階で攻撃経路・処理結果・検察側の直接操作説との整合を評価する。事件全体の無罪論証は、すべての争点で成立した技術的な論証を合わせて示す。';
   const evidenceRequirements = {
     schemaVersion: '1.0', evidenceRequirementSetId: `requirements_${suffix}`, scenarioId,
     attackGraphRef, requirements: [
@@ -181,13 +191,15 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
     ],
   };
   if (incidentNarratives.length) {
-    const narrative = incidentNarratives.map(item => `${item.impact} ${item.causalRefutation}`).join('\n');
-    evidenceRequirements.requirements.find(item => item.requirementId === 'requirement_contradiction').description =
-      '検察側の帰属主張と技術的事実を分ける。検察側が被告人に帰属させた被害操作について、別の攻撃主体の入力から発生した処理を複数資料で論証する。被告人の利用記録や人物対応を観測事実として補完しない。' + narrative + issueDesign;
-    evidenceRequirements.requirements.find(item => item.requirementId === 'requirement_exoneration').description =
-      '事件の真相はgroundTruth.incidentNarrativesに先に確定している。必要資料をすべて通常調査で取得可能にし、被害とその原因を示して被告人への誤った帰属を反駁する。単に「人物や意図は不明」とする結論では不十分。' + narrative
-      + ' IP・アカウントだけで人物を特定しない。人物の役割の設定と観測事実を区別する。新しい犯人名、供述、アリバイや未定義の被害を補わない。';
+    const technicalProofScope = '争点では、プレイヤーが通常の調査で取得できるメール、Webページ本文、アクセス記録、アプリケーション記録、端末記録など、選択された攻撃に必要な技術資料を全て照合する。各資料が直接示す事実と限界を区別し、要求・処理・結果の対応を原文の識別値で説明する。内部設定の観察記録や調査報告はプレイヤー向け資料にせず、証拠として要求しない。アカウント名、IP、端末の一致だけから人物を特定しない。';
+    for (const requirementId of ['requirement_contradiction', 'requirement_exoneration']) {
+      const requirement = evidenceRequirements.requirements.find(item => item.requirementId === requirementId);
+      requirement.grounds = requirement.grounds.filter(ground => ground.sourceType !== 'CASE_FACT');
+      requirement.description = `${technicalProofScope} ${issueDesign}`;
+    }
   }
+  evidenceRequirements.requirements = evidenceRequirements.requirements
+    .filter(requirement => requirement.purpose !== 'IDENTITY_PROOF');
   const scenarioDraft = { schemaVersion: '1.0', scenarioId, state: 'DRAFT', attackGraphRef,
     groundTruthId: groundTruth.groundTruthId, characterSetId: characters.characterSetId,
     timelineId: timeline.timelineId, learningObjectiveSetId: learningObjectives.learningObjectiveSetId,

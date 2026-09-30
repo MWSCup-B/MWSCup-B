@@ -8,6 +8,7 @@ import { buildScenarioGenerationInputs, importScenarioPackage }
 import {
   MAX_REVISION_ATTEMPTS,
   SCENARIO_VERIFICATION_PROMPT,
+  buildScenarioReviewReferenceRules,
   buildScenarioVerificationInput,
   validateEvidenceAgentHandoff,
   validateScenarioRevisionFeedback,
@@ -164,6 +165,93 @@ function semanticReview(input, outcomes = {}) {
     }),
   };
 }
+
+function verificationInputWithCaseFact() {
+  const packageWithObservation = structuredClone(basePackage);
+  const node = generationInput.technicalInput.attackGraph.nodes
+    .find(item => item.state === 'SATISFIED'
+      && item.artifactEvaluations.some(artifact => artifact.state === 'SATISFIED'));
+  const artifact = node.artifactEvaluations.find(item => item.state === 'SATISFIED');
+  packageWithObservation.characters.characters.push({
+    characterId: 'character_observer', displayName: '第三者の立会人',
+    provenance: 'AI_GENERATED_SYNTHETIC', roles: ['witness'], bindingRefs: [],
+  });
+  packageWithObservation.groundTruth.characterFactRefs.push({
+    characterId: 'character_observer', role: 'witness',
+  });
+  packageWithObservation.groundTruth.caseFacts = [{
+    schemaVersion: '1.0', factId: 'case_observation_review_fixture', attackNodeId: node.nodeId,
+    witnessCharacterId: 'character_observer', subjectCharacterId: 'character_attacker',
+    excludedCharacterId: 'character_defendant', observation: '対象操作を行う人物を直接確認した。',
+    relatedArtifactIds: [artifact.artifactId],
+  }];
+  const importResult = importScenarioPackage({ generationInput, scenarioPackage: packageWithObservation });
+  assert.equal(importResult.status, 'VALID');
+  return buildScenarioVerificationInput({ generationInput, importResult,
+    scenarioPackage: packageWithObservation });
+}
+
+test('実在するCASE_FACTの参照を人物帰属と関連する意味レビューの根拠に使用できる', () => {
+  const input = verificationInputWithCaseFact();
+  const factRef = 'caseFact:case_observation_review_fixture';
+  const rules = buildScenarioReviewReferenceRules(input);
+  assert.ok(input.allowedReviewRefs.includes(factRef));
+  const categories = ['EVIDENCE_GROUND_ALIGNMENT', 'FACT_NARRATIVE_SEPARATION',
+    'IDENTITY_ATTRIBUTION', 'INVESTIGATION_COVERAGE'];
+  const review = semanticReview(input);
+  for (const category of categories) {
+    assert.ok(rules[category].sourceRefs.includes(factRef));
+    review.checks.find(check => check.category === category).sourceRefs = [factRef];
+  }
+  assert.equal(validateScenarioVerificationReview(review, input), review);
+  assert.equal(verifyScenario({ verificationInput: input, semanticReview: review }).status, 'VERIFIED');
+});
+
+test('CASE_FACTの未知IDや誤prefixは拒否し、不正参照とcategoryを限定長で示す', () => {
+  const input = verificationInputWithCaseFact();
+  for (const ref of ['caseFact:invented', 'groundTruth.fact:case_observation_review_fixture',
+    'groundTruth.caseFacts[0]', `caseFact:${'x'.repeat(500)}`]) {
+    const review = semanticReview(input);
+    const check = review.checks.find(item => item.category === 'IDENTITY_ATTRIBUTION');
+    check.sourceRefs = [ref];
+    assert.throws(() => validateScenarioVerificationReview(review, input), error => {
+      assert.equal(error.code, 'UNSUPPORTED_REVIEW_REFERENCE');
+      assert.match(error.field, /review_identity_attribution\.sourceRefs\[0\]$/);
+      assert.match(error.message, /IDENTITY_ATTRIBUTION.*sourceRefs\[0\]=/);
+      assert.ok(error.message.includes(ref.slice(0, 80)));
+      assert.ok(error.message.length < 800);
+      return true;
+    });
+    assert.equal(verifyScenario({ verificationInput: input, semanticReview: review }).status, 'BLOCKED');
+  }
+});
+
+test('不正参照の診断は先頭3件に制限し、制御文字をそのまま出さない', () => {
+  const input = verificationInputWithCaseFact();
+  const review = semanticReview(input);
+  const check = review.checks.find(item => item.category === 'IDENTITY_ATTRIBUTION');
+  check.subjectRefs = ['character:invented\n\r\t\u001b'];
+  check.sourceRefs = Array.from({ length: 4 }, (_, index) => `caseFact:missing_${index}`);
+  assert.throws(() => validateScenarioVerificationReview(review, input), error => {
+    assert.equal(error.code, 'UNSUPPORTED_REVIEW_REFERENCE');
+    assert.match(error.field, /\.subjectRefs\[0\]$/);
+    assert.match(error.message, /ほか2件/);
+    assert.doesNotMatch(error.message, /[\n\r\t\u001b]/);
+    assert.ok(error.message.length < 800);
+    return true;
+  });
+});
+
+test('CASE_FACTを人物帰属の対象にしたり無関係なcategoryの唯一の根拠にしない', () => {
+  const input = verificationInputWithCaseFact();
+  const factRef = 'caseFact:case_observation_review_fixture';
+  for (const [category, field] of [['IDENTITY_ATTRIBUTION', 'subjectRefs'],
+    ['LEARNING_OBJECTIVE_ALIGNMENT', 'sourceRefs'], ['REFERENCE_CONTENT_ALIGNMENT', 'sourceRefs']]) {
+    const review = semanticReview(input);
+    review.checks.find(check => check.category === category)[field] = [factRef];
+    assert.throws(() => validateScenarioVerificationReview(review, input), { code: 'IRRELEVANT_REVIEW_GROUND' });
+  }
+});
 
 test('Deterministic Verificationと独立意味的レビューの両方を通過してVERIFIEDにする', () => {
   const input = verificationInput();

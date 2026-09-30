@@ -46,7 +46,15 @@ for (const ids of [...catalog.map(a => [a.id]), ['sql_injection', 'reflected_xss
   ['valid_account_ssh', 'setuid_misconfiguration', 'protected_file_collection'],
   ['phishing', 'path_traversal', 'valid_account_ssh', 'sudo_misconfiguration', 'protected_file_collection', 'windows_service_permissions']]) {
   test(`任意選択 ${ids.join(' / ')} が承認・証拠生成・評価を経てREADYになる`, async () => {
-    const input = configuration(ids), manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
+    const input = configuration(ids), runner = new MockCodexRunner();
+    const runJson = runner.runJson.bind(runner);
+    let submittedQuestions;
+    runner.runJson = async args => {
+      const output = await runJson(args);
+      if (output.courtQuestions) submittedQuestions = structuredClone(output.courtQuestions);
+      return output;
+    };
+    const manager = new AutoGenerationManager({ jsonRunner: runner });
     const session = createAutoAuthorSession(); manager.submitManual(session, input); await manager.waitForIdle();
     assert.equal(session.auto.state, 'SCENARIO_PREVIEW', JSON.stringify(session.auto.details));
     const narratives = session.scenarioPackage.groundTruth.incidentNarratives;
@@ -57,11 +65,30 @@ for (const ids of [...catalog.map(a => [a.id]), ['sql_injection', 'reflected_xss
     assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));
     assert.equal(session.evaluationResult.status, 'ACCEPTED');
     assert.deepEqual(session.configuration, input);
-    const explanation = buildCaseStudy(session.runtime).issues.at(-1).explanation;
-    for (const narrative of narratives) {
-      assert.ok(explanation.includes(narrative.attackerAction), narrative.attackNodeId);
-      assert.ok(explanation.includes(narrative.verdictBasis), narrative.attackNodeId);
+    const caseStudy = buildCaseStudy(session.runtime);
+    const explanation = caseStudy.incident;
+    assert.ok(caseStudy.issues.every(issue => explanation.includes(issue.explanation)),
+      'the closing explanation carries the explanation for every attack-specific court issue');
+    const questions = session.runtime.gameCase.progression.courtIssues
+      .filter(issue => issue.question).map(issue => issue.question);
+    assert.ok(questions.every(question => explanation.includes(question.explanation)),
+      'the closing explanation preserves each attack-specific court explanation');
+    const artifacts = session.evidenceImportResult.evidenceSet.evidenceArtifacts;
+    assert.ok(artifacts.every(artifact => !Object.hasOwn(artifact, 'caseSupport')
+      && artifact.sourceRefs.every(ref => ref.sourceType !== 'CASE_FACT')));
+    const stages = session.scenarioPackage.evidenceRequirements.requirements
+      .filter(requirement => requirement.investigationStage);
+    assert.equal(stages.length, questions.length);
+    for (const stage of stages) {
+      assert.ok(stage.grounds.every(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+      for (const ground of stage.grounds) {
+        assert.ok(artifacts.some(artifact => artifact.type !== 'TESTIMONY' && artifact.sourceRefs.some(ref =>
+          ref.sourceType === ground.sourceType && ref.attackNodeId === ground.attackNodeId
+          && ref.sourceId === ground.sourceId)), `required technical material ${ground.sourceId} remains player evidence`);
+      }
     }
+    assert.ok(artifacts.some(artifact => artifact.type === 'EMAIL') || !ids.some(id => ['phishing', 'credential_phishing'].includes(id)));
+    assert.ok(artifacts.some(artifact => artifact.type === 'DOCUMENT') || !ids.includes('clickfix'));
     assert.doesNotMatch(explanation, /その処理を被告人が行ったと判断できない/);
   });
 }

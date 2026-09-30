@@ -39,7 +39,7 @@ function executionClaim(draft, input) {
   contradiction.reason = 'ブラウザのスクリプト実行記録資料が存在しないという主張と競合する。';
   const question = draft.courtQuestions.find(item => item.statementId === statement.statementId);
   question.prompt = 'training-script-01を含む保存・閲覧後のブラウザの動作記録資料から、どこまで言えますか。';
-  question.choices = ['対象応答に対応するブラウザのスクリプト実行記録記録がある。',
+  question.choices = ['対象応答に対応するブラウザのスクリプト実行記録がある。',
     '保存された投稿の資料だけで実行成功を確認できる。', '認証成功の記録だけでブラウザ実行まで確認できる。',
     'ブラウザのスクリプト実行記録だけで操作者の氏名が確定する。'];
   question.correctOptionIndex = 0; question.explanation = question.choices[0];
@@ -125,11 +125,10 @@ for (const side of ['contradiction', 'statement']) {
     };
     assert.deepEqual(session.progressionPlan.courtQuestions.map(withoutExplanation),
       validDraft.courtQuestions.map(withoutExplanation));
-    const grounded = session.progressionPlan.courtQuestions.filter((question, index) =>
-      question.explanation !== validDraft.courtQuestions[index].explanation);
-    assert.equal(grounded.length, 1);
-    assert.match(grounded[0].explanation, /事件で確認されたこと：.*別の攻撃者/s);
-    assert.match(grounded[0].explanation, /弁護側の結論：.*無罪判決を求める根拠/s);
+    // Reference repair must not append private incident settings as if they
+    // had been demonstrated by the cited public records.
+    assert.deepEqual(session.progressionPlan.courtQuestions.map(question => question.explanation),
+      validDraft.courtQuestions.map(question => question.explanation));
     assert.doesNotMatch(JSON.stringify(autoAuthorView(session)), /evidenceGroundRevision|unexpectedGroundTruthRefs/);
 
     // The invalid first draft is still rejected by the unchanged canonical Import.

@@ -3,12 +3,13 @@ import { validateGeneratedLogFormats, validateExplorableWebLogs } from './eviden
 import { validateLearningObservations } from './learning-observations.js';
 import { validatePhishingObservations } from './phishing-evidence.js';
 import { validateRansomwareObservations } from './ransomware-observations.js';
-import { validateMaterialPlans } from './investigation-procedures.js';
+import { materialPlanProblems } from './investigation-procedures.js';
 import { courtQuestionSourceErrors } from './court-questions.js';
+import { presentationWordingProblems } from './court-claim-style.js';
 
 const questionHint = '各4択を取得可能な資料に基づく問いにし、supportingQuotesには対応する公開原文を正確に引用してください。解説は引用が示す内容と記録の限界に合わせ、存在しない対応や相違を前提にしないでください。';
 function issue(error, field = error.field) {
-  return { code: error.code, field, reason: error.message, correctionHint: error.correctionHint
+  return { code: error.code, field, reason: error.message, retryable: Boolean(error.retryable), correctionHint: error.correctionHint
     ?? (error.code.startsWith('EVIDENCE_LEARNING_') && field.startsWith('courtQuestions') ? questionHint
       : error.code.startsWith('EVIDENCE_QUESTION_') ? questionHint + '引用・参照の不一致も同時に修正してください。'
         : error.code === 'EVIDENCE_LEARNING_OBSERVATION_INCOMPLETE'
@@ -29,17 +30,36 @@ export function evidenceDraftProblems(draft, evidencePackage, agentInput, observ
   };
   // Generated labels/instructions are editorial text, separate from immutable
   // quoted evidence. Return wording defects to the author rather than rewriting it.
-  const displayText = [
-    ...evidencePackage.evidenceArtifacts.map(item => item.title),
-    ...(draft.courtQuestions ?? []).flatMap(item => [item.prompt, item.explanation, ...item.choices]),
-    ...(draft.materialInvestigations ?? []).flatMap(item => item.steps.flatMap(step =>
-      [step.prompt, step.explanation, ...step.choices.map(choice => choice.description)])),
-  ];
-  if (displayText.some(text => /ブラウザ(?:実行)?(?:記録|\u8a08\u6e2c)/.test(text))) issues.push({
-    code: 'EVIDENCE_PRESENTATION_TERMINOLOGY', field: 'evidence-generation-draft',
-    reason: 'ブラウザ実行記録・ブラウザ記録という表示用語は使用しません。',
-    correctionHint: '表示名・問題文・解説では「ブラウザのスクリプト実行記録」または「ブラウザの動作記録」を使ってください。原文・引用・参照・観測値は変更しません。',
+  const inspectWording = (text, field) => {
+    for (const problem of presentationWordingProblems(text)) issues.push({
+      code: 'EVIDENCE_PRESENTATION_TERMINOLOGY', field, ...problem,
+      correctionHint: `${problem.correctionHint} 原文・引用・参照・観測値は変更しません。`,
+    });
+  };
+  evidencePackage.evidenceArtifacts.forEach((item, index) => {
+    const field = `evidenceArtifacts[${index}]`;
+    inspectWording(item.title, `${field}.title`);
+    if (item.type === 'TESTIMONY') {
+      inspectWording(item.publicContent, `${field}.publicContent`);
+      item.testimony?.statements.forEach((statement, statementIndex) =>
+        inspectWording(statement.spokenContent, `${field}.testimony.statements[${statementIndex}].spokenContent`));
+    }
   });
+  (draft.courtQuestions ?? []).forEach((item, index) => {
+    const field = `courtQuestions[${index}]`;
+    inspectWording(item.prompt, `${field}.prompt`);
+    inspectWording(item.explanation, `${field}.explanation`);
+    item.choices.forEach((text, choiceIndex) => inspectWording(text, `${field}.choices[${choiceIndex}]`));
+  });
+  (draft.materialInvestigations ?? []).forEach((item, index) => item.steps.forEach((step, stepIndex) => {
+    const field = `materialInvestigations[${index}].steps[${stepIndex}]`;
+    inspectWording(step.prompt, `${field}.prompt`);
+    inspectWording(step.explanation, `${field}.explanation`);
+    step.choices.forEach((choice, choiceIndex) =>
+      inspectWording(choice.description, `${field}.choices[${choiceIndex}].description`));
+  }));
+  for (const kind of ['contradictions', 'exonerations'])
+    (evidencePackage[kind] ?? []).forEach((item, index) => inspectWording(item.reason, `${kind}[${index}].reason`));
   evidencePackage.evidenceArtifacts.forEach((artifact, index) => {
     inspect(() => validateGeneratedLogFormats([artifact], evidencePackage.evidenceArtifacts), index);
     inspect(() => validateExplorableWebLogs([artifact], evidencePackage.evidenceArtifacts), index);
@@ -51,7 +71,7 @@ export function evidenceDraftProblems(draft, evidencePackage, agentInput, observ
     inspect(() => validateLearningObservations(observationArtifacts));
   inspect(() => validatePhishingObservations(evidencePackage.evidenceArtifacts, agentInput.attackGraph));
   inspect(() => validateRansomwareObservations(observationArtifacts, agentInput.attackGraph));
-  inspect(() => validateMaterialPlans(draft.materialInvestigations, evidencePackage.evidenceArtifacts));
+  issues.push(...materialPlanProblems(draft.materialInvestigations, evidencePackage.evidenceArtifacts).map(error => issue(error)));
   issues.push(...courtQuestionSourceErrors(draft.courtQuestions, evidencePackage, agentInput).map(error => issue(error)));
   return issues;
 }

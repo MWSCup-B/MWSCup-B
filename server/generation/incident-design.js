@@ -3,6 +3,7 @@ import { fail } from './schema.js';
 // Opt-in automatic authoring defaults. Legacy configurations retain their original
 // attack scope. Preconditions are evaluated in the same graph as every other fact.
 export const INCIDENT_DESIGN = 'ATTACK_CAUSED_HARM_V1';
+const technicalCausalRefutation = '選択された攻撃について取得可能と定義された技術資料を段階ごとに照合する。各資料が記録する対象・内容・処理結果を原文の識別値で対応付け、資料にない因果関係を時刻の近さだけで補わない。アカウント名・IPアドレス・端末情報だけから人物や意図を特定せず、確認された攻撃経路が被告人による攻撃処理の作成・直接操作という検察側の主張と両立するかを論じる。必要な技術資料や対応関係が不足する場合は、その不足を明示して差し戻す。';
 const condition = (source, predicate, args, description) => ({ source, predicate, args, value: true, description });
 const artifact = (id, binding, logSource, type, predicate, args, description) => ({ id, description,
   acquisition: { binding, logSource, type, targetType: logSource === 'DEVICE' ? 'ENDPOINT' : 'LOG_SOURCE' },
@@ -13,6 +14,10 @@ export function incidentDefinitions(catalog, configuration) {
   if (configuration.incidentDesign !== INCIDENT_DESIGN) return catalog;
   return catalog.map(original => {
     const definition = structuredClone(original);
+    if (definition.incidentNarrative) {
+      delete definition.incidentNarrative.attributionObservation;
+      definition.incidentNarrative.causalRefutation = technicalCausalRefutation;
+    }
     if (definition.id === 'stored_xss') {
       definition.prerequisites.find(item => item.predicate === 'user_uses_browser').description =
         '閲覧者がこのブラウザを利用する教材条件。被告人と閲覧者の対応は事件の教材内設定で先に定義し、IPやアカウントから推定した事実としては扱わない。';
@@ -28,10 +33,10 @@ export function incidentDefinitions(catalog, configuration) {
       definition.observableArtifacts.push(
         artifact('announcement_audit_record', 'web', 'APPLICATION_LOG', 'APPLICATION_LOG',
           'announcement_audit_available', ['$web', '$request'],
-          '告知投稿APIの監査記録。要求ID、セッション識別子、告知ID、処理結果を記録し、閲覧要求と投稿要求は別IDで保持する。'),
+          '告知投稿APIの監査記録。timestamp、要求ID(request_id)、セッション識別子(session_id)、告知ID(post_id)、処理結果(result)を記録し、閲覧要求と投稿要求は別IDで保持する。'),
         artifact('browser_request_initiator_record', 'browser', 'DEVICE', 'DEVICE_INFORMATION',
           'browser_request_initiator_record_available', ['$browser', '$web', '$request'],
-          'ブラウザで事前に収集した通信の開始元記録。閲覧要求ID(view_request_id)、実行ID(execution_id)、スクリプトの出典となる保存投稿ID(source_post_id)、ソース位置、発行した投稿要求ID(request_id)、開始元の種類を記録する。対応する実行記録にも閲覧要求ID(request_id)、実行ID、投稿IDを保持する。アクセス履歴やCSP違反ログによる代用は不可。'));
+          'ブラウザで事前に収集した通信の開始元記録。timestamp、閲覧要求ID(view_request_id)、実行ID(execution_id)、スクリプトの出典となる保存投稿ID(source_post_id)、ソース位置(source_location)、発行した投稿要求ID(request_id)、開始元の種類(initiator_type)を記録する。対応する実行記録にもtimestamp、閲覧要求ID(request_id)、実行ID、投稿IDを保持する。アクセス履歴やCSP違反ログによる代用は不可。'));
     } else if (definition.id === 'sql_injection') {
       definition.observableArtifacts.find(item => item.id === 'database_statement_record').description +=
         ' request_idとquery_idを保持し、statement欄の実行SQLから条件式・演算子・引用符の範囲を読み、値の範囲だけでなく構造の改変を確認できる。';
@@ -46,7 +51,7 @@ export function incidentDefinitions(catalog, configuration) {
         '外部から投入されたSQL改変入力により、非公開レコードがWeb応答を通じて要求元へ返却される。'));
       definition.observableArtifacts.push(artifact('application_response_record', 'web', 'APPLICATION_LOG', 'APPLICATION_LOG',
         'query_response_audit_available', ['$web', '$database', '$request'],
-        'アプリの応答監査。HTTP要求IDとDBクエリIDの対応、返却レコードの合成識別子またはダイジェスト、応答状態を保全する。秘密値や実在情報は記録しない。通常のWebアクセスログとは別の取得資料。'));
+        'アプリの応答監査。timestamp、HTTP要求ID(request_id)とDBクエリID(query_id)の対応、返却レコードの合成識別子(record_refs)またはダイジェスト(result_digest)、応答状態(status)を保全する。秘密値や実在情報は記録しない。通常のWebアクセスログとは別の取得資料。'));
     }
     return definition;
   });
@@ -69,21 +74,14 @@ export function buildIncidentNarratives(configuration, graph, definitions) {
     return [{ schemaVersion: '1.0', attackNodeId: node.nodeId, impactEffectId: effect.effectId,
       attackerCharacterId: 'character_attacker', defendantCharacterId: 'character_defendant',
       attackerAction: profile.attackerAction, impact: profile.impact, allegation: profile.allegation,
-      prosecutionKnowledge: profile.prosecutionKnowledge, causalRefutation: profile.causalRefutation,
+      prosecutionKnowledge: profile.prosecutionKnowledge, causalRefutation: technicalCausalRefutation,
       verdictBasis: profile.verdictBasis, requiredArtifactIds: [...profile.requiredArtifactIds] }];
   });
 }
 
-// Court-question prose is model-authored, but an incident with a verified causal
-// narrative must not regress to a mere "the operator is unknown" acquittal.
+// Keep the explanation that passed evidence review. Private incident settings
+// must never replace a reviewed inference or become newly asserted evidence.
+// Retain the arguments for callers of the existing interface.
 export function groundIncidentQuestionExplanations(questions, incidentNarratives = [], finalStatementId = null) {
-  const result = structuredClone(questions);
-  if (!incidentNarratives.length || !result.length) return result;
-  const conclusion = incidentNarratives.map(item =>
-    `事件で確認されたこと：${item.attackerAction}\n検察側の把握と主張：${item.prosecutionKnowledge}\n資料を照合して分かること：${item.causalRefutation}\n弁護側の結論：${item.verdictBasis}`).join('\n\n');
-  const final = result.find(item => item.statementId === finalStatementId) ?? result.at(-1);
-  // This is the post-clear explanation, so prefer the verified incident finding
-  // over model prose that may fall back to a generic lack-of-attribution ending.
-  final.explanation = conclusion;
-  return result;
+  return structuredClone(questions);
 }

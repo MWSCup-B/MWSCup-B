@@ -9,6 +9,7 @@ import { CodexRunner } from '../server/codex/codex-runner.js';
 import { CodexJsonRunner } from '../server/codex/codex-json-runner.js';
 import { actGenerated, createGeneratedGame } from '../server/generated-game.js';
 import { correctCourtChoiceId } from '../server/generation/court-questions.js';
+import { courtEvidenceLines, requiredCourtEvidence } from '../server/generation/court-evidence.js';
 
 const { values } = parseArgs({ options: {
   real: { type: 'boolean', default: false },
@@ -35,12 +36,15 @@ function play(runtime) {
   const player = createGeneratedGame(runtime);
   actGenerated(player, runtime, { action: 'begin' });
   actGenerated(player, runtime, { action: 'continue' });
-  // Exercise the public investigation actions before entering court.
-  for (const item of runtime.gameCase.detective.evidence.filter(item => item.type !== 'TESTIMONY')) {
-    actGenerated(player, runtime, { action: 'workspace-read', materialId: item.evidenceId });
-    actGenerated(player, runtime, { action: 'save-fact', materialId: item.evidenceId, line: 1 });
-  }
   for (const issue of runtime.gameCase.progression.courtIssues) {
+    // Save the verified original support again for each issue, just as a player
+    // must do after the previous issue's submitted evidence is cleared.
+    for (const materialId of requiredCourtEvidence(runtime.gameCase, player.currentRound)) {
+      actGenerated(player, runtime, { action: 'workspace-read', materialId });
+      for (const line of courtEvidenceLines(runtime.gameCase, player.currentRound, materialId)) {
+        actGenerated(player, runtime, { action: 'save-fact', materialId, line });
+      }
+    }
     const rule = runtime.gameCase.judgment.judgmentRules.find(item => issue.judgmentRuleIds.includes(item.ruleId));
     const interpretationChoiceId = correctCourtChoiceId(issue.question);
     const evidenceId = rule.acceptedEvidenceIds[0];

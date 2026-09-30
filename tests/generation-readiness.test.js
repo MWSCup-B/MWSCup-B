@@ -9,10 +9,43 @@ import { importScenarioPackage } from '../server/generation/scenario-interface.j
 import { buildInvestigationStages } from '../server/generation/investigation-registry.js';
 import { buildQuestionBackground } from '../server/generation/investigation-lessons.js';
 import { observationAnchors } from '../server/generation/court-questions.js';
+import { spokenProsecutionClaim } from '../server/generation/scenario-stage-plan.js';
 import { AutoGenerationManager, autoAuthorView, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 
 const catalog = await loadCatalog();
+
+test('ClickFix completes its own technical proof before a separate later harm stage', () => {
+  const configuration = createSelectionConfiguration({ schemaVersion: '1.0', attackIds: ['clickfix', 'ransomware'], settingId: 'company' }, catalog);
+  const generationInput = validateScenarioConfiguration(configuration, catalog).technical.generationInput;
+  const scenario = buildScenarioTemplate({ configuration, generationInput });
+  const stages = scenario.evidenceRequirements.requirements.filter(item => item.investigationStage);
+  const comparison = stages.slice(0, -1).find(item => ['clickfix_page_record', 'process_execution_record']
+    .every(id => item.grounds.some(ground => ground.sourceId === id)));
+  assert.ok(comparison);
+  const clickfix = generationInput.technicalInput.attackGraph.nodes.find(node => node.attackDefinitionId === 'clickfix');
+  assert.ok(comparison.grounds.every(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+  assert.ok(comparison.grounds.every(ground => ground.attackNodeId === clickfix.nodeId));
+  assert.match(comparison.investigationStage.claim, /被告人が攻撃用処理を作成し、攻撃目的で当該処理を直接起動/);
+  assert.match(comparison.description, /instruction_ref/);
+  assert.match(comparison.investigationStage.expectedInference, /instruction_ref/);
+  assert.doesNotMatch(comparison.investigationStage.expectedInference + comparison.investigationStage.limitedRefutation,
+    /CASE_FACT|caseSupport|調査報告|直接観察/);
+  assert.ok(stages.at(-1).grounds.every(ground => ground.attackNodeId !== clickfix.nodeId));
+});
+
+test('all registered attack allegations become direct courtroom claims without an attack-id text map', () => {
+  assert.equal(catalog.length, 16);
+  for (const attack of catalog) {
+    const allegation = attack.incidentNarrative?.allegation;
+    assert.ok(allegation, attack.id);
+    const claim = spokenProsecutionClaim(allegation, '');
+    assert.match(claim, /被告人/, attack.id);
+    assert.match(claim, /判断できます。$/, attack.id);
+    assert.doesNotMatch(claim, /検察側は|と主張している|それだけで/, attack.id);
+  }
+});
+
 test('all 17 supported attack paths in all five settings keep complete teaching text within the scenario contract', () => {
   const paths = buildAttackSelectionPaths(catalog);
   assert.equal(paths.length, 17);
@@ -22,30 +55,62 @@ test('all 17 supported attack paths in all five settings keep complete teaching 
     const scenarioPackage = buildScenarioTemplate({ configuration, generationInput });
     const imported = importScenarioPackage({ generationInput, scenarioPackage });
     assert.equal(imported.status, 'VALID', `${setting.id}: ${attackIds}: ${JSON.stringify(imported.errors)}`);
-    const last = scenarioPackage.evidenceRequirements.requirements.filter(item => item.investigationStage).at(-1);
+    const stages = scenarioPackage.evidenceRequirements.requirements.filter(item => item.investigationStage);
+    const last = stages.at(-1);
     assert.match(last.investigationStage.claim, /被告人/);
-    assert.match(last.investigationStage.limitedRefutation, /既存の最終法廷内/);
+    assert.ok(last.grounds.every(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+    assert.ok(scenarioPackage.evidenceRequirements.requirements.every(requirement => requirement.purpose !== 'IDENTITY_PROOF'
+      && requirement.grounds.every(ground => ground.sourceType !== 'CASE_FACT')));
+    assert.equal(scenarioPackage.groundTruth.caseFacts?.length ?? 0, 0);
+    for (const node of generationInput.technicalInput.attackGraph.nodes) {
+      const ownStages = stages.filter(stage => stage.grounds.some(ground => ground.attackNodeId === node.nodeId));
+      assert.ok(ownStages.length, `attack has its own technical investigation: ${node.attackDefinitionId}`);
+      assert.ok(ownStages.at(-1).grounds.every(ground => ground.attackNodeId === node.nodeId));
+    }
+    assert.doesNotMatch(last.investigationStage.expectedInference + last.investigationStage.limitedRefutation,
+      /Ground Truth|incidentNarratives|CASE_FACT|caseSupport|調査報告|直接観察/);
+    const defendant = scenarioPackage.characters.characters.find(item => item.characterId === 'character_defendant');
+    for (const node of generationInput.technicalInput.attackGraph.nodes) {
+      const binding = node.bindings.find(item => item.name === 'victim')
+        ?? node.bindings.find(item => item.name === 'account');
+      if (binding) assert.ok(defendant.bindingRefs.some(ref => ref.attackNodeId === node.nodeId
+        && ref.bindingName === binding.name && ref.entityId === binding.entityId));
+    }
   }
 });
 
-test('ClickFix has distinct observation and comparison disputes, with the full process lesson visible to review', () => {
+test('ClickFix separates page-content and process-record stages, with the full process lesson visible to review', () => {
   const configuration = createSelectionConfiguration({ schemaVersion: '1.0', attackIds: ['clickfix'], settingId: 'company' }, catalog);
   const generationInput = validateScenarioConfiguration(configuration, catalog).technical.generationInput;
-  const requirements = buildScenarioTemplate({ configuration, generationInput }).evidenceRequirements.requirements
-    .filter(requirement => requirement.investigationStage);
+  const scenario = buildScenarioTemplate({ configuration, generationInput });
+  const requirements = scenario.evidenceRequirements.requirements.filter(requirement => requirement.investigationStage);
   assert.equal(requirements.length, 2);
   assert.deepEqual(requirements[0].grounds.map(item => item.sourceId), ['clickfix_page_record']);
   assert.match(requirements[0].investigationStage.claim, /修復案内.*表示/);
   assert.match(requirements[0].investigationStage.claim, /案内どおりの処理.*実行.*みるべき/);
   const final = requirements[1];
-  assert.deepEqual(new Set(final.grounds.map(item => item.sourceId)), new Set(['clickfix_page_record', 'process_execution_record']));
-  assert.match(final.investigationStage.claim, /要求IDと端末のプロセス相関ID/);
+  assert.deepEqual(new Set(final.grounds.map(item => item.sourceId)),
+    new Set(['clickfix_page_record', 'process_execution_record']));
+  assert.match(final.investigationStage.claim, /プロセス実行記録.*ユーザー識別子/);
+  assert.match(final.investigationStage.claim, /攻撃用処理を作成し、攻撃目的で(?:当該処理を)?直接起動/);
   assert.match(final.investigationStage.claim, /被告人/);
+  assert.match(final.description, /同じinstruction_ref/);
+  assert.match(final.description, /要求IDとプロセス相関IDを同一の番号にはしない/);
+  assert.doesNotMatch(final.investigationStage.expectedInference, /CASE_FACT|caseSupport|調査報告|直接観察/);
+  assert.match(final.investigationStage.expectedInference, /同じinstruction_ref/);
+  assert.match(final.investigationStage.expectedInference, /処理がその後に端末で起動/);
+  assert.doesNotMatch(final.investigationStage.expectedInference, /確認できなければ|未確認|Ground Truth/);
+  assert.match(final.investigationStage.limitedRefutation, /利用者.*操作/);
+  assert.doesNotMatch(final.investigationStage.limitedRefutation, /Ground Truth/);
+  assert.deepEqual(scenario.characters.characters.find(item => item.characterId === 'character_defendant').bindingRefs,
+    [{ attackNodeId: final.grounds[0].attackNodeId, bindingName: 'victim', entityId: 'user-a' }]);
   for (const meaning of [/プロセスは動いているプログラム/, /親子関係とは/, /実行アカウント/, /起動結果/, /アカウントは実際の人物とは限りません/]) {
     assert.match(final.description, meaning);
   }
-  assert.match(final.investigationStage.expectedInference, /対応・因果が資料で確認できなければ未確認/);
-  assert.match(final.investigationStage.limitedRefutation, /時刻の一致、因果を新設しない/);
+  assert.match(final.investigationStage.limitedRefutation, /保存案内と端末記録の同じinstruction_ref/);
+  assert.match(final.investigationStage.limitedRefutation, /というclaimを反駁/);
+  assert.match(final.investigationStage.limitedRefutation, /被告人の利用者としての端末操作/);
+  assert.doesNotMatch(final.investigationStage.limitedRefutation, /人物不明を正答/);
 });
 
 test('question specificity reads real values in nested JSON and arrays without accepting column names', () => {

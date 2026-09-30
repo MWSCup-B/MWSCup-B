@@ -79,10 +79,16 @@ test('the final narrative uses confirmed graph causality and does not invent a p
 test('the investigation follows entry, instructions, execution and effects independently of graph storage order', () => {
   const { configuration, generationInput } = selected(['phishing', 'clickfix', 'ransomware']);
   const stages = buildInvestigationStages(configuration, generationInput);
-  assert.deepEqual(stages.map(stage => [...new Set(stage.routes.map(route => route.ground.sourceId))]), [
-    ['email_record'], ['web_access_record', 'clickfix_page_record'],
-    ['process_execution_record', 'file_operation_record'], ['damaged_file_record', 'original_file_record', 'ransom_note_record'],
+  assert.deepEqual(stages.map(stage => [...new Set(stage.routes
+    .filter(route => route.ground.sourceType === 'ATTACK_GRAPH_ARTIFACT').map(route => route.ground.sourceId))]), [
+    ['email_record'], ['web_access_record'], ['clickfix_page_record'],
+    ['process_execution_record'], ['file_operation_record', 'process_execution_record'],
+    ['damaged_file_record', 'original_file_record', 'ransom_note_record'],
   ]);
+  for (const stage of stages) {
+    assert.equal(new Set(stage.routes.map(route => route.ground.attackNodeId)).size, 1);
+    assert.ok(stage.routes.every(route => route.ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+  }
   const reordered = structuredClone(generationInput);
   reordered.technicalInput.attackGraph.nodes.reverse().forEach(node => node.artifactEvaluations.reverse());
   assert.deepEqual(buildInvestigationStages(configuration, reordered), stages);

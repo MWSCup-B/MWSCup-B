@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { courtEvidenceLines } from '../server/generation/court-evidence.js';
 import { procedureMethods } from '../server/generation/investigation-procedures.js';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -139,7 +140,9 @@ test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解�
     }
     for (const materialId of requiredCourtEvidence(author.runtime.gameCase, round)) {
       game = await action({ action: 'workspace-read', materialId });
-      game = await action({ action: 'save-fact', materialId, line: 1 });
+      for (const line of courtEvidenceLines(author.runtime.gameCase, round, materialId)) {
+        game = await action({ action: 'save-fact', materialId, line });
+      }
     }
     const evidenceId = currentCorrectPair(author.runtime, round).evidenceId;
     assert.equal(game.workbench.materials.find(item => item.materialId === evidenceId).question.choices.length, 4);
@@ -150,9 +153,10 @@ test('4択HTTP APIは解釈省略・正解注入を拒否し、全争点を解�
     if (round === 1) {
       const submitted = game.presentableEvidence.find(item => item.evidenceId === evidenceId);
       const source = author.runtime.gameCase.detective.evidence.find(item => item.evidenceId === evidenceId);
-      assert.deepEqual(submitted.savedFacts, [{ line: 1, text: source.publicContent.split(/\r?\n/)[0] }]);
-      assert.equal(submitted.publicContent, submitted.savedFacts[0].text);
-      assert.notEqual(submitted.publicContent, source.publicContent);
+      const expectedLines = [...new Set([1, ...courtEvidenceLines(author.runtime.gameCase, round, evidenceId)])].sort((a, b) => a - b);
+      assert.deepEqual(submitted.savedFacts, expectedLines.map(line => ({ line,
+        text: source.publicContent.split(/\r?\n/)[line - 1] })));
+      assert.equal(submitted.publicContent, submitted.savedFacts.map(fact => fact.text).join('\n'));
     }
     const injected = await post('/api/action', { action: 'objection', ...currentCorrectPair(author.runtime, round),
       correctOptionIndex: 0 }, token);

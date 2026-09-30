@@ -19,6 +19,7 @@ export class MockCodexRunner {
       malformedEvidenceOutput, timeout, invalidMakotomaruOutput,
       changeScenarioSummaryOnRevision });
     this.calls = []; this.scenarioCalls = 0; this.reviewCalls = 0; this.evidenceCalls = 0;
+    this.evidenceReviewCalls = 0;
     this.makotomaruCalls = 0;
   }
 
@@ -79,6 +80,21 @@ export class MockCodexRunner {
       }
       return review;
     }
+    if (phase === 'REVIEWING_EVIDENCE') {
+      this.evidenceReviewCalls += 1;
+      // This is the isolated reviewer fixture, not the evidence author's
+      // self-assessment. Failure paths provide their own reviewer response.
+      return { schemaVersion: '1.0', status: 'VERIFIED', checks: [
+        { checkId: 'OBSERVATION_GROUNDING', status: 'PASS',
+          reason: '資料の記録内容と照合結果が、検証済みの取得条件で確認できる範囲に収まっています。' },
+        { checkId: 'ATTRIBUTION_GROUNDING', status: 'PASS',
+          reason: '攻撃経路に関する結論は提示された技術資料の照合に基づき、アカウントの一致だけには依存していません。' },
+        { checkId: 'CLAIM_REFUTATION_ALIGNMENT', status: 'PASS',
+          reason: '検察側の具体的な主張と、提示された証拠から反駁できる内容が対応しています。' },
+        { checkId: 'EXPLANATION_GROUNDING', status: 'PASS',
+          reason: '正答と解説は提示資料から確認できる内容に限定され、制作側だけが知る設定を証明に使っていません。' },
+      ], issues: [] };
+    }
     if (phase === 'GENERATING_EVIDENCE') {
       this.evidenceCalls += 1;
       if (this.evidenceCalls <= this.malformedEvidenceOutput) throw new CodexOutputError(
@@ -127,7 +143,21 @@ export class MockCodexRunner {
         .flatMap(item => item.testimony.statements).filter(item => item.technicalAssessment === 'CONTRADICTED');
       for (const requirement of stageRequirements) {
         const plan = requirement.investigationStage;
-        const question = draft.courtQuestions.find(item => item.statementId === statements[plan.order - 1]?.statementId);
+        const statement = statements[plan.order - 1];
+        const question = draft.courtQuestions.find(item => item.statementId === statement?.statementId);
+        // A later attack must not inherit the first attack's technical fact
+        // simply because the original testimony was used as a template.
+        const attackNodes = new Set(requirement.grounds.map(ground => ground.attackNodeId));
+        const truth = agent.scenarioVerificationInput.scenarioPackage.groundTruth;
+        const facts = [
+          ...truth.technicalFacts.filter(fact => fact.sourceType === 'ATTACK_NODE'
+            && attackNodes.has(fact.attackNodeId)).map(fact => fact.factId),
+        ];
+        if (statement && facts.length) {
+          statement.groundTruthRefs = facts;
+          draft.contradictions.filter(item => item.statementRef === statement.statementId)
+            .forEach(item => { item.groundTruthRefs = [...facts]; });
+        }
         if (question) {
           const values = question.supportingQuotes.map(item => observationAnchors(item.quote)[0]);
           question.prompt = `${values[0]}を含む資料について、${plan.questionFocus}`;

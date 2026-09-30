@@ -9,6 +9,7 @@ import { fail, validateDocument } from './schema.js';
 import { correctCourtChoiceId, publicCourtQuestion, validateCourtQuestion,
   validateCourtQuestionSources } from './court-questions.js';
 import { validateSequentialGame, validateSequentialPlan } from './sequential-investigation.js';
+import { hasSufficientCourtEvidence } from './court-evidence.js';
 
 export const GAME_CASE_TITLE = 'セキュリティインシデント調査';
 export const GAME_CASE_SYNOPSIS = '取得可能な証拠と証言を確認し、主張の矛盾を指摘してください。';
@@ -303,13 +304,16 @@ export function validateGameCaseConversionInput(input) {
   if (graphRefs(input).some(ref => !sameValues(ref, draft.attackGraphRef))) fail('ATTACK_GRAPH_REFERENCE_MISMATCH',
     'game-case-conversion-input', 'Evidence、Handoff、Verification、Scenario、ProgressionのAttack Graph参照が一致しません。');
   const { artifacts } = sourceMaps(input);
-  const facts = new Set(input.scenarioPackage.groundTruth.technicalFacts.map(item => item.factId));
+  const technicalFacts = new Set(input.scenarioPackage.groundTruth.technicalFacts.map(item => item.factId));
+  const facts = technicalFacts;
   const events = new Set(input.timeline.events.map(item => item.eventId));
   const characters = new Map(input.characters.characters.map(item => [item.characterId, item]));
   for (const artifact of artifacts.values()) {
     for (const ref of artifact.sourceRefs) {
-      if (ref.sourceType === 'GROUND_TRUTH_FACT' && !facts.has(ref.sourceId)) fail('BROKEN_GROUND_TRUTH_REFERENCE',
+      if (ref.sourceType === 'GROUND_TRUTH_FACT' && !technicalFacts.has(ref.sourceId)) fail('BROKEN_GROUND_TRUTH_REFERENCE',
         `evidenceSet.${artifact.evidenceId}.sourceRefs`, 'EvidenceのGround Truth参照が存在しません。');
+      if (ref.sourceType === 'CASE_FACT') fail('INTERNAL_CASE_FACT_EXPOSED',
+        `evidenceSet.${artifact.evidenceId}.sourceRefs`, '内部設定の事件内事実をプレイヤー向けEvidenceの根拠にできません。');
       if (ref.sourceType === 'TIMELINE_EVENT' && !events.has(ref.sourceId)) fail('BROKEN_TIMELINE_REFERENCE',
         `evidenceSet.${artifact.evidenceId}.sourceRefs`, 'EvidenceのTimeline参照が存在しません。');
       if (ref.sourceType === 'CHARACTER' && !characters.has(ref.sourceId)) fail('BROKEN_CHARACTER_REFERENCE',
@@ -477,7 +481,10 @@ export function deriveGameCaseParts(input) {
   const courtIssues = input.progressionPlan.courtIssueMode ? issueTargets.map((target, index) => {
     const rules = judgmentRules.filter(rule => rule.targetStatementId === target);
     const required = rules.flatMap(rule => rule.acceptedEvidenceIds);
-    // The final verdict requires the full verified exoneration support, not one IP or account.
+    const question = input.progressionPlan.courtQuestions?.find(question => question.statementId === target);
+    required.push(...(question?.supportingQuotes.map(quote => quote.evidenceId) ?? []));
+    // Staged games establish every required proof across their ordered issues.
+    // The final issue must still require the complete, player-visible technical proof set.
     if (index === issueTargets.length - 1) required.push(...input.exonerations
       .filter(item => judgmentRules.some(rule => rule.exonerationRef === item.exonerationId))
       .flatMap(item => item.supportingEvidenceIds));
@@ -485,8 +492,7 @@ export function deriveGameCaseParts(input) {
       ...(input.progressionPlan.investigationMode ? {
         investigationTargetId: input.progressionPlan.investigationTargets[index].targetId,
       } : {}),
-      ...(input.progressionPlan.courtQuestions ? { question: structuredClone(
-        input.progressionPlan.courtQuestions.find(question => question.statementId === target)) } : {}),
+      ...(question ? { question: structuredClone(question) } : {}),
       statementIds: input.progressionPlan.retrialStatementIds.filter(id => id === target || nonTargets.includes(id)),
       judgmentRuleIds: rules.map(rule => rule.ruleId), requiredEvidenceIds: [...new Set(required)] };
   }) : null;
@@ -699,7 +705,7 @@ export function validatePublicGameCase(publicGameCase, input = null) {
     ? ['statementId', 'interpretationChoiceId'] : ['statementId', 'evidenceId'];
   if (!sameValues(publicGameCase.progression.objection.requiredInputs, expectedInputs)) fail(
     'INVALID_OBJECTION_INPUTS', 'public-game-progression.objection.requiredInputs', '公開された解答方式と必須入力が一致しません。');
-  const forbidden = /^(groundTruth|verificationResult|sourceRefs|sourceNodeRef|provenance|fingerprint|progressionFingerprint|contradictionRef|exonerationRef|judgment|attackGraphRef|requirementIds|technicalAssessment|groundTruthRefs|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|initiallyAvailable|retryPolicy|correctOptionIndex|correctChoiceId|supportingQuotes)$/i;
+  const forbidden = /^(groundTruth|caseSupport|caseFacts|verificationResult|sourceRefs|sourceNodeRef|provenance|fingerprint|progressionFingerprint|contradictionRef|exonerationRef|judgment|attackGraphRef|requirementIds|technicalAssessment|groundTruthRefs|acceptedEvidenceIds|requiredForCourtIds|requiredEvidenceIds|requiredCompletedActionIds|evidenceDiscoveryRules|initiallyAvailable|retryPolicy|correctOptionIndex|correctChoiceId|supportingQuotes)$/i;
   walkKeys(publicGameCase, key => {
     if (forbidden.test(key)) fail('PUBLIC_GAME_CASE_INTERNAL_FIELD', `public-game-case.${key}`,
       'Public Game CaseにBackend内部フィールドが含まれています。');
@@ -712,6 +718,7 @@ export function validatePublicGameCase(publicGameCase, input = null) {
       ...input.evidenceSet.contradictionRefs, ...input.evidenceSet.exonerationRefs,
       input.scenarioPackage.groundTruth.groundTruthId,
       ...input.scenarioPackage.groundTruth.technicalFacts.flatMap(item => [item.factId, item.sourceId]),
+      ...(input.scenarioPackage.groundTruth.caseFacts ?? []).map(item => item.factId),
       ...input.characters.characters.map(item => item.characterId),
       ...input.scenarioPackage.evidenceRequirements.requirements.map(item => item.requirementId)];
     const text = JSON.stringify({ publicGameCase,
@@ -764,7 +771,7 @@ export function validateGameCaseBundle({ input, gameCase, publicGameCase }) {
 }
 
 export function evaluateObjection(gameCase, { statementId, evidenceId, interpretationChoiceId, attemptCount,
-  currentRound = 1, collectedEvidenceIds = [] }) {
+  currentRound = 1, collectedEvidenceIds = [], savedFacts = {}, wholeDocumentEvidenceIds = [] }) {
   validateGameCase(gameCase);
   if (!Number.isSafeInteger(attemptCount) || attemptCount < 0) fail('INVALID_ATTEMPT_COUNT',
     'objection.attemptCount', 'attemptCountは0以上の安全な整数である必要があります。');
@@ -785,8 +792,8 @@ export function evaluateObjection(gameCase, { statementId, evidenceId, interpret
     fail('INTERPRETATION_CHOICE_REQUIRED', 'objection.interpretationChoiceId', '現在の争点の4択から解釈を選んでください。');
   }
   const nextAttemptCount = attemptCount + 1;
-  const hasSufficientEvidenceSet = !issue
-    || issue.requiredEvidenceIds.every(id => collectedEvidenceIds.includes(id));
+  const hasSufficientEvidenceSet = hasSufficientCourtEvidence(gameCase,
+    { currentRound, collectedEvidenceIds, savedFacts, wholeDocumentEvidenceIds });
   const matchedRule = gameCase.judgment.judgmentRules.find(rule =>
     (!issue || issue.judgmentRuleIds.includes(rule.ruleId))
     && (!issue?.question || interpretationChoiceId === correctCourtChoiceId(issue.question))

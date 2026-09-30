@@ -63,12 +63,20 @@ export function validateSequentialPlan(plan, evidenceSet) {
   const claims = plan.retrialStatementIds.filter(id => plan.objectionRules.some(rule => rule.targetStatementId === id));
   const issues = claims.map((id, index) => ({ investigationTargetId: plan.investigationTargets[index]?.targetId,
     question: plan.courtQuestions.find(item => item.statementId === id),
-    requiredEvidenceIds: [...plan.objectionRules.filter(rule => rule.targetStatementId === id).flatMap(rule => rule.acceptedEvidenceIds),
-      ...(index === claims.length - 1 ? evidenceSet.exonerations
-        .filter(item => plan.objectionRules.some(rule => rule.exonerationRef === item.exonerationId))
-        .flatMap(item => item.supportingEvidenceIds) : [])] }));
+    requiredEvidenceIds: [...new Set([
+      ...plan.objectionRules.filter(rule => rule.targetStatementId === id).flatMap(rule => rule.acceptedEvidenceIds),
+      ...(plan.courtQuestions.find(item => item.statementId === id)?.supportingQuotes.map(quote => quote.evidenceId) ?? []),
+    ])] }));
   validateDesign(plan.investigationTargets, plan.evidenceDiscoveryRules, issues,
     plan.initialAvailableTargetIds, plan.initialCourtEvidenceIds, plan.investigationMode === 'OPEN_MATERIALS');
+  // All issues must succeed in order. A completed attack's proof need not be
+  // resubmitted at the final desk, but no exoneration support may be omitted.
+  const covered = new Set(issues.flatMap(issue => issue.requiredEvidenceIds));
+  const required = evidenceSet.exonerations.filter(item => plan.objectionRules
+    .some(rule => rule.exonerationRef === item.exonerationId)).flatMap(item => item.supportingEvidenceIds);
+  if (required.some(id => !covered.has(id))) fail('EXONERATION_STAGE_COVERAGE_MISSING',
+    'game-progression-plan.courtQuestions',
+    '無罪論証に必要な全資料を、順番に解く各争点の必須根拠へ割り当ててください。どの争点でも提示しない資料で無罪にできません。');
 }
 
 export function validateSequentialGame(gameCase) {

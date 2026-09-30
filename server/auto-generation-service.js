@@ -44,6 +44,8 @@ import { buildTechnicalEvidenceCatalog, technicalEvidenceCoverageIssues } from '
 import { buildIncidentConclusion } from './generation/incident-conclusion.js';
 import { INCIDENT_DESIGN, groundIncidentQuestionExplanations } from './generation/incident-design.js';
 import { LEARNING_OBSERVATION_FIELDS } from './generation/learning-observations.js';
+import { EVIDENCE_REVIEW_PROMPT, buildEvidenceSemanticReviewInput, validateEvidenceSemanticReview }
+  from './generation/evidence-semantic-review.js';
 // 2026-09-20 修正前: Scenario設計の技術境界検証を導入する
 // import { buildScenarioTemplate, validateScenarioEvidenceCoverage }
 // 2026-09-20 修正後: Scenario設計の技術境界検証を導入する
@@ -95,7 +97,7 @@ export function createAutoAuthorSession() {
     configuration: null, configurationValidation: null, scenarioPreview: null,
     userApproval: null, revisionFeedback: null, makotomaruRequest: null,
     scenarioPackage: null, scenarioImportResult: null, verificationInput: null,
-    verificationResult: null, evidenceGenerationInput: null, evidenceImportResult: null,
+    verificationResult: null, evidenceGenerationInput: null, evidenceImportResult: null, evidenceSemanticReview: null,
     progressionPlan: null, gameCaseResult: null, gameMakeResult: null,
     evaluationResult: null, runtime: null, prototypeEvaluation: null, playId: null,
     savedGameId: null, savedAt: null };
@@ -222,6 +224,12 @@ const REPAIRABLE_CODES = [
   // A generated cross-reference mismatch can be revised without changing verified facts.
   // Do not classify arbitrary *_MISMATCH (including upstream corruption) as repairable.
   /^CONTRADICTION_GROUND_MISMATCH$/,
+  /^CONTRADICTION_REQUIREMENT_MISMATCH$/,
+  /^INSUFFICIENT_EXONERATION_SUPPORT$/,
+  /^TESTIMONY_CONTENT_MISMATCH$/,
+  // A malformed saved-line/search procedure is an Evidence draft defect even
+  // when an independent source/quotation defect also makes the import invalid.
+  /^INVALID_MATERIAL_PROCEDURES$/,
 ];
 
 export function classifyBlocked(issues) {
@@ -265,13 +273,13 @@ function buildAutomaticProgression(session, courtQuestions, materialInvestigatio
   const stages = buildInvestigationStages(session.configuration, session.generationInput);
   const targets = stages.map((stage, index) => ({ schemaVersion: '1.0', targetId: stage.targetId,
     targetType: stage.targetType, displayName: stage.displayName,
-    description: `${stage.displayName}に保管された事件資料。`,
+    description: `${stage.displayName}に関するログ・原資料などの技術資料。`,
     sourceNodeRef: { sourceType: 'NETWORK_NODE', sourceId: stage.sourceNodeId },
     availableActionIds: [...new Set(stage.routes.map(route => route.actionId))], initiallyAvailable: true }));
   const artifactRoutes = artifacts.map(artifact => {
     const sources = stages.flatMap(stage => stage.routes.map(route => ({ ...route, targetId: stage.targetId })))
       .filter(item => artifact.sourceRefs.some(ref =>
-      ref.sourceType === 'ATTACK_GRAPH_ARTIFACT' && ref.attackNodeId === item.ground.attackNodeId
+      ref.sourceType === item.ground.sourceType && ref.attackNodeId === item.ground.attackNodeId
       && ref.sourceId === item.ground.sourceId));
     const route = sources.find(item => item.evidenceType === artifact.type);
     if (!route || new Set(sources.map(item => item.targetId)).size !== 1) throw new ValidationError(
@@ -308,6 +316,11 @@ function buildAutomaticProgression(session, courtQuestions, materialInvestigatio
     .some(contradiction => contradiction.statementRef === item.statementId)).at(-1)?.statementId;
   const groundedCourtQuestions = groundIncidentQuestionExplanations(courtQuestions,
     session.scenarioPackage.groundTruth.incidentNarratives, finalStatementId);
+  const finalExplanation = groundedCourtQuestions
+    .filter(question => statements.some(statement => statement.statementId === question.statementId))
+    .sort((left, right) => statements.findIndex(statement => statement.statementId === left.statementId)
+      - statements.findIndex(statement => statement.statementId === right.statementId))
+    .map(question => question.explanation).filter(Boolean).join('\n\n');
   return buildGameProgressionPlan({ scenarioId: set.scenarioId,
     evidenceSetId: set.evidenceSetId, attackGraphRef: set.attackGraphRef,
     initialCourtEvidenceIds: openingEvidence.map(item => item?.evidenceId),
@@ -329,7 +342,7 @@ function buildAutomaticProgression(session, courtQuestions, materialInvestigatio
         statements.filter(item => item.statementId === openingStatementId), session.configuration),
       initialRuling: '疑いだけでは判断できません。弁護人は記録を調べ、主張の根拠を確かめてください。',
       acquittalRuling: '被告人を無罪とします。',
-      acquittalExplanation: buildIncidentConclusion(session.configuration, session.generationInput),
+      acquittalExplanation: finalExplanation ?? buildIncidentConclusion(session.configuration, session.generationInput),
       failureFeedback: 'その推理は、この証拠では支えられません。同じ調査先に戻って、記録を読み直してください。' } });
 }
 
@@ -417,6 +430,7 @@ function preservesEvidenceGroundRevision(revision, draft) {
 function feedbackFromIssues(issues, classification) {
   return { classification, errors: (issues ?? []).map(item => ({ code: item.code,
     field: item.field, reason: item.reason, correctionHint: item.correctionHint,
+    ...(item.retryable ? { retryable: true } : {}),
     ...(item.evidenceId ? { evidenceId: item.evidenceId } : {}),
     ...(item.requirementId ? { requirementId: item.requirementId } : {}) })) };
 }
@@ -691,7 +705,8 @@ export class AutoGenerationManager {
     for (const running of Object.values(session.auto.progress)
       .filter(item => item.status === 'RUNNING')) running.status = 'FAILED';
     session.auto.details.push(detail(error, error.phase ?? session.auto.state,
-      (error.phase === 'GENERATING_EVIDENCE' ? session.auto.progress.evidence.attempt : session.auto.attempt) || null));
+      (['GENERATING_EVIDENCE', 'REVIEWING_EVIDENCE'].includes(error.phase)
+        ? session.auto.progress.evidence.attempt : session.auto.attempt) || null));
     session.runtime = null; session.playId = null;
   }
 
@@ -943,6 +958,7 @@ export class AutoGenerationManager {
       description: buildQuestionBackground(investigationStages, index, session.generationInput) }));
     for (let evidenceAttempt = 1; evidenceAttempt <= 2; evidenceAttempt += 1) {
       mark(session, 'evidence', 'RUNNING', evidenceAttempt);
+      session.evidenceSemanticReview = null;
       let evidencePackage;
       let draft;
       let compactDraft;
@@ -1039,6 +1055,29 @@ export class AutoGenerationManager {
         if (issueTargets.every(target => findIncorrectObjectionPair({
           statementIds: plan.retrialStatementIds.filter(id => id === target || !issueTargets.includes(id)),
           presentableEvidenceIds, objectionRules: plan.objectionRules.filter(rule => rule.targetStatementId === target) }))) {
+          const reviewInput = buildEvidenceSemanticReviewInput(session.evidenceGenerationInput.evidenceAgentInput, compactDraft);
+          let reviewed;
+          try {
+            const review = await measured(session, 'REVIEWING_EVIDENCE', evidenceAttempt,
+              () => this.jsonRunner.runJson({ instruction: EVIDENCE_REVIEW_PROMPT, data: reviewInput,
+                outputSchema: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceReview.canonicalSchema,
+                outputSchemaName: AUTO_CODEX_OUTPUT_SCHEMAS.evidenceReview.name,
+                generationSettings: session.generationSettings, phase: 'REVIEWING_EVIDENCE', signal }));
+            reviewed = validateEvidenceSemanticReview(review, reviewInput);
+          } catch (error) {
+            if (!(error instanceof ValidationError) && !(error instanceof CodexOutputError)) throw error;
+            session.auto.details.push(detail({ code: 'EVIDENCE_REVIEW_INVALID', field: error.field ?? 'evidenceSemanticReview',
+              reason: error.message, correctionHint: '独立審査の結果が不正です。審査を省略してゲームを構築しません。' },
+            'REVIEWING_EVIDENCE', evidenceAttempt));
+            break;
+          }
+          session.evidenceSemanticReview = reviewed;
+          if (reviewed.review.status !== 'VERIFIED') {
+            session.auto.details.push(...reviewed.review.issues.map(item => detail(item, 'REVIEWING_EVIDENCE', evidenceAttempt)));
+            if (reviewed.review.status === 'BLOCKED') break;
+            evidenceFeedback = feedbackFromIssues(reviewed.review.issues, 'REPAIRABLE_BLOCKED');
+            continue;
+          }
           evidenceProgressionPlan = plan;
           break;
         }

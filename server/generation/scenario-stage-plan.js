@@ -1,9 +1,21 @@
 import { buildInvestigationStages } from './investigation-registry.js';
-import { stageQuestionTasks, phishingMaterialPolicy } from './attack-learning.js';
+import { stageQuestionTasks, phishingStagePolicy, investigationSourceLabel } from './attack-learning.js';
 import { buildQuestionBackground } from './investigation-lessons.js';
 import { hasSelfDisclosingShortcut } from './court-claim-style.js';
 
 const key = ground => `${ground.attackNodeId}/${ground.sourceId}`;
+
+// Incident metadata owns the accusation. Turn its third-person description into
+// a prosecutor's courtroom statement without maintaining an attack-id text map.
+export function spokenProsecutionClaim(allegation, fallback) {
+  if (typeof allegation !== 'string' || !allegation.trim()) return fallback;
+  const parts = allegation.trim().match(/^(.*?)、?検察側は、?(.*?)と主張している。?$/);
+  if (!parts) return allegation;
+  const basis = parts[1].replace(/、$/, '').replace(/を根拠として$|ことから$|ため$/, '')
+    .replace(/こと$/, '').trim();
+  const conclusion = parts[2].trim();
+  return basis && conclusion ? `${basis}。このことから、${conclusion}と判断できます。` : allegation;
+}
 
 // 記録の取得順と攻撃の実行順は別。登録済みの取得元を変えずに、争点を取得順へ割り当てる。
 export function buildStageRequirements(configuration, generationInput) {
@@ -12,7 +24,8 @@ export function buildStageRequirements(configuration, generationInput) {
     const tasks = stageQuestionTasks(stages, index, generationInput);
     const questionNodes = new Set(tasks.map(task => task.attackNodeId));
     const current = stage.routes.map(route => route.ground).filter(ground => questionNodes.has(ground.attackNodeId));
-    const available = stages.slice(0, index + 1).flatMap(item => item.routes.map(route => route.ground));
+    const available = stages.slice(0, index + 1).flatMap(item => item.routes.map(route => route.ground))
+      .filter(ground => questionNodes.has(ground.attackNodeId));
     const has = id => current.some(ground => ground.sourceId === id);
     let grounds = current;
     let claim, questionFocus, expectedInference, limitedRefutation;
@@ -89,12 +102,17 @@ export function buildStageRequirements(configuration, generationInput) {
       limitedRefutation = '認証結果を投稿完了と同一視する部分だけを反駁し、投稿の実行者を断定しない。';
     } else if (current.some(ground => /^(ssh_|traversal_|sudo_|setuid_|service_|collection_)/.test(ground.sourceId))) {
       // 2026-09-24: mainのローカル攻撃にWeb要求を捏造せず、今回の観測範囲を問う。
-      claim = '対象の設定内容と操作記録は整合しています。したがって、関連する処理は、記録された権限ですべて成功したと判断できます。';
+      const recordLabel = investigationSourceLabel(stage.routes.filter(route => route.ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+      claim = `${recordLabel}を確認しました。この資料から、関連する処理は必要な権限で成功したと判断できます。`;
       questionFocus = '今回の資料が示す設定・操作・実効権限と、まだ確認できない処理を区別する4択。';
       expectedInference = '取得した資料に記録された対象と状態だけを確認し、設定の存在と実行の観測を区別する。';
       limitedRefutation = '今回の資料の記録範囲を越えた成功・権限の断定だけを反駁する。未取得の資料や操作を追加しない。';
     } else {
       claim = 'Webアプリケーション側には、対象の要求を受け付けた記録が残っています。したがって、その要求に続く処理も正常に完了したと判断できます。';
+      if (tasks.some(task => task.sources.includes('database_statement_record')))
+        claim = 'Web側には対象の要求を受け付けた記録が残っています。対応するSQLの実行も正常に完了したと判断できます。';
+      else if (tasks.some(task => task.sources.includes('browser_execution_record')))
+        claim = 'ページへの要求を受け付けた記録が残っています。ページ内のスクリプトもブラウザで実行されたと判断できます。';
       questionFocus = '取得した要求・セッションの記録範囲から、要求の記録と後続処理の成功を区別する4択。';
       expectedInference = '要求の到達やセッションの状態は、その記録範囲で確認する。後続の実行成功は対応する処理側の記録がなければ断定できない。';
       limitedRefutation = '要求の記録だけで後続処理の成功まで断定する部分を反駁する。まだ取得していない端末・DB・認証の資料を要求しない。';
@@ -109,22 +127,19 @@ export function buildStageRequirements(configuration, generationInput) {
     grounds = [...new Map([...grounds, ...tasks.flatMap(task => task.grounds)]
       .map(ground => [key(ground), ground])).values()];
     if (completed.length) {
-      const claims = {
-        phishing: '保存メールのリンクとWeb要求の記録は対応しています。この記録から、ページの表示と後続処理まで完了したと判断できます。',
-        credential_phishing: '記録されているのはページの閲覧です。偽フォームへのデータ送信を示す資料はありません。',
-        stored_xss: 'ブラウザにはページの閲覧記録がありますが、保存投稿のスクリプト実行を示す記録はありません。',
-        reflected_xss: 'サーバーには対象要求の受付記録がありますが、ブラウザでのスクリプト実行を示す記録はありません。',
-        sql_injection: '対象の要求に含まれる入力は値としてだけ扱われ、実行されたSQLの構造を変えていません。',
-        unauthorized_login: '認証記録上のアカウントとWebアプリケーション側のセッションは、被告人の利用情報と一致しています。この一致と当該セッションの処理記録から、被告人が対象のWebサービスを操作したと認められます。',
-        clickfix: '案内の要求IDと端末のプロセス相関IDは、同じ操作を示す番号です。実行ユーザーの記録から、被告人自身が案内に従って当該処理を起動したと判断できます。',
-        password_spray: '認証の制限設定は事件時にも有効でした。記録された不審な試行はすべて遮断されています。',
-        ransomware: '被告人のアカウントで不審なプログラムが実行されているため、被告人本人が意図的に業務ファイルを破壊したと分かります。',
-        unrestricted_file_upload: '受付記録と検査資料は、保存IDが違っても名前が同じなら同じファイルです。許可外の内容が見つかれば、サーバーでの実行も証明できます。',
-      };
       const focus = completed.at(-1);
-      const attackId = generationInput.technicalInput.attackGraph.nodes
-        .find(node => node.nodeId === focus.attackNodeId).attackDefinitionId;
-      claim = claims[attackId] ?? focus.claim;
+      const attackNode = generationInput.technicalInput.attackGraph.nodes
+        .find(node => node.nodeId === focus.attackNodeId);
+      const attackId = attackNode.attackDefinitionId;
+      const definition = generationInput.technicalInput.attackDefinitions.find(item => item.id === attackId);
+      const incident = definition?.incidentNarrative;
+      const applicableAllegation = incident && attackNode.effects
+        .some(effect => effect.predicate === incident.impactEffectPredicate) ? incident.allegation : null;
+      const legacySqlClaim = '対象の要求に含まれる入力は値としてだけ扱われ、実行されたSQLの構造を変えていません。';
+      claim = spokenProsecutionClaim(applicableAllegation,
+        attackId === 'sql_injection' ? legacySqlClaim : (focus.claim ?? claim));
+      if (!applicableAllegation && attackId === 'phishing')
+        claim = '保存メールのリンク先とWeb要求の対象は一致しています。この一致から、受信者がメールのリンクを操作して要求を送ったと判断できます。';
       questionFocus = `${completed.map(task => task.name).join('・')}の取得済み資料を比較し、対象・値の対応と攻撃の特徴、記録から判断できる範囲を問う4択。対象が分かる読みやすい問題文にする。`;
       expectedInference = completed.map(task => task.comparison + task.limit).join('\n');
       limitedRefutation = 'この主張を資料の比較で反駁する。各資料が観測する段階を分け、単一資料に攻撃全体の結論を書かない。' + focus.limit;
@@ -134,39 +149,45 @@ export function buildStageRequirements(configuration, generationInput) {
         limitedRefutation = '保証されている入力によるSQL構造の改変・実行に基づいてclaimを反駁する。一つの値だけに一致する検索条件や特定の検索範囲を必須にしない。' + focus.limit;
       }
       if (attackId === 'clickfix') {
-        questionFocus = '保存案内の要求ID・応答時刻・求める操作と、今回の端末記録の端末ID・プロセスID・親子関係・実行ユーザー・起動結果を読み比べる。二つのIDが識別する対象の違い、起動の確認範囲、被告人への帰属を選ぶ4択。各資料の実在する値を使い、対応の欠落は未確認とする。';
-        expectedInference = focus.comparison + focus.limit
-          + '要求IDはWeb要求、プロセスIDは端末上の処理を識別する。両資料の実値を列挙して記録対象と段階を比較し、同じ意味の番号として扱わない。端末の親子関係は起動元と起動先、実行ユーザーはアカウント、起動結果は記録された処理の結果に限る。案内からその起動への対応・因果が資料で確認できなければ未確認と明記し、被告人本人が案内に従ったとは断定しない。';
-        limitedRefutation = '第1段階の「案内表示だけで実行成功」という論点を繰り返さず、今回初めて得た端末記録と保存案内の記録単位・実値を比較する。要求IDとプロセスIDの同一視、および実行ユーザーから被告人本人の操作・意図を断定する部分を限定的に反駁する。人物対応、共通ID、時刻の一致、因果を新設しない。';
+        questionFocus = '保存案内の要求ID・応答時刻・instruction_ref・求める操作と、今回の端末記録の端末ID・プロセス相関ID・instruction_ref・親子関係・実行ユーザー・起動結果を読み比べる。instruction_refによる内容対応と、要求ID・プロセス相関IDが識別する対象の違いを踏まえ、起動経路と検察側の攻撃目的・作成・直接起動の帰属を選ぶ4択。';
+        expectedInference = '資料から確認できる事実は、保存案内が端末操作を求めていること、両資料に同じinstruction_refが記録されていること、案内に記載された操作内容に対応する処理がその後に端末で起動していることである。要求IDはWeb要求、プロセス相関IDは端末上の処理を識別する別の番号であり、両者を直接対応付ける値ではない。端末記録の実行ユーザー識別子は利用アカウントを示すが、処理の作成者や攻撃目的は示さない。事件内の人物設定では被告人はvictimに対応する利用者であり、この対応はログから人物を特定した結果ではない。保存案内から対応する処理が起動した経路は、被告人が攻撃処理を作成し、攻撃目的で直接起動したという検察側の説明とは両立しない。被告人が誘導に従って端末を操作したことや、処理が起動したこと自体は否定しない。';
+        limitedRefutation = '保存案内と端末記録の同じinstruction_refにより確認できる内容対応と起動経路を根拠に、被告人が攻撃用処理を作成し、攻撃目的で直接起動したというclaimを反駁する。被告人の利用者としての端末操作や処理の起動自体は否定しない。要求IDとプロセス相関IDを同一視せず、実行ユーザー識別子から人物や意図を断定しない。';
+        if (!incident) {
+          claim = '案内の要求IDと端末のプロセス相関IDは、同じ処理を表す番号です。この二つの番号を照合すれば、案内と実行を対応付けられます。';
+          questionFocus = '要求ID・プロセス相関IDがそれぞれ識別する対象と、instruction_refが示す案内内容・処理内容の対応を読み比べる4択。';
+          expectedInference = focus.comparison + focus.limit;
+        limitedRefutation = '要求IDとプロセス相関IDの同一視を反駁し、内容の対応はinstruction_refと時系列・起動結果から確認する。実行ユーザー識別子だけから作成者や操作者を特定しない。';
+        }
       }
-    }
-    if (index === stages.length - 1) {
-      grounds = available;
-      if (!claim.includes('被告人')) claim += 'これで、被告人本人による操作だと分かります。';
-      questionFocus += '同じ最終争点の中で、記録上の処理と被告人本人への帰属も区別する。';
-      expectedInference += '取得済み資料が示す処理と、被告人本人が行ったという主張は別である。アカウント・端末の記録から本人の操作や意図を証明したとは言えない。';
-      limitedRefutation += 'このclaimの被告人本人への帰属も、既存の最終法廷内で反駁する。Ground TruthのincidentNarrativesに定義された別の攻撃者による因果経路を取得済み資料で具体的に示し、被告人による直接操作説と両立しないことを結論にする。別の法廷を追加せず、定義されていない人物や攻撃経路は補完しない。';
     }
     const incidentTask = completed.find(task => task.sources.includes('browser_request_initiator_record')
       || task.sources.includes('application_response_record'));
     if (incidentTask) {
       const stored = incidentTask.sources.includes('browser_request_initiator_record');
-      claim = stored
-        ? '虚偽の告知は、被告人が手動で投稿したものです。先に保存されていたスクリプトを含む投稿は、この告知の送信には関係ありません。'
-        : '非公開レコードを取り出したSQLは、被告人がデータベースへ直接入力したものです。外部からのWeb要求に含まれる入力によって、SQLの構造が変化したものではありません。';
       questionFocus = '被害を起こした処理の開始元と、その処理が被告人の操作に見えた理由を、取得済み資料の識別情報と内容を比較して判断する。';
       if (!stored) questionFocus += 'DB監査のstatement欄でSQLの構造を読み、要求ID・クエリIDと返却資料を照合する。未記録のWebの入力本文は要求しない。';
       expectedInference = incidentTask.comparison;
-      limitedRefutation = '被害が発生した事実と、攻撃入力から被害処理までの因果を裏付ける公開資料を示し、被告人が当該被害操作を直接行ったというclaimを反駁する。「意図は分からない」という一般論だけを結論にしない。人物の設定は観測で確認できる範囲と区別して示し、IP・アカウントだけから名前を特定しない。既存の最終法廷内で取得済み資料を統合し、人物帰属だけの争点や別の法廷を追加しない。';
+      limitedRefutation = '被害が発生した事実と、攻撃入力から被害処理までの因果を裏付ける公開資料を示し、被告人が当該被害操作を直接行ったというclaimを反駁する。「意図は分からない」という一般論だけを結論にしない。人物の設定は観測で確認できる範囲と区別して示し、IP・アカウントだけから名前を特定しない。この攻撃の取得済み資料を本争点内で照合し、人物帰属だけの争点を追加しない。';
+      if (!incidentTask.complete)
+        limitedRefutation = '取得済み資料で要求・保存・実行・応答の対応を確認し、claimの記録解釈を反駁する。アカウントやIPの一致だけから作成者や操作者を特定しない。';
     }
+    const credentialTask = completed.find(task => task.attackNodeId === stage.attackNodeId
+      && task.sources.includes('credential_submission_record'));
+    if (credentialTask) {
+      expectedInference += ' 偽フォームへの送信・受信資料は、送信元ページ・送信先・相関識別子・処理結果が示す範囲を確認する。送信記録はフォームへの情報送信を示すが、フォームや受信先を準備した人物までは示さない。';
+      limitedRefutation += ' 被告人が誘導に従って入力・送信したこと自体は否定せず、偽メール・偽フォームと受信先を準備し、資格情報を収集した主体だという主張を、準備と送信を区別して反駁する。';
+    }
+    if (grounds.some(ground => ground.sourceType === 'CASE_FACT')) fail(
+      'PLAYER_CASE_REPORT_FORBIDDEN', `evidenceRequirements.requirements[${index}].grounds`,
+      '内部用の直接観察記録・調査報告は、プレイヤー向けの争点資料にできません。');
     const learningDesign = tasks.map(task => task.complete
       ? `${task.name}: ${task.comparison} ${task.limit} この攻撃の必要資料をすべて取得済み。複数資料の照合を正答の必須条件にする。`
       : `${task.name}: 今回はgrounds内の資料の観測項目と記録範囲を読む。${task.limit} 未取得の資料は今回の解答に使わない。攻撃全体の比較は必要な資料がそろう後の段階で行う。`).join('\n');
-    const materialPolicy = tasks.map(task => phishingMaterialPolicy(generationInput.technicalInput.attackGraph.nodes
-      .find(node => node.nodeId === task.attackNodeId).attackDefinitionId)).filter(Boolean).join('\n');
+    const materialPolicy = tasks.map(task => phishingStagePolicy(generationInput.technicalInput.attackGraph.nodes
+      .find(node => node.nodeId === task.attackNodeId).attackDefinitionId, task.grounds)).filter(Boolean).join('\n');
     if (materialPolicy) {
       expectedInference += materialPolicy;
-      limitedRefutation += 'URL不一致は必須ではない。扱う場合は公開本文内の比較結果に限定し、Ground Truthに事件事実を追加しない。';
+      limitedRefutation += 'URL不一致は必須ではない。扱う場合は公開本文内の比較結果に限定し、資料本文で確認できない事件事実を追加しない。';
     }
     return { requirementId: `requirement_stage_${index + 1}`, purpose: 'CONTRADICTION_PROOF',
       description: `第${index + 1}段階: ${stage.displayName}。investigationStageの主張は検察側調査官の証言であり、技術的事実とは区別する。groundsの観測資料だけをこの段階の4択・反駁に使う。今回の資料は観測資料ごとの取得要件に示された既存の取得元・操作で取得し、以前の資料は収集済みのものを使う。\n${learningDesign}\n終了後の解説に使う攻撃の仕組み・用語の背景：${buildQuestionBackground(stages, index, generationInput)} この背景は制作資料であり、問題文へコピーしない。プレイ中は検察側のclaimを争点ごとに固定し、資料を替えても変更しない。原文全体を検索・照合し、資料・証拠箇所・反論を学習者が判断する。攻撃名、読み方、正解の箇所は事前に説明しない。必要な基礎知識、実際の事件の経緯、原文の根拠、各選択肢の読み違いは終了後に丁寧な日本語で説明する。`,
@@ -183,8 +204,15 @@ export function validateStageRequirements(configuration, generationInput, scenar
   const errors = [];
   const problem = reason => errors.push({ code: 'INVESTIGATION_STAGE_PLAN_INVALID',
     field: 'scenarioPackage.evidenceRequirements.requirements', reason,
-    correctionHint: '各調査先に一つのinvestigationStageを割り当て、現在・過去の観測資料だけをgroundsへ指定してください。' });
+    correctionHint: '攻撃ごとに分けた各調査先に一つのinvestigationStageを割り当て、その攻撃で現在・過去に取得した資料だけをgroundsへ指定してください。' });
   if (requirements.length !== stages.length) problem('調査対象数と段階別の争点数が一致しません。');
+  const claims = new Map();
+  for (const requirement of requirements) {
+    const normalized = requirement.investigationStage.claim.normalize('NFKC').replace(/\s/g, '');
+    const previous = claims.get(normalized);
+    if (previous) problem(`${previous}と${requirement.investigationStage.targetId}の主張が同一です。各資料が記録する対象・処理に即した異なる争点にしてください。`);
+    else claims.set(normalized, requirement.investigationStage.targetId);
+  }
   stages.forEach((stage, index) => {
     const matches = requirements.filter(item => item.investigationStage.targetId === stage.targetId);
     if (matches.length !== 1) { problem(`${stage.targetId}の争点が一意に定義されていません。`); return; }
@@ -206,6 +234,8 @@ export function validateStageRequirements(configuration, generationInput, scenar
     }
     const available = new Set(stages.slice(0, index + 1).flatMap(item => item.routes.map(route => key(route.ground))));
     const grounds = requirement.grounds.filter(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT');
+    if (grounds.length !== requirement.grounds.length) problem(`${stage.targetId}が観測資料以外を反駁の根拠に指定しています。`);
+    if (grounds.some(ground => ground.attackNodeId !== stage.attackNodeId)) problem(`${stage.targetId}に別の攻撃の争点資料が混在しています。`);
     if (grounds.some(ground => !available.has(key(ground)))) problem(`${stage.targetId}が未取得の後続資料を必要としています。`);
     if (!stage.routes.some(route => grounds.some(ground => key(ground) === key(route.ground)))) {
       problem(`${stage.targetId}の争点に現在の調査資料が指定されていません。`);
@@ -228,9 +258,15 @@ export function stageEvidenceProblems(evidenceSet, scenarioPackage) {
       .filter(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT').map(key)));
     const missing = requirement.grounds.filter(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'
       && !covered.has(key(ground)));
+    const allowed = new Set(requirement.grounds.map(key));
+    const outside = [...covered].filter(ref => !allowed.has(ref));
     const distinctSources = new Set(requirement.grounds.filter(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT')
       .map(ground => ground.sourceId));
     const problems = [];
+    if (outside.length) problems.push({ code: 'INVESTIGATION_STAGE_EVIDENCE_SCOPE_MISMATCH',
+      field: `evidenceSet.contradictions.${requirement.investigationStage.targetId}`,
+      reason: `検証済みの第${index + 1}段階とは別の争点の資料が混在しています: ${outside.join(', ')}。`,
+      correctionHint: '担当する攻撃の段階別Requirementに指定された取得済み資料で反駁してください。別攻撃の論証を最終争点に集めず、その攻撃の担当争点で示してください。' });
     if (distinctSources.size > 1 && new Set(evidenceIds).size < 2) problems.push({
       code: 'INVESTIGATION_LEARNING_COMPARISON_MISSING', field: `evidenceSet.contradictions.${requirement.investigationStage.targetId}`,
       reason: '異なる種類の観測資料を一つの結論資料へまとめず、取得可能な複数の技術資料を比較する争点にしてください。',

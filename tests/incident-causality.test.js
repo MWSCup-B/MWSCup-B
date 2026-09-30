@@ -6,7 +6,7 @@ import { createDefaultConfiguration, validateScenarioConfiguration } from '../se
 import { buildScenarioTemplate, validateScenarioDesignBoundary } from '../server/generation/scenario-template.js';
 import { buildIncidentConclusion } from '../server/generation/incident-conclusion.js';
 import { buildIncidentOverview } from '../server/generation/incident-report.js';
-import { buildIncidentNarratives } from '../server/generation/incident-design.js';
+import { buildIncidentNarratives, groundIncidentQuestionExplanations } from '../server/generation/incident-design.js';
 import { buildCaseStudy } from '../server/generation/material-investigation.js';
 import { validateLearningObservations } from '../server/generation/learning-observations.js';
 import { validateGeneratedLogFormats, validateExplorableWebLogs } from '../server/generation/evidence-log-format.js';
@@ -38,7 +38,15 @@ test('incident narratives use explicit and natural Japanese for records and iden
 
 for (const attackIds of [['stored_xss'], ['sql_injection'], ['phishing', 'unauthorized_login', 'stored_xss']]) {
   test(`new ${attackIds.join('/')} games ground concrete harm, acquire all causal records and keep answers private`, async () => {
-    const manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
+    const runner = new MockCodexRunner();
+    const runJson = runner.runJson.bind(runner);
+    let submittedQuestions;
+    runner.runJson = async args => {
+      const output = await runJson(args);
+      if (output.courtQuestions) submittedQuestions = structuredClone(output.courtQuestions);
+      return output;
+    };
+    const manager = new AutoGenerationManager({ jsonRunner: runner });
     const session = createAutoAuthorSession();
     manager.submitSelection(session, { schemaVersion: '1.0', attackIds, settingId: 'company' });
     await manager.waitForIdle();
@@ -50,9 +58,13 @@ for (const attackIds of [['stored_xss'], ['sql_injection'], ['phishing', 'unauth
     assert.match(narrative.attackerAction, /別の攻撃者/);
     assert.match(narrative.prosecutionKnowledge, /検察側/);
     assert.match(narrative.verdictBasis, /無罪/);
-    const final = pkg.evidenceRequirements.requirements.filter(item => item.investigationStage).at(-1);
-    assert.match(final.investigationStage.claim, /被告人.*手動|被告人.*直接/);
-    for (const id of narrative.requiredArtifactIds) assert.ok(final.grounds.some(ref => ref.sourceId === id), id);
+    const stages = pkg.evidenceRequirements.requirements.filter(item => item.investigationStage);
+    for (const incident of pkg.groundTruth.incidentNarratives) {
+      const completed = stages.filter(stage => stage.grounds.some(ref => ref.attackNodeId === incident.attackNodeId)).at(-1);
+      assert.match(completed.investigationStage.claim, /被告人/);
+      assert.ok(completed.grounds.every(ref => ref.attackNodeId === incident.attackNodeId));
+      for (const id of incident.requiredArtifactIds) assert.ok(completed.grounds.some(ref => ref.sourceId === id), id);
+    }
     assert.doesNotMatch(buildIncidentOverview(session.configuration), /SQL|XSS|スクリプト|具体的な手口|これから/);
     const conclusion = buildIncidentConclusion(session.configuration, session.generationInput);
     assert.match(conclusion, /別の攻撃主体|別の攻撃者/);
@@ -60,8 +72,10 @@ for (const attackIds of [['stored_xss'], ['sql_injection'], ['phishing', 'unauth
     manager.approve(session); await manager.waitForIdle();
     assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));
     const study = buildCaseStudy(session.runtime);
-    assert.ok(study.issues.at(-1).explanation.includes(narrative.attackerAction));
-    assert.ok(study.issues.at(-1).explanation.includes(narrative.verdictBasis));
+    const finalQuestion = session.runtime.gameCase.progression.courtIssues
+      .filter(issue => issue.question).at(-1).question;
+    assert.equal(study.issues.at(-1).explanation,
+      submittedQuestions.find(question => question.statementId === finalQuestion.statementId).explanation);
     assert.doesNotMatch(study.issues.at(-1).explanation,
       /その処理を被告人が行ったと判断できない|送信者の氏名や未記録の入力本文/);
     const artifacts = session.evidenceImportResult.evidenceSet.evidenceArtifacts;
@@ -106,6 +120,24 @@ test('legacy SQL scenarios do not require a search range or harm that the attack
   assert.match(stage.claim, /入力は値としてだけ|SQL.*構造/);
   assert.doesNotMatch(stage.claim, /指定された一つ|非公開レコード|漏えい/);
   assert.match(stage.expectedInference, /構造/);
+});
+
+test('reviewed explanations remain unchanged instead of importing private incident conclusions', () => {
+  const questions = [{ statementId: 'first', explanation: '取得した資料の対象と時刻を確認する。' },
+    { statementId: 'final', explanation: '要求の開始元と受理記録を照合した結果を説明する。' }];
+  const before = structuredClone(questions);
+  const privateNarratives = [{ attackerAction: '未提示の人物が操作したという非公開設定。',
+    prosecutionKnowledge: '未提示の検察設定。', causalRefutation: '未裏付けの因果断定。',
+    verdictBasis: '未裏付けの判決理由。' }];
+  for (const finalStatementId of ['final', 'missing', null]) {
+    const result = groundIncidentQuestionExplanations(questions, privateNarratives, finalStatementId);
+    assert.deepEqual(result, before);
+    assert.notEqual(result, questions);
+    assert.notEqual(result[1], questions[1]);
+    assert.doesNotMatch(JSON.stringify(result), /未提示|未裏付け/);
+  }
+  assert.deepEqual(questions, before);
+  assert.deepEqual(groundIncidentQuestionExplanations([], privateNarratives), []);
 });
 
 test('incident narrative can be added through attack metadata without an attack-id branch', () => {

@@ -17,7 +17,7 @@ export function createGeneratedGame(runtime) {
     availableInvestigationTargets:
       [...runtime.gameCase.progression.investigation.initialAvailableTargetIds],
     completedInvestigationActions: [], discoveredEvidenceIds: [], collectedEvidenceIds: [],
-    roundCollectedEvidenceIds: [], savedFacts: {},
+    roundCollectedEvidenceIds: [], savedFacts: {}, wholeDocumentEvidenceIds: [],
     lastInvestigationResult: null, selectedStatementId: null, selectedInterpretationChoiceId: null, attemptCount: 0,
     previousAttempts: [], result: null };
 }
@@ -38,8 +38,10 @@ function publicEvidence(item) {
 function collectedEvidenceView(item, session) {
   // Legacy investigation APIs collect a whole document. Workspace saves instead
   // own explicit excerpts; never replace those excerpts with the original file.
-  if (!Object.hasOwn(session.savedFacts ?? {}, item.evidenceId)) return publicEvidence(item);
-  const savedFacts = structuredClone(session.savedFacts[item.evidenceId]).sort((a, b) => a.line - b.line);
+  if (!Object.hasOwn(session.savedFacts ?? {}, item.evidenceId)
+    && session.wholeDocumentEvidenceIds?.includes(item.evidenceId)) return publicEvidence(item);
+  const savedFacts = structuredClone(Object.hasOwn(session.savedFacts ?? {}, item.evidenceId)
+    ? session.savedFacts[item.evidenceId] : []).sort((a, b) => a.line - b.line);
   return { ...publicEvidence(item), publicContent: savedFacts.map(fact => fact.text).join('\n'), savedFacts };
 }
 
@@ -207,7 +209,7 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     requireState(session, 'TITLE'); session.currentState = 'INITIAL_COURT';
   } else if (action === 'continue') {
     requireState(session, 'INITIAL_COURT'); session.currentState = 'INVESTIGATION';
-  } else if (['workspace-command', 'workspace-read', 'save-observation', 'save-fact', 'remove-fact'].includes(action)) {
+  } else if (['workspace-command', 'workspace-read', 'save-observation', 'save-fact', 'remove-fact', 'clear-saved-evidence'].includes(action)) {
     requireState(session, 'INVESTIGATION');
     if (!isOpenMaterials(internal)) throw new GameError('UNKNOWN_ACTION', 'action', '資料調査モードの操作です。');
     workspaceAction(session, internal, { action, materialId, command, field, value, line });
@@ -238,6 +240,10 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
       if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
       session.roundCollectedEvidenceIds ??= [];
       if (!session.roundCollectedEvidenceIds.includes(materialId)) session.roundCollectedEvidenceIds.push(materialId);
+      if (!Object.hasOwn(session.savedFacts ?? {}, materialId)) {
+        session.wholeDocumentEvidenceIds ??= [];
+        if (!session.wholeDocumentEvidenceIds.includes(materialId)) session.wholeDocumentEvidenceIds.push(materialId);
+      }
       const completionId = investigationCompletionId(rule.targetId, rule.actionId);
       if (!session.completedInvestigationActions.includes(completionId)) session.completedInvestigationActions.push(completionId);
     }
@@ -307,6 +313,10 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     if (!session.collectedEvidenceIds.includes(evidenceId)) session.collectedEvidenceIds.push(evidenceId);
     session.roundCollectedEvidenceIds ??= [];
     if (!session.roundCollectedEvidenceIds.includes(evidenceId)) session.roundCollectedEvidenceIds.push(evidenceId);
+    if (!Object.hasOwn(session.savedFacts ?? {}, evidenceId)) {
+      session.wholeDocumentEvidenceIds ??= [];
+      if (!session.wholeDocumentEvidenceIds.includes(evidenceId)) session.wholeDocumentEvidenceIds.push(evidenceId);
+    }
   } else if (action === 'retrial') {
     requireState(session, 'INVESTIGATION');
     const allowed = canReturnToCourt(session, internal);
@@ -366,7 +376,8 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     let outcome;
     try { outcome = evaluateObjection(internal, { statementId, evidenceId, interpretationChoiceId,
       attemptCount: session.attemptCount, currentRound: session.currentRound,
-      collectedEvidenceIds: activeEvidenceIds }); }
+      collectedEvidenceIds: activeEvidenceIds, savedFacts: session.savedFacts,
+      wholeDocumentEvidenceIds: session.wholeDocumentEvidenceIds }); }
     catch (error) {
       session.currentState = 'RETRIAL_COURT';
       throw new GameError(error.code ?? 'INVALID_OBJECTION', error.field ?? 'objection',
@@ -381,13 +392,14 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     session.result = outcome.outcome === 'SUCCESS'
       ? { outcome: 'SUCCESS', objection: '証言の食い違いを示した！', hasNextRound,
         ...(!hasNextRound && internal.progression.courtIssues?.[session.currentRound - 1]?.question ? {
-          publicExplanation: internal.progression.courtIssues[session.currentRound - 1].question.explanation,
+          publicExplanation: internal.progression.outcomes.acquitted.publicExplanation,
         } : {}) }
       : { outcome: 'FAILURE', publicFeedback: outcome.publicFailureFeedback };
     if (hasNextRound) { session.currentRound += 1; session.attemptCount = 0;
       session.currentState = 'INVESTIGATION';
       session.roundCollectedEvidenceIds = [];
       session.savedFacts = {};
+      session.wholeDocumentEvidenceIds = [];
       session.savedObservations = [];
       session.selectedStatementId = null;
       session.selectedInterpretationChoiceId = null;

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { courtEvidenceLines } from '../server/generation/court-evidence.js';
 import assert from 'node:assert/strict';
 import { executeMaterialCommand, commandTemplates, workspaceAction, workspaceMaterial, investigationProgress, requiredCourtEvidence }
   from '../server/generation/investigation-workspace.js';
@@ -64,6 +65,25 @@ test('observations never collect evidence and forged facts are rejected; complet
   assert.equal(workspaceMaterial(session, unusual.detective.evidence[0]).savedFacts[0].line, 1);
 });
 
+test('bulk clear removes current saved evidence without erasing investigation history or notes', () => {
+  const game = { detective: { evidence: [log], evidenceDiscoveryRules: [{ evidenceId: 'auth', targetId: 'server', actionId: 'read',
+    prerequisites: { requiredEvidenceIds: [], requiredCompletedActionIds: [] } }] },
+  progression: { courtIssues: [{ requiredEvidenceIds: ['auth'] }] } };
+  const session = { currentRound: 1, collectedEvidenceIds: ['auth', 'older'], roundCollectedEvidenceIds: ['auth', 'older'],
+    savedFacts: { auth: [{ line: 1, text: 'saved' }] }, wholeDocumentEvidenceIds: ['older'],
+    discoveredEvidenceIds: ['auth', 'older'], observedLines: { auth: [1] }, commandHistory: { auth: [{ command: 'head', output: 'line' }] },
+    savedObservations: [{ materialId: 'auth', field: 'source_ip', value: '192.0.2.10' }] };
+  workspaceAction(session, game, { action: 'clear-saved-evidence' });
+  assert.deepEqual(session.savedFacts, {});
+  assert.deepEqual(session.wholeDocumentEvidenceIds, []);
+  assert.deepEqual(session.roundCollectedEvidenceIds, []);
+  assert.deepEqual(session.collectedEvidenceIds, ['auth', 'older']);
+  assert.deepEqual(session.discoveredEvidenceIds, ['auth', 'older']);
+  assert.deepEqual(session.observedLines, { auth: [1] });
+  assert.deepEqual(session.commandHistory, { auth: [{ command: 'head', output: 'line' }] });
+  assert.equal(session.savedObservations.length, 1);
+});
+
 test('technical preflight and coverage require the available route and correct non-testimony type', () => {
   const ground = { sourceType: 'ATTACK_GRAPH_ARTIFACT', attackNodeId: 'attack', sourceId: 'observed' };
   const requirements = [{ requirementId: 'req', grounds: [ground] }];
@@ -99,7 +119,9 @@ for (const attacks of [['unauthorized_login'], ['password_spray'], ['password_sp
     for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round++) {
       for (const materialId of requiredCourtEvidence(runtime.gameCase, round)) {
         actGenerated(session, runtime, { action: 'workspace-read', materialId });
-        actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
+        for (const line of courtEvidenceLines(runtime.gameCase, round, materialId)) {
+          actGenerated(session, runtime, { action: 'save-fact', materialId, line });
+        }
       }
       assert.equal(generatedPlayerView(session, runtime).workbench.progress.complete, true);
       const pair = currentCorrectPair(runtime, round);

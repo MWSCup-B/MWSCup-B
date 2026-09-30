@@ -52,28 +52,30 @@ const explanationLabels = Object.freeze({
   '資料から確認した因果関係': 'causality',
   '弁護側の結論': 'conclusion',
   '判決理由': 'conclusion',
+  '技術資料で確認した処理': 'fact',
+  '照合による反駁': 'causality',
+  '判断の限界': 'limits',
 });
 
 function closingArgument(explanation) {
-  const blocks = String(explanation ?? '').split(/\n{2,}/).map(block => {
-    const values = {};
-    for (const line of block.split('\n')) {
-      const match = /^([^：]+)：(.*)$/s.exec(line.trim());
-      const key = explanationLabels[match?.[1]];
-      if (key) values[key] = match[2].trim();
+  // The explanation is an earned, verified document. Turn its presentation into
+  // speech without dropping observations/limits or adding a private conclusion.
+  let labelled = false;
+  const lines = String(explanation ?? '').split(/\r?\n/).flatMap(source => {
+    const text = source.trim().replace(/^#{1,6}\s+/, '').replace(/^(?:[-*・]|\d+[.)])\s+/, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1');
+    const match = /^([^：:]+)[：:](.*)$/.exec(text);
+    if (explanationLabels[match?.[1]]) {
+      labelled = true;
+      return match[2].trim() ? [match[2].trim()] : [];
     }
-    return values;
-  }).filter(values => values.fact || values.prosecution || values.causality || values.conclusion);
-  if (!blocks.length) return String(explanation ?? '')
-    .replaceAll('被告人を無罪とする', '弁護側は被告人に無罪判決を求めます')
+    if (explanationLabels[text]) { labelled = true; return []; }
+    return text ? [text] : [];
+  });
+  const speech = lines.join('\n')
+    .replace(/被告人を無罪と(?:する|します)/g, '弁護側は被告人に無罪判決を求めます')
     .replaceAll('攻撃者の実名までログから特定することは、この結論の要件ではない。', '');
-  return blocks.map((values, index) => [
-    index === 0 ? '調査で確認した事実を申し上げます。' : 'さらに、別の攻撃経路についても確認されています。',
-    values.fact,
-    values.prosecution ? `一方、${values.prosecution}` : '',
-    values.causality ? `しかし、資料を照合すると、${values.causality}` : '',
-    values.conclusion,
-  ].filter(Boolean).join('')).join('\n\n');
+  return labelled ? `調査で確認した事実を申し上げます。\n${speech}` : speech;
 }
 
 // Only public, already earned information enters a scene. No private slot is serialized.

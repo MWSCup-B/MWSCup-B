@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AutoGenerationManager, autoAuthorBootstrap, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { createGeneratedGame, actGenerated, generatedPlayerView } from '../server/generated-game.js';
-import { procedureCommand, procedureOutput, procedureMethods, validateMaterialPlans } from '../server/generation/investigation-procedures.js';
+import { procedureCommand, procedureOutput, procedureMethods, validateMaterialPlans, materialPlanProblems } from '../server/generation/investigation-procedures.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { inspectMaterial } from './helpers/court-issues.js';
 
@@ -75,4 +75,20 @@ test('material validation refuses omitted materials, unavailable source lines, a
   const valid = structuredClone(runtime.gameCase.progression.materialInvestigations);
   valid[0].steps[0].choices[0].operation = { kind: 'MATCH', needle: 'unavailable unique trace', firstLine: 1, lastLine: 1 };
   assert.throws(() => validateMaterialPlans(valid, evidence), { code: 'INVALID_MATERIAL_PROCEDURES' });
+});
+
+test('procedure repair identifies every affected material and its actual source line range', () => {
+  const plans = structuredClone(runtime.gameCase.progression.materialInvestigations);
+  const evidence = runtime.gameCase.detective.evidence;
+  for (const plan of plans.slice(0, 2)) plan.steps[0].choices[0].operation.lastLine = 100000;
+  const before = structuredClone(plans);
+  const problems = materialPlanProblems(plans, evidence);
+  assert.equal(problems.length, 2);
+  plans.slice(0, 2).forEach((plan, index) => {
+    assert.ok(problems[index].field.includes(plan.evidenceId));
+    assert.match(problems[index].field, /steps\[0\]\.choices\[0\]\.operation$/);
+    assert.match(problems[index].message, /原文は\d+行/);
+    assert.match(problems[index].correctionHint, /firstLine.*lastLine/);
+  });
+  assert.deepEqual(plans, before);
 });

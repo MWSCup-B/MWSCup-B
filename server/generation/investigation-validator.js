@@ -20,7 +20,7 @@ export const DEFAULT_INVESTIGATION_ACTIONS = Object.freeze([
     allowedTargetTypes: ['BROWSER', 'ENDPOINT'] },
   { schemaVersion: '1.0', actionId: 'action_inspect_file', actionType: 'INSPECT_FILE',
     displayName: 'ファイルを調査', description: '本文と付随する情報を読みます。ファイルやコードは実行しません。',
-    allowedTargetTypes: ['FILE_SYSTEM', 'ENDPOINT', 'SERVER'] },
+    allowedTargetTypes: ['FILE_SYSTEM', 'ENDPOINT', 'SERVER', 'LOG_SOURCE', 'APPLICATION', 'MAILBOX', 'BROWSER', 'NETWORK_DEVICE'] },
   { schemaVersion: '1.0', actionId: 'action_analyze_network_log', actionType: 'ANALYZE_NETWORK_LOG',
     displayName: '通信ログを分析', description: '通信の記録を読み、接続先など記録された範囲を確かめます。',
     allowedTargetTypes: ['NETWORK_DEVICE', 'LOG_SOURCE', 'SERVER'] },

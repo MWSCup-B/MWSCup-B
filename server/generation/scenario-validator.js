@@ -85,6 +85,33 @@ function validateGroundTruth(groundTruth, graph, characters, definitions) {
       '各Attack nodeと各因果edgeを1件ずつtechnical factとして参照してください。');
   }
   const characterMap = new Map(characters.characters.map(character => [character.characterId, character]));
+  const caseFacts = groundTruth.caseFacts ?? [];
+  ensureUnique([...groundTruth.technicalFacts, ...caseFacts], item => item.factId,
+    'ground-truth.caseFacts.factId');
+  for (const fact of caseFacts) {
+    const field = `ground-truth.caseFacts.${fact.factId}`;
+    const node = nodes.get(fact.attackNodeId);
+    if (!node || node.state !== 'SATISFIED') stop('CASE_FACT_UNGROUNDED', `${field}.attackNodeId`,
+      '事件内の観察対象が成立済みのAttack nodeを参照していません。',
+      '同じGraphの成立済みnodeへ対応付け、技術条件の代用にしないでください。', [fact.attackNodeId]);
+    const people = [fact.witnessCharacterId, fact.subjectCharacterId, fact.excludedCharacterId];
+    if (new Set(people).size !== people.length
+      || !characterMap.get(fact.witnessCharacterId)?.roles.includes('witness')
+      || !characterMap.get(fact.subjectCharacterId)?.roles.includes('attacker')
+      || !characterMap.get(fact.excludedCharacterId)?.roles.includes('defendant')) {
+      stop('CASE_FACT_CHARACTER_MISMATCH', field,
+        '直接観察者・観察対象・被告人の人物参照または役割が一致しません。',
+        '証言者、攻撃者、被告人を異なる実在のCharacterへ対応付けてください。', people);
+    }
+    ensureUnique(fact.relatedArtifactIds, id => id, `${field}.relatedArtifactIds`);
+    for (const artifactId of fact.relatedArtifactIds) {
+      const artifact = node.artifactEvaluations.find(item => item.artifactId === artifactId);
+      if (!artifact || artifact.state !== 'SATISFIED'
+        || artifact.evaluations.some(item => item.state !== 'SATISFIED')) stop('CASE_FACT_ARTIFACT_UNAVAILABLE',
+        `${field}.relatedArtifactIds`, '事件内の観察と照合する技術資料が取得可能ではありません。',
+        '同じAttack nodeにあり、観測条件が成立した資料だけを参照してください。', [artifactId]);
+    }
+  }
   ensureUnique(groundTruth.characterFactRefs, item => JSON.stringify([item.characterId, item.role]),
     'ground-truth.characterFactRefs');
   for (const ref of groundTruth.characterFactRefs) {
@@ -229,9 +256,14 @@ function validateEvidence(evidenceRequirements, graph, groundTruth, characters, 
   const nodes = new Map(graph.nodes.map(node => [node.nodeId, node]));
   const timelineIds = new Set(timeline.events.map(event => event.eventId));
   const factIds = new Set(groundTruth.technicalFacts.map(fact => fact.factId));
+  const caseFacts = new Map((groundTruth.caseFacts ?? []).map(fact => [fact.factId, fact]));
   const characterIds = new Set(characters.characters.map(character => character.characterId));
   const objectiveIds = new Set(learningObjectives.objectives.map(objective => objective.objectiveId));
   for (const requirement of evidenceRequirements.requirements) {
+    if (requirement.purpose === 'IDENTITY_PROOF'
+      || requirement.grounds.some(ground => ground.sourceType === 'CASE_FACT')) stop(
+      'PLAYER_CASE_REPORT_FORBIDDEN', `evidence-requirement.requirements.${requirement.requirementId}`,
+      '内部用の直接観察記録・調査報告は、プレイヤー向け資料や必須証拠にできません。技術資料の取得要件を指定してください。');
     ensureUnique(requirement.grounds,
       ground => JSON.stringify([ground.sourceType, ground.attackNodeId, ground.sourceId]),
       `evidence-requirement.requirements.${requirement.requirementId}.grounds`);
@@ -254,6 +286,12 @@ function validateEvidence(evidenceRequirements, graph, groundTruth, characters, 
           'UNKNOWNまたはUNSATISFIEDのartifactは取得可能な証拠要件にできません。',
           '観測条件を明示的に満たすartifactを使用するか、入力を修正してください。',
           [ground.attackNodeId, ground.sourceId]);
+      } else if (ground.sourceType === 'CASE_FACT') {
+        const fact = caseFacts.get(ground.sourceId);
+        if (!fact || ground.attackNodeId !== fact.attackNodeId) stop('BROKEN_REFERENCE',
+          `evidence-requirement.requirements.${requirement.requirementId}.grounds`,
+          '事件内観察の参照先またはAttack nodeが一致しません。',
+          'caseFactsのfactIdと同じattackNodeIdを指定してください。', [ground.sourceId, ground.attackNodeId].filter(Boolean));
       } else {
         if (ground.attackNodeId !== null) stop('BROKEN_REFERENCE',
           `evidence-requirement.requirements.${requirement.requirementId}.grounds.attackNodeId`,

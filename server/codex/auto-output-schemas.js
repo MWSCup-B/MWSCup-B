@@ -26,11 +26,25 @@ Object.assign(scenarioOutputSchema.properties, {
 // 外部v1の省略可能フィールドはCLI用だけ必須nullableにする。
 scenarioOutputSchema.properties.evidenceRequirements.properties.requirements.items.required.push('investigationStage');
 scenarioOutputSchema.properties.groundTruth.required.push('incidentNarratives');
+scenarioOutputSchema.properties.groundTruth.required.push('caseFacts');
+scenarioOutputSchema.properties.groundTruth.properties.caseFacts.type = ['array', 'null'];
 
 const evidenceOutputSchema = structuredClone(evidencePackage);
-evidenceOutputSchema.properties.evidenceArtifacts.items = evidenceArtifact;
+evidenceOutputSchema.properties.evidenceArtifacts.items = structuredClone(evidenceArtifact);
 evidenceOutputSchema.properties.contradictions.items = contradiction;
 evidenceOutputSchema.properties.exonerations.items = exoneration;
+
+const evidenceDraftOutputSchema = structuredClone(EVIDENCE_GENERATION_DRAFT_SCHEMA);
+
+// Only these CLI-only nullable fields represent omitted canonical properties.
+// Keep nulls in source records and every other field intact for normal validation.
+export function normalizeAutoCodexOutput(value, schemaName) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const result = structuredClone(value);
+  if (schemaName === 'scenario-import-package' && result.groundTruth?.caseFacts === null)
+    delete result.groundTruth.caseFacts;
+  return result;
+}
 
 const makotomaruOutputSchema = structuredClone(makotomaruResult);
 makotomaruOutputSchema.properties.configuration = scenarioConfiguration;
@@ -51,7 +65,10 @@ export const AUTO_CODEX_OUTPUT_SCHEMAS = Object.freeze({
     name: 'evidence-import-package', canonicalSchema: evidenceOutputSchema,
   }),
   evidenceDraft: Object.freeze({
-    name: 'evidence-generation-draft', canonicalSchema: structuredClone(EVIDENCE_GENERATION_DRAFT_SCHEMA),
+    name: 'evidence-generation-draft', canonicalSchema: evidenceDraftOutputSchema,
+  }),
+  evidenceReview: Object.freeze({
+    name: 'evidence-semantic-review', canonicalSchema: await loadSchema('evidence-semantic-review'),
   }),
   makotomaru: Object.freeze({
     name: 'makotomaru-result', canonicalSchema: makotomaruOutputSchema,

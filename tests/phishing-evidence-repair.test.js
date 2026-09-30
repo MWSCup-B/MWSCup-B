@@ -50,7 +50,7 @@ test('フィッシングの目標は取得可能な観測を優先し、URL不�
   }
   const observation = source => requirements.find(item => item.requirementId.startsWith('requirement_observation_')
     && item.grounds.some(ground => ground.sourceId === source));
-  assert.match(observation('email_record').description, /リンクをpublicContent.*第1段階はこのメールだけ/);
+  assert.match(observation('email_record').description, /リンクをpublicContent.*メールのみを取得する段階.*このメールだけ/);
   assert.match(observation('web_access_record').description, /timestampとrequest_target.*取得後にメールと要求記録/);
   assert.deepEqual(evidenceDraftProblems(validDraft, materializeEvidenceGenerationDraft(validDraft), agent), []);
 });
@@ -141,6 +141,7 @@ for (const attackIds of [['phishing'], ['stored_xss'], ['phishing', 'stored_xss'
           if (artifact.type === 'EMAIL') {
             const link = phishingMailLinks(artifact.publicContent)[0].href;
             artifact.publicContent = `Subject: 確認のお願い\n\n次のリンクを開いて確認してください。\n${link}`;
+            // This fixture changes the player-visible source format before validation.
           }
         }
         syncQuestionQuotes(draft);

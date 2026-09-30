@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { courtEvidenceLines } from '../server/generation/court-evidence.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
@@ -131,6 +132,26 @@ test('workspace fact picker shows only the original rows in the active filtered 
   const overlay = page.screen.querySelector('.workspace-overlay');
   assert.match(overlay.textContent, /2: second/);
   assert.doesNotMatch(overlay.textContent, /1: first/);
+});
+
+test('workspace bulk-clear button is available only when evidence is saved', async () => {
+  const game = { ...base, currentState: 'INVESTIGATION', investigationMode: 'OPEN_MATERIALS',
+    investigationTargets: [], canReturnToCourt: false, collectedEvidence: [],
+    workbench: { workspaceVersion: '1.0', canChooseEvidence: true,
+      progress: { complete: false, collected: 1, required: 2 }, savedObservations: [],
+      materials: [{ materialId: 'saved_log', targetId: 'server', label: '保存済みログ',
+        capabilities: { console: true }, collected: true, history: [], facts: [], savedFacts: [], templates: [] }] } };
+  const page = ui(game);
+  const clear = page.screen.querySelector('.workspace-clear-saved-evidence');
+  assert.ok(clear);
+  assert.equal(clear.disabled, false);
+  await page.click('保存した証拠をすべて取り消す');
+  assert.deepEqual(page.calls, [{ action: 'clear-saved-evidence' }]);
+
+  page.change({ ...game, workbench: { ...game.workbench, canChooseEvidence: false,
+    progress: { complete: false, collected: 0, required: 2 },
+    materials: game.workbench.materials.map(item => ({ ...item, collected: false })) } });
+  assert.equal(page.screen.querySelector('.workspace-clear-saved-evidence').disabled, true);
 });
 
 test('the case file omits the incident-summary item and keeps entry to the report', async () => {
@@ -526,7 +547,9 @@ test('generated script and UI play from the one-page report through a wrong answ
       assert.ok(page.screen.querySelector('.workspace-console'));
       assert.ok(!session.roundCollectedEvidenceIds.includes(plan.evidenceId));
       await page.click('原文を証拠として保存');
-      await page.click('行1を証拠として保存');
+      for (const line of courtEvidenceLines(runtime.gameCase, round, plan.evidenceId)) {
+        await page.click(`行${line}を証拠として保存`);
+      }
       assert.ok(session.collectedEvidenceIds.includes(plan.evidenceId));
       await page.click('現場へ戻る');
     }
@@ -558,10 +581,10 @@ test('generated script and UI play from the one-page report through a wrong answ
   assert.equal(page.screen.querySelector('.case-study-reader'), null);
   await page.click('解説を開く');
   assert.ok(page.screen.querySelector('.case-study-reader'));
-  const explanationPoints = page.screen.querySelector('.case-explanation-points');
-  assert.ok(explanationPoints);
-  assert.deepEqual(explanationPoints.querySelectorAll('strong').slice(-4).map(item => item.textContent),
-    ['事件で確認されたこと', '検察側の把握と主張', '資料を照合して分かること', '弁護側の結論']);
+  for (const issue of generatedPlayerView(session, runtime).caseStudy.issues) {
+    assert.ok(page.screen.querySelector('.case-study-reader').textContent.includes(issue.explanation),
+      '見出しのない審査済み説明も、内容を追加・省略せず全文表示する');
+  }
   await page.click('判決へ戻る');
   assert.equal(page.screen.querySelector('.case-study-reader'), null);
 });
@@ -574,6 +597,43 @@ test('spoken lines contain only the speaker and line, without instructional badg
     assert.equal(spoken.querySelector('.case-eyebrow'), null);
     assert.equal(spoken.querySelector('p').textContent, '記録を確かめましょう。');
   }
+});
+
+test('case explanations organize technical-evidence headings without dropping limits', async () => {
+  const explanation = [
+    '各資料を照合した結果です。',
+    '実際に起きたこと：記録された処理を確認しました。',
+    '検察側が把握していた範囲：アカウントの利用が確認されています。',
+    '資料から確認した因果関係：識別子が一致する資料を対応付けました。',
+    '判決理由：弁護側は無罪判決を求めます。',
+    '## 技術資料で確認した処理',
+    '- 保存と実行は異なる処理です。',
+    '- 記録が示すのは対象の処理です。',
+    '**照合による反駁：**保存投稿の識別値と閲覧要求の記録が一致しました。',
+    '保全対象と技術記録の対象を比較しました。',
+    '### 判断の限界',
+    '1. 観察していない処理の意図までは分かりません。',
+    '未分類の補足：<script>実行しない</script>という文字列も原文です。',
+  ].join('\n');
+  const page = ui({ ...base, currentState: 'ACQUITTED',
+    acquittal: { publicRuling: '被告人を無罪とします。' },
+    caseStudy: { incident: '審査済みの結論。', materials: [], issues: [{ explanation }] } });
+  await page.click('解説を開く');
+  const points = page.screen.querySelector('.case-explanation-points');
+  assert.ok(points);
+  assert.deepEqual(points.querySelectorAll('strong').map(item => item.textContent), [
+    '事件で確認されたこと', '検察側の把握と主張', '資料を照合して分かること', '弁護側の結論',
+    '技術資料で確認した処理', '照合による反駁', '判断の限界',
+  ]);
+  assert.deepEqual(points.querySelectorAll('p').map(item => item.textContent), [
+    '各資料を照合した結果です。', '記録された処理を確認しました。', 'アカウントの利用が確認されています。',
+    '識別子が一致する資料を対応付けました。', '弁護側は無罪判決を求めます。',
+    '保存と実行は異なる処理です。', '記録が示すのは対象の処理です。',
+    '保存投稿の識別値と閲覧要求の記録が一致しました。', '保全対象と技術記録の対象を比較しました。',
+    '観察していない処理の意図までは分かりません。',
+    '未分類の補足：<script>実行しない</script>という文字列も原文です。',
+  ]);
+  assert.equal(page.screen.querySelectorAll('script').length, 0);
 });
 
 test('closing dialogue precedes the complete one-page verdict without consuming a presentation', async () => {

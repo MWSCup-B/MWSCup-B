@@ -16,7 +16,8 @@ const names = ['attack-definition', 'network', 'scenario-context', 'candidate',
   'orchestrator-result', 'investigation-action', 'investigation-target',
   'evidence-discovery-rule', 'investigation-result', 'xss-prototype-selection',
   'xss-prototype-evaluation', 'scenario-configuration', 'network-preset', 'makotomaru-request',
-  'makotomaru-result', 'court-question', 'scenario-revision', 'scenario-selection', 'material-investigation-plan', 'technical-evidence-catalog'];
+  'makotomaru-result', 'court-question', 'scenario-revision', 'scenario-selection', 'material-investigation-plan', 'technical-evidence-catalog',
+  'evidence-semantic-review'];
 const schemas = new Map(await Promise.all(names.map(async name => [name,
   JSON.parse(await readFile(new URL(`../../schemas/${name}.schema.json`, import.meta.url), 'utf8')),
 ])));

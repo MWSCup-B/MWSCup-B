@@ -143,3 +143,20 @@ test('suspicion never quotes native values or testimony and stays within schema 
   assert.ok(long.length <= 1000);
   assert.ok(long.isWellFormed());
 });
+
+test('verified case explanation becomes speech using technical materials and limits', () => {
+  const explanation = [
+    '## 技術資料で確認した処理', '- 要求と処理結果の対応が確認されています。',
+    '**照合による反駁：**', '- 保存されたページの内容と端末記録の処理内容が対応しています。',
+    '照合による反駁：保全された入力内容は要求の記録と一致しています。',
+    '### 判断の限界', '- アカウントの記録から人物を特定したわけではありません。',
+    '判決理由：被告人を無罪とする。',
+  ].join('\n');
+  const game = { currentState: 'ACQUITTED', result: { publicExplanation: explanation } };
+  const speech = generatedSceneDialogue(game)[0].text;
+  assert.doesNotMatch(speech, /技術資料で確認した処理|資料間の照合|第三者の直接観察|調査報告|照合による反駁|判断の限界|判決理由|被告人を無罪とする|^[-#*]/m);
+  assert.match(speech, /保存されたページの内容と端末記録の処理内容が対応/);
+  assert.match(speech, /保全された入力内容は要求の記録と一致/);
+  assert.match(speech, /アカウントの記録から人物を特定したわけではありません/);
+  assert.equal(game.result.publicExplanation, explanation);
+});

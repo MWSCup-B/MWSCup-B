@@ -13,19 +13,20 @@
   ],
   "authoring": {
     "preferredInvestigationType": "FILE",
-    "evidenceAnswer": "対象実行ファイルの所有者・setuidビットと記録時点を確認する。 / 実行記録の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
+    "evidenceAnswer": "対象実行ファイルのパス・所有者・setuidビットと記録時点を確認する。 / 実行記録の実行ファイルのパス、親子関係、実効UIDを照合する。ビットの存在だけから成功を断定しない。",
     "sourceNodeBinding": "host",
     "targetServiceBinding": "service",
     "investigationServiceBinding": "service"
   },
   "incidentNarrative": {
     "impactEffectPredicate": "privileged_execution",
+    "attributionObservation": "立会人は被告人と面識があり、操作を行っていた人物が被告人とは異なることを直接確認している。立会人が目撃したのは、対象ホストの一般ユーザーのシェルから、対象のsetuid実行ファイルを起動した場面である。立会時に保全された対象や操作内容を技術資料と比較して、どの処理についての観察かを確認する。端末名やアカウント名から人物を推定した供述ではない。",
     "requiredArtifactIds": ["setuid_metadata_record", "setuid_execution_record"],
     "attackerAction": "被告人とは別の攻撃者が、対象ホストで得ていた一般利用者の権限を足掛かりに、安全でない処理を持つsetuid root実行ファイルを悪用した。その結果、攻撃者が操作できるプロセスがroot実効UIDで起動した。",
     "impact": "設定不備のあるsetuid実行ファイルを通じ、別の攻撃者が対象ホスト上でroot実効UIDのプロセスを操作できる状態になった。",
     "allegation": "root実効UIDのプロセスが、被告人のアカウントから開始されたプロセス系列の一部として記録されていたため、検察側は、被告人がroot権限で処理を直接実行したと主張している。",
     "prosecutionKnowledge": "検察側は、対象プロセスがroot実効UIDで起動したことを把握している。一方、実行ファイルの所有者・setuidビット・安全でない処理と親子プロセスの関係を評価せず、実効UIDまたは開始ユーザーを実際の操作者と取り違えている。",
-    "causalRefutation": "setuid実行ファイルの所有者・モード・記録時点と、実行記録の親子関係・開始ユーザー・実効UID・時刻を照合する。これにより、root処理は別の攻撃者が設定不備を悪用して得たものであり、被告人が正規の管理操作として直接起動したものではないことが分かる。",
+    "causalRefutation": "取得可能な技術資料を同一の対象・処理識別子・記録範囲に基づいて比較し、各段階の処理と結果を確認する。さらに、第三者の直接観察を記した調査報告の対象・操作内容を、その技術資料と照合する。人物の相違は立会人の直接観察を根拠とし、技術資料との対応によって、その別人の操作が本件の処理に結び付くことを示す。ログのアカウント一致や時刻の近さだけを人物・因果の証明にしない。必要な対応が不足する場合は論証未成立として差し戻す。",
     "verdictBasis": "rootプロセスを成立させたのは設定不備を悪用した別の攻撃者であり、root実効UIDは被告人本人を示すものではない。被告人による直接の管理者操作という検察側の構成とは両立しない。この事実は、弁護側が被告人に無罪判決を求める根拠となる。"
   },
   "bindings": [
@@ -143,7 +144,7 @@
     },
     {
       "id": "setuid_execution_record",
-      "description": "実行記録の親子関係と実効UIDを確認する。ビットの存在だけから成功を断定しない。",
+      "description": "実行記録の実行ファイルのパス、親子関係、実効UIDを確認し、属性を確認した同じファイルの実行と照合する。ビットの存在だけから成功を断定しない。",
       "acquisition": {
         "binding": "host",
         "logSource": "DEVICE",

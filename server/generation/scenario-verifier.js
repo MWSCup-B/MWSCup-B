@@ -90,6 +90,7 @@ function buildAllowedReviewRefs(generationInput, scenarioPackage, materials) {
     ...technicalInput.candidate.assignments.map(item => `candidate.attack:${item.attackId}`),
     ...technicalInput.attackDefinitions.map(item => `attackDefinition:${item.id}`),
     ...scenarioPackage.groundTruth.technicalFacts.map(item => `groundTruth.fact:${item.factId}`),
+    ...(scenarioPackage.groundTruth.caseFacts ?? []).map(item => `caseFact:${item.factId}`),
     ...scenarioPackage.timeline.events.map(item => `timeline.event:${item.eventId}`),
     ...scenarioPackage.characters.characters.map(item => `character:${item.characterId}`),
     ...scenarioPackage.learningObjectives.objectives.map(item => `learningObjective:${item.objectiveId}`),
@@ -204,7 +205,7 @@ export function buildScenarioReviewReferenceRules(input) {
   const prefixes = {
     EVIDENCE_GROUND_ALIGNMENT: {
       subject: hasRequirements ? ['evidenceRequirement:'] : ['scenarioDraft:'],
-      source: ['attackGraph.artifact:', 'timeline.event:', 'groundTruth.fact:', 'character:'],
+      source: ['attackGraph.artifact:', 'timeline.event:', 'groundTruth.fact:', 'character:', 'caseFact:'],
     },
     LEARNING_OBJECTIVE_ALIGNMENT: {
       subject: hasObjectives ? ['learningObjective:'] : ['scenarioDraft:'],
@@ -212,15 +213,15 @@ export function buildScenarioReviewReferenceRules(input) {
     },
     FACT_NARRATIVE_SEPARATION: {
       subject: ['groundTruth.fact:', 'scenarioDraft:', 'evidenceRequirement:', 'character:'],
-      source: ['attackGraph.node:', 'attackGraph.edge:', 'groundTruth.fact:'],
+      source: ['attackGraph.node:', 'attackGraph.edge:', 'groundTruth.fact:', 'caseFact:'],
     },
     IDENTITY_ATTRIBUTION: {
       subject: input.scenarioPackage.characters.characters.length ? ['character:'] : ['scenarioDraft:'],
-      source: ['groundTruth.fact:', 'attackGraph.node:', 'scenarioContext.'],
+      source: ['groundTruth.fact:', 'attackGraph.node:', 'scenarioContext.', 'caseFact:'],
     },
     INVESTIGATION_COVERAGE: {
       subject: hasRequirements ? ['evidenceRequirement:'] : ['scenarioDraft:'],
-      source: ['attackGraph.artifact:', 'timeline.event:', 'groundTruth.fact:', 'character:'],
+      source: ['attackGraph.artifact:', 'timeline.event:', 'groundTruth.fact:', 'character:', 'caseFact:'],
     },
     REFERENCE_CONTENT_ALIGNMENT: {
       subject: ['referenceMaterial:'], source: ['referenceMaterial:'],
@@ -252,9 +253,19 @@ export function validateScenarioVerificationReview(review, input) {
       `scenario-verification-review.checks.${check.checkId}.subjectRefs`);
     ensureUnique(check.sourceRefs, item => item,
       `scenario-verification-review.checks.${check.checkId}.sourceRefs`);
-    if ([...check.subjectRefs, ...check.sourceRefs].some(ref => !allowedRefs.has(ref))) {
-      fail('UNSUPPORTED_REVIEW_REFERENCE', `scenario-verification-review.checks.${check.checkId}`,
-        '独立レビューがVerification Inputに存在しない対象または根拠を参照しています。');
+    const unsupported = ['subjectRefs', 'sourceRefs'].flatMap(kind => check[kind]
+      .map((ref, index) => ({ kind, index, ref })).filter(item => !allowedRefs.has(item.ref)));
+    if (unsupported.length) {
+      const first = unsupported[0];
+      const details = unsupported.slice(0, 3).map(item => {
+        const value = JSON.stringify(item.ref).replace(/[\u007f-\u009f\u2028\u2029]/g, ' ');
+        return `${item.kind}[${item.index}]=${value.length > 180 ? `${value.slice(0, 179)}…` : value}`;
+      }).join('、');
+      fail('UNSUPPORTED_REVIEW_REFERENCE',
+        `scenario-verification-review.checks.${check.checkId}.${first.kind}[${first.index}]`,
+        `${check.category}: allowedReviewRefsに存在しない参照です: ${details}`
+        + (unsupported.length > 3 ? `（ほか${unsupported.length - 3}件）` : '')
+        + '。入力の許可参照を確認して再レビューし、推測した参照へ置換しないでください。');
     }
     const rule = referenceRules[check.category];
     if (!check.subjectRefs.some(ref => rule.subjectRefs.includes(ref))

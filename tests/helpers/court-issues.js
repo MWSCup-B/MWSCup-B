@@ -2,6 +2,7 @@ import { correctCourtChoiceId } from '../../server/generation/court-questions.js
 import { actGenerated } from '../../server/generated-game.js';
 import { procedureMethods } from '../../server/generation/investigation-procedures.js';
 import { requiredCourtEvidence } from '../../server/generation/investigation-workspace.js';
+import { courtEvidenceLines } from '../../server/generation/court-evidence.js';
 
 export function inspectMaterial(session, runtime, materialId) {
   const plan = runtime.gameCase.progression.materialInvestigations?.find(item => item.evidenceId === materialId);
@@ -18,7 +19,9 @@ export function collectCurrentTarget(session, runtime) {
   if (runtime.gameCase.progression.investigationMode === 'OPEN_MATERIALS') {
     for (const materialId of requiredCourtEvidence(runtime.gameCase, session.currentRound)) {
       actGenerated(session, runtime, { action: 'workspace-read', materialId });
-      actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
+      for (const line of courtEvidenceLines(runtime.gameCase, session.currentRound, materialId)) {
+        actGenerated(session, runtime, { action: 'save-fact', materialId, line });
+      }
     }
     return;
   }

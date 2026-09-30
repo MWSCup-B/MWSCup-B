@@ -9,6 +9,7 @@ import { ValidationError, fail, validateDocument } from './schema.js';
 import { correctCourtChoiceId, publicCourtQuestion } from './court-questions.js';
 import { isSequential, isOpenMaterials, stageEvidenceIds } from './sequential-investigation.js';
 import { requiredCourtEvidence } from './investigation-workspace.js';
+import { courtEvidenceLines } from './court-evidence.js';
 
 const CATEGORIES = ['UPSTREAM_INTEGRITY', 'NORMAL_PLAYTHROUGH', 'RETRY_PLAYTHROUGH',
   'LIMIT_PLAYTHROUGH', 'INVESTIGATION_REACHABILITY', 'INVESTIGATION_DISCLOSURE',
@@ -131,7 +132,8 @@ function discoverEvidence(session, runtime, evidenceIds) {
       for (const materialId of [...pending]) {
         try {
           actGenerated(session, runtime, { action: 'workspace-read', materialId });
-          actGenerated(session, runtime, { action: 'save-fact', materialId, line: 1 });
+          const lines = courtEvidenceLines(runtime.gameCase, session.currentRound, materialId);
+          for (const line of lines) actGenerated(session, runtime, { action: 'save-fact', materialId, line });
           pending.delete(materialId);
         } catch (error) {
           if (error.code !== 'MATERIAL_PREREQUISITES_REQUIRED') throw error;
@@ -173,7 +175,7 @@ function collectForCourt(session, runtime, extraIds = [], pair) {
     : runtime.gameCase.progression.investigation.requiredForCourtIds;
   const ids = [...new Set([...required, ...extraIds])];
   if (!discoverEvidence(session, runtime, ids)) throw new Error('Evidence discovery failed');
-  for (const evidenceId of ids) {
+  for (const evidenceId of isOpenMaterials(runtime.gameCase) ? [] : ids) {
     actGenerated(session, runtime, { action: 'collect', evidenceId });
   }
   returnToCourt(session, runtime, pair);

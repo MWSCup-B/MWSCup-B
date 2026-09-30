@@ -312,7 +312,8 @@ test('Manualは独立検証後のPreviewで停止しUser Approval前にEvidence�
   assert.equal(view.scenarioPreview.verification.status, 'VERIFIED');
   assert.equal(runner.evidenceCalls, 0); assert.equal(view.playUrl, null); assert.equal(view.canApprove, true);
   manager.approve(session); await manager.waitForIdle(); view = autoAuthorView(session);
-  assert.equal(view.currentState, 'READY'); assert.equal(session.verificationResult.status, 'VERIFIED');
+  assert.equal(view.currentState, 'READY', JSON.stringify(view.developerDetails));
+  assert.equal(session.verificationResult.status, 'VERIFIED');
 });
 
 test('User Rejectは設定へ戻り、真実丸はinvalid outputを最大3回内で自動修正する', async () => {
@@ -463,28 +464,37 @@ test('全要件IDを列挙してもWeb観測資料をメールで代用したEvi
   assert.ok(result.errors.some(item => item.code === 'OBSERVABLE_EVIDENCE_NOT_COVERED'));
 });
 
-test('E2E A: MANUAL 2 Attack / ★★ は調査チェーン2・異なる3争点・ACQUITTEDへ到達する', async () => {
+test('E2E A: MANUAL 2 Attack / ★★ は調査チェーン2・攻撃別4争点・ACQUITTEDへ到達する', async () => {
   const manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
   const session = createAutoAuthorSession(); manager.submitManual(session,
     createDefaultConfiguration({ difficulty: 2, attackIds: ['phishing', 'reflected_xss'] }));
   await manager.waitForIdle(); manager.approve(session); await manager.waitForIdle();
-  assert.equal(session.auto.state, 'READY'); assert.equal(session.evidenceChain.length, 2);
-  assert.equal(session.dialoguePlan.rounds.length, 3);
-  assert.equal(session.runtime.gameCase.progression.courtRoundCount, 3);
+  assert.equal(session.auto.state, 'READY', JSON.stringify(autoAuthorView(session).developerDetails));
+  assert.equal(session.evidenceChain.length, 2);
+  assert.equal(session.dialoguePlan.rounds.length, 4);
+  assert.equal(session.runtime.gameCase.progression.courtRoundCount, 4);
+  const stages = session.scenarioPackage.evidenceRequirements.requirements
+    .filter(item => item.investigationStage).sort((left, right) =>
+      left.investigationStage.order - right.investigationStage.order);
+  assert.deepEqual(stages.map(item => item.investigationStage.sourceNodeId),
+    ['mail-host', 'web-host', 'web-host', 'client-host']);
+  assert.notEqual(stages[1].investigationStage.claim, stages[2].investigationStage.claim);
+  for (const stage of stages) assert.equal(new Set(stage.grounds
+    .filter(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT').map(ground => ground.attackNodeId)).size, 1);
   const game = playToAcquittal(session.runtime); assert.equal(game.currentState, 'ACQUITTED');
-  assert.equal(game.currentRound, 3);
+  assert.equal(game.currentRound, 4);
 });
 
-test('E2E B: MAKOTOMARU ★★★ はPreview・3調査対象ごとの審理を経てACQUITTEDになる', async () => {
+test('E2E B: MAKOTOMARU ★★★ はPreview・攻撃別4段階の審理を経てACQUITTEDになる', async () => {
   const manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
   const session = createAutoAuthorSession(); manager.startMakotomaru(session, {
     schemaVersion: '1.0', difficulty: 3, attackCategory: 'ANY', complexity: 'COMPLEX' });
   await manager.waitForIdle(); assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
   manager.approve(session); await manager.waitForIdle(); assert.equal(session.auto.state, 'READY');
-  assert.equal(session.evidenceChain.length, 3); assert.equal(session.dialoguePlan.rounds.length, 3);
-  assert.equal(session.runtime.gameCase.progression.courtRoundCount, 3);
+  assert.equal(session.evidenceChain.length, 3); assert.equal(session.dialoguePlan.rounds.length, 4);
+  assert.equal(session.runtime.gameCase.progression.courtRoundCount, 4);
   const game = playToAcquittal(session.runtime); assert.equal(game.currentState, 'ACQUITTED');
-  assert.equal(game.currentRound, 3);
+  assert.equal(game.currentRound, 4);
 });
 
 test('Dialogue Assignmentは固定Templateへslotを割り当てる', () => {

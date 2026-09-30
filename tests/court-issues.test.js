@@ -81,14 +81,19 @@ for (const difficulty of [1, 2, 3]) test(`★${difficulty}: all materials initia
 
 test('questions needing a future investigation are rejected within the bounded revision loop', async () => {
   const { author, runner } = await generate({ changeDraft: draft => {
-    for (const item of draft.contradictions) item.conflictingEvidenceIds = ['evidence_technical_a', 'evidence_technical_b'];
+    for (const item of draft.contradictions) item.conflictingEvidenceIds = [...new Set([
+      ...item.conflictingEvidenceIds, 'evidence_technical_a', 'evidence_technical_b',
+    ])];
     syncQuestionQuotes(draft);
     for (const question of draft.courtQuestions) question.explanation += question.supportingQuotes
       .map(item => observationAnchors(item.quote)[0]).join('、');
   } });
   assert.equal(author.auto.state, 'FAILED'); assert.equal(author.runtime, null);
   assert.equal(runner.evidenceCalls, 2);
-  assert.ok(author.auto.details.some(item => item.code === 'SEQUENTIAL_INVESTIGATION_UNSOLVABLE'));
+  const scopeErrors = author.auto.details.filter(item => item.code === 'INVESTIGATION_STAGE_EVIDENCE_SCOPE_MISMATCH');
+  assert.deepEqual([...new Set(scopeErrors.map(item => item.attempt))], [1, 2], JSON.stringify(author.auto.details));
+  assert.ok(scopeErrors.some(item => /第1段階とは別の争点の資料/.test(item.reason)));
+  assert.ok(scopeErrors.every(item => item.field.startsWith('evidenceSet.contradictions.')));
 });
 
 test('a stage cannot reuse an earlier source as its only support', async () => {

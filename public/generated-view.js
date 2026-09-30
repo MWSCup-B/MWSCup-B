@@ -319,14 +319,29 @@ export function caseStudyView(study) {
       ['検察側の把握と主張', '検察側の把握と主張'], ['検察側が把握していた範囲', '検察側の把握と主張'],
       ['資料を照合して分かること', '資料を照合して分かること'], ['資料から確認した因果関係', '資料を照合して分かること'],
       ['弁護側の結論', '弁護側の結論'], ['判決理由', '弁護側の結論'],
+      ['技術資料で確認した処理', '技術資料で確認した処理'],
+      ['照合による反駁', '照合による反駁'], ['判断の限界', '判断の限界'],
     ]);
-    const parsed = String(issue.explanation ?? '').split(/\n+/).map(line => {
-      const match = /^([^：]+)：(.*)$/s.exec(line.trim());
-      return match && labels.has(match[1]) ? { label: labels.get(match[1]), text: match[2].trim() } : null;
-    }).filter(Boolean);
-    if (parsed.length) {
+    const parsed = [];
+    let current;
+    for (const line of String(issue.explanation ?? '').split(/\r?\n/)) {
+      const text = line.trim().replace(/^#{1,6}\s+/, '').replace(/^(?:[-*・]|\d+[.)])\s+/, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1');
+      if (!text) continue;
+      const match = /^([^：:]+)[：:](.*)$/s.exec(text);
+      const label = labels.get(match?.[1] ?? text);
+      if (label) {
+        current = { label, lines: match?.[2].trim() ? [match[2].trim()] : [] };
+        parsed.push(current);
+      } else if (current) current.lines.push(text);
+      else parsed.push({ lines: [text] });
+    }
+    if (parsed.some(point => point.label)) {
       for (const point of parsed) {
-        const item = el('li'); item.append(el('strong', point.label), el('p', point.text)); points.append(item);
+        const item = el('li');
+        if (point.label) item.append(el('strong', point.label));
+        for (const text of point.lines) item.append(el('p', text));
+        points.append(item);
       }
       section.append(points);
     } else section.append(el('p', issue.explanation));
@@ -610,7 +625,7 @@ export function renderGeneratedGame({ screen, game, action }) {
         targets.append(methods);
       }
       const result = el('div', undefined, 'case-search-result'); result.setAttribute('role', 'status');
-      result.append(el('strong', '調査報告'), el('p', game.lastInvestigationResult?.publicMessage ?? '調査方法を選んで記録を確認してください。'));
+      result.append(el('strong', '調査結果'), el('p', game.lastInvestigationResult?.publicMessage ?? '調査方法を選んで記録を確認してください。'));
       for (const hint of game.lastInvestigationResult?.nextHints ?? []) result.append(el('p', hint));
       targets.append(result);
       workspace.append(targets, evidenceBrowser(game.discoveredEvidence, draw,

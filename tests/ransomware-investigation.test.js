@@ -120,8 +120,17 @@ for (const attackIds of [['ransomware'], ['clickfix', 'ransomware'], ['phishing'
     assert.ok(materials.some(item => item.title === 'バックアップから取得した元ファイル'));
     assert.equal(materials.filter(item => item.title.includes('SSH')).length, 0);
     const requirements = author.scenarioPackage.evidenceRequirements.requirements.filter(item => item.investigationStage);
-    assert.match(requirements.at(-1).investigationStage.claim, /被告人本人.*意図的/);
-    if (attackIds.includes('clickfix')) assert.ok(requirements.at(-1).grounds.some(ref => ref.sourceId === 'clickfix_page_record'));
+    // Verify the concrete accusation, not the wording of the superseded
+    // generic intentional-damage claim. Induced use of a device is not denied.
+    assert.match(requirements.at(-1).investigationStage.claim, /被告人が自らランサムウェアを実行/);
+    if (attackIds.includes('clickfix')) {
+      const clickfix = author.generationInput.technicalInput.attackGraph.nodes.find(node => node.attackDefinitionId === 'clickfix');
+      const completion = requirements.filter(requirement => requirement.grounds.some(ref => ref.attackNodeId === clickfix.nodeId)).at(-1);
+      assert.match(completion.investigationStage.claim, /被告人が攻撃用処理を作成し、攻撃目的で当該処理を直接起動/);
+      assert.ok(completion.grounds.some(ref => ref.sourceId === 'clickfix_page_record'));
+      assert.ok(completion.grounds.every(ref => ref.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+      assert.ok(requirements.at(-1).grounds.every(ref => ref.attackNodeId !== clickfix.nodeId));
+    }
     const player = createGeneratedGame(runtime);
     actGenerated(player, runtime, { action: 'begin' }); actGenerated(player, runtime, { action: 'continue' });
     assert.deepEqual(generatedPlayerView(player, runtime).workbench.comparisons, []);

@@ -51,7 +51,7 @@ test('XSS + Network C + ★3をReview修正後にGAME READYまで自動実行す
   // 2026-09-24 修正前: 統合前の契約。
 // ['evidence-generation-draft', 'scenario-revision', 'scenario-verification-review']);
 // 2026-09-24 修正後: main制作画面・初回設計とkawata-workのゲーム生成を統合。
-['evidence-generation-draft', 'scenario-import-package', 'scenario-revision', 'scenario-verification-review']);
+['evidence-generation-draft', 'evidence-semantic-review', 'scenario-import-package', 'scenario-revision', 'scenario-verification-review']);
   assert.ok(runner.calls.filter(item => item.kind === 'invocation')
     .every(item => item.hasOutputSchema));
   assert.ok(view.progress.every(item => item.status === 'COMPLETE'

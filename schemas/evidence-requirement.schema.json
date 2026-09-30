@@ -21,7 +21,7 @@
         "type": "object",
         "properties": {
           "requirementId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
-          "purpose": { "enum": ["ATTACK_TRACE", "TIMELINE_PROOF", "IDENTITY_PROOF", "CONTRADICTION_PROOF", "EXONERATION_PROOF"] },
+          "purpose": { "enum": ["ATTACK_TRACE", "TIMELINE_PROOF", "CONTRADICTION_PROOF", "EXONERATION_PROOF"] },
           "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
           "investigationStage": {
             "type": ["object", "null"],
@@ -52,7 +52,7 @@
               "additionalProperties": false
             },
             "minItems": 1,
-            "maxItems": 32
+            "maxItems": 64
           },
           "learningObjectiveIds": {
             "type": "array",

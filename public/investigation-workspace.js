@@ -17,8 +17,17 @@ export function renderInvestigationWorkspace(game, state, action, redraw, { el, 
     button('保存した証拠を基に反論を考える', () => switchMode('submission'), '',
       !(game.workbench.canChooseEvidence ?? materials.some(item => item.collected))));
   const progress = game.workbench.progress;
-  toolbar.append(el('span', `${progress.complete ? '調査完了' : '証拠を収集中'} ${progress.collected} / ${progress.required}`));
-  root.append(toolbar);
+  const savedLineCount = materials.reduce((total, item) => total + (item.savedFacts?.length ?? 0), 0);
+  const savedMaterialCount = materials.filter(item => item.collected || (item.savedFacts?.length ?? 0) > 0).length;
+  const progressStatus = el('div', undefined, 'workspace-progress-status');
+  progressStatus.append(
+    el('span', `${progress.complete ? '必要資料の保存完了' : '今回の争点に必要な資料'} ${progress.collected} / ${progress.required}`, 'workspace-required-count'),
+    el('span', `保存済み原文 ${savedLineCount} 行 / ${savedMaterialCount} 資料`, 'workspace-saved-count'));
+  toolbar.append(progressStatus);
+  toolbar.append(button('保存した証拠をすべて取り消す', () => {
+    action('clear-saved-evidence');
+  }, 'workspace-clear-saved-evidence', savedMaterialCount === 0));
+  root.append(toolbar, el('p', '資料を開いただけでは原文は保存されません。「原文を証拠として保存」を押すと、保存済み原文の件数に反映されます。上段の進捗は今回の争点で必要な資料だけを数えるため、別の争点で使う資料を保存しても増えません。調査回が切り替わると保存状況はリセットされます。', 'workspace-progress-help'));
   if (mode === 'submission') { root.append(submission()); return root; }
   if (['notes', 'talk', 'hint', 'network', 'report'].includes(mode)) {
     const page = el('section', undefined, 'workspace-auxiliary');
@@ -31,7 +40,12 @@ export function renderInvestigationWorkspace(game, state, action, redraw, { el, 
     } else if (mode === 'talk') {
       page.append(el('h2', '検察側の主張'), el('p', game.investigationClaim?.spokenContent ?? '資料を照合してください。'));
     } else if (mode === 'hint') {
-      const hints = [
+      const storedXss = materials.some(item => item.label.includes('ブラウザ通信の開始元記録'));
+      const hints = storedXss ? [
+        'Hint1：まず、投稿を保存した記録、投稿を表示した要求、ブラウザでの実行記録を区別しましょう。保存されたことだけでは、誰が投稿を作成したかや、閲覧時にスクリプトが実行されたかまでは分かりません。',
+        'Hint2：ブラウザの動作記録では、閲覧要求のrequest_id、対象投稿のpost_id、execution_id、実行結果を確認します。通信の開始元記録では、view_request_id、source_post_id、execution_id、initiator_type、source_locationを見て、同じ投稿・閲覧・実行の記録か照合します。',
+        'Hint3：投稿の保存記録と閲覧・実行記録で、post_id、要求ID、execution_idなどが対応しているか確かめましょう。保存内容、実行結果、通信の開始元を合わせて読むと、投稿が保存された段階と、閲覧後に発生した処理を区別できます。ログに記録された利用者や端末だけから、投稿の作成者本人まで断定しないでください。',
+      ] : [
         'Hint1：まず、各資料に実際に記録された事実と、検察側がそこから導いた解釈を分けてください。IPアドレスやアカウントの一致だけでは、操作した人物までは特定できません。',
         'Hint2：同じ時間帯の複数資料を照合し、送信元・送信先・相関ID・処理結果が対応しているか確認してください。一つの資料だけで、入力が処理へ至った経路や、記録上の実行主体を断定しないことが重要です。',
         `Hint3：この争点では、必要な記録が ${progress.required} 件あります。検察側の直接操作説と、別の攻撃経路のどちらが記録全体と矛盾なく整合するかを検討してください。`,
