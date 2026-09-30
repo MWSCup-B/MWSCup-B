@@ -1,4 +1,5 @@
 import { parseCodexJson } from './codex-output-parser.js';
+import { normalizeAutoCodexOutput } from './auto-output-schemas.js';
 
 export class CodexJsonRunner {
   constructor(runner) { this.runner = runner; }
@@ -19,6 +20,6 @@ export class CodexJsonRunner {
         '</VALIDATION_FEEDBACK>'] : []), ''].join('\n');
     const stdout = await this.runner.run({ prompt, outputSchemaPath, outputSchema,
       outputSchemaName, phase, signal, timeoutMs, generationSettings });
-    return parseCodexJson(stdout, phase);
+    return normalizeAutoCodexOutput(parseCodexJson(stdout, phase), outputSchemaName);
   }
 }

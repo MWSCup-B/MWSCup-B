@@ -8,6 +8,7 @@ import { buildEvidenceInvestigationPlan } from '../server/generation/investigati
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { startAuthorDom } from './helpers/author-dom.js';
 import { SCENARIO_PROMPT_TEMPLATE } from '../server/generation/scenario-interface.js';
+import { buildCaseStudy } from '../server/generation/material-investigation.js';
 
 const bootstrap = autoAuthorBootstrap(), catalog = await loadCatalog();
 // 2026-09-24 修正前: mainの9攻撃用構成。
@@ -28,6 +29,9 @@ test('コメント保存した旧生成指示をAIへ送信しない', async () 
   manager.startMakotomaru(session, { schemaVersion: '1.0', difficulty: 1, attackCategory: 'ANY', complexity: 'STANDARD' });
   await manager.waitForIdle();
   assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
+  assert.equal(session.configuration.incidentDesign, 'ATTACK_CAUSED_HARM_V1');
+  assert.equal(session.scenarioPackage.groundTruth.incidentNarratives.length,
+    session.configuration.attacks.length);
   assert.doesNotMatch(SCENARIO_PROMPT_TEMPLATE, /<!--|grounds`不足を指摘された場合/);
 });
 function configuration(ids) {
@@ -42,13 +46,62 @@ for (const ids of [...catalog.map(a => [a.id]), ['sql_injection', 'reflected_xss
   ['valid_account_ssh', 'setuid_misconfiguration', 'protected_file_collection'],
   ['phishing', 'path_traversal', 'valid_account_ssh', 'sudo_misconfiguration', 'protected_file_collection', 'windows_service_permissions']]) {
   test(`任意選択 ${ids.join(' / ')} が承認・証拠生成・評価を経てREADYになる`, async () => {
-    const input = configuration(ids), manager = new AutoGenerationManager({ jsonRunner: new MockCodexRunner() });
+    const input = configuration(ids), runner = new MockCodexRunner();
+    const runJson = runner.runJson.bind(runner);
+    let submittedQuestions;
+    runner.runJson = async args => {
+      const output = await runJson(args);
+      if (output.courtQuestions) submittedQuestions = structuredClone(output.courtQuestions);
+      return output;
+    };
+    const manager = new AutoGenerationManager({ jsonRunner: runner });
     const session = createAutoAuthorSession(); manager.submitManual(session, input); await manager.waitForIdle();
     assert.equal(session.auto.state, 'SCENARIO_PREVIEW', JSON.stringify(session.auto.details));
+    const narratives = session.scenarioPackage.groundTruth.incidentNarratives;
+    assert.equal(narratives.length, ids.length, ids.join(' / '));
+    assert.ok(narratives.every(item => /別の攻撃者/.test(item.attackerAction)
+      && /可能性を排除できない/.test(item.verdictBasis)
+      && /第三者が実行したと断定.*しない/.test(item.verdictBasis)));
     manager.approve(session); await manager.waitForIdle();
     assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));
     assert.equal(session.evaluationResult.status, 'ACCEPTED');
     assert.deepEqual(session.configuration, input);
+    const caseStudy = buildCaseStudy(session.runtime);
+    const explanation = caseStudy.incident;
+    assert.ok(caseStudy.issues.every(issue => explanation.includes(issue.explanation)),
+      'the closing explanation carries the explanation for every attack-specific court issue');
+    const questions = session.runtime.gameCase.progression.courtIssues
+      .filter(issue => issue.question).map(issue => issue.question);
+    assert.ok(questions.every(question => explanation.includes(question.explanation)),
+      'the closing explanation preserves each attack-specific court explanation');
+    const artifacts = session.evidenceImportResult.evidenceSet.evidenceArtifacts;
+    assert.ok(artifacts.every(artifact => !Object.hasOwn(artifact, 'caseSupport')
+      && artifact.sourceRefs.every(ref => ref.sourceType !== 'CASE_FACT')));
+    const stages = session.scenarioPackage.evidenceRequirements.requirements
+      .filter(requirement => requirement.investigationStage);
+    assert.equal(stages.length, questions.length);
+    assert.equal(session.scenarioPackage.groundTruth.caseFacts?.length ?? 0, 0);
+    assert.ok(session.scenarioPackage.evidenceRequirements.requirements
+      .every(requirement => requirement.purpose !== 'IDENTITY_PROOF'
+        && requirement.grounds.every(ground => ground.sourceType !== 'CASE_FACT')));
+    for (const narrative of narratives) {
+      const routedIds = new Set(stages.flatMap(stage => stage.grounds
+        .filter(ground => ground.attackNodeId === narrative.attackNodeId)
+        .map(ground => ground.sourceId)));
+      assert.ok(narrative.requiredArtifactIds.every(id => routedIds.has(id)),
+        `all required technical materials are routed for ${narrative.attackNodeId}`);
+    }
+    for (const stage of stages) {
+      assert.ok(stage.grounds.every(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+      for (const ground of stage.grounds) {
+        assert.ok(artifacts.some(artifact => artifact.type !== 'TESTIMONY' && artifact.sourceRefs.some(ref =>
+          ref.sourceType === ground.sourceType && ref.attackNodeId === ground.attackNodeId
+          && ref.sourceId === ground.sourceId)), `required technical material ${ground.sourceId} remains player evidence`);
+      }
+    }
+    assert.ok(artifacts.some(artifact => artifact.type === 'EMAIL') || !ids.some(id => ['phishing', 'credential_phishing'].includes(id)));
+    assert.ok(artifacts.some(artifact => artifact.type === 'DOCUMENT') || !ids.includes('clickfix'));
+    assert.doesNotMatch(explanation, /その処理を被告人が行ったと判断できない/);
   });
 }
 test('単独の権限昇格は初期権限を明示し、SSH連鎖なら効果を使う', () => {

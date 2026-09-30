@@ -31,8 +31,8 @@
 | 有効アカウント悪用（SSH） | 認証情報と要求される認証・認可条件が揃い、一般ユーザーのシェル起動が許可される場合。rootを付与しない。 |
 | パストラバーサル | 入力を使うファイル参照の制限不備と、アプリケーションの対象ファイル読み取り・応答条件が必要。コード実行へ拡張しない。 |
 | sudo設定不備 | 一般ユーザーとして実行可能で、rootへの危険なsudo許可と認証条件が満たされる場合。 |
-| setuid設定不備 | 一般ユーザーが実行可能な安全でないsetuid rootプログラムと、setuidが実効制御で抑止されない条件が必要。 |
-| Windowsサービス実行ファイルの権限不備 | 書換え可能な実行ファイル、LocalSystemのサービス設定、書換え後の起動、実効制御の許可が必要。再起動権限やドメイン権限を自動付与しない。 |
+| setuid設定不備 | 一般ユーザーが実行可能な安全でないsetuid rootプログラムと、setuidの効果が実行時のセキュリティ制御で阻止されない条件が必要。 |
+| Windowsサービス実行ファイルの権限不備 | 書き換え可能な実行ファイル、LocalSystemのサービス設定、書き換え後の起動、その実行がアプリケーション制御で阻止されない条件が必要。再起動権限やドメイン権限を自動付与しない。 |
 | 保護ファイル収集（Linux） | 開始時または前段でroot実行権限を取得済みで、対象データも読み取り可能な場合。外部送信は含まない。 |
 
 追加テンプレート：`data/networks/enterprise-lab.json`。「Web・SSH・権限昇格の教材構成」をSubnet画面で明示的に適用する。既存構成は自動変更しない。新しいService Typeの`local_execution`はホスト上の実行環境を表し、通信リスナーの存在を意味しない。
@@ -51,7 +51,7 @@
 
 ## 技術資料
 
-成立条件の範囲は [MITRE ATT&CK Valid Accounts](https://attack.mitre.org/techniques/T1078/)、[sudo](https://attack.mitre.org/techniques/T1548/003/)、[setuid/setgid](https://attack.mitre.org/techniques/T1548/001/)、[Windowsサービス実行ファイルの権限](https://attack.mitre.org/techniques/T1574/010/)、[ローカルデータ収集](https://attack.mitre.org/techniques/T1005/)、[OWASP Path Traversal](https://community.owasp.org/attacks/Path_Traversal)を参照した。特定製品の標準ログを保証せず、必要な計測の有効化・取得・保持を教材条件として定義した。
+成立条件の範囲は [MITRE ATT&CK Valid Accounts](https://attack.mitre.org/techniques/T1078/)、[sudo](https://attack.mitre.org/techniques/T1548/003/)、[setuid/setgid](https://attack.mitre.org/techniques/T1548/001/)、[Windowsサービス実行ファイルの権限](https://attack.mitre.org/techniques/T1574/010/)、[ローカルデータ収集](https://attack.mitre.org/techniques/T1005/)、[OWASP Path Traversal](https://community.owasp.org/attacks/Path_Traversal)を参照した。特定製品の標準ログを保証せず、必要な記録機能の有効化・取得・保持を教材条件として定義した。
 
 ## 修正前コードの保持
 

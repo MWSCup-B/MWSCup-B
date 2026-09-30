@@ -1,6 +1,7 @@
 import test from 'node:test';
+import { courtEvidenceLines } from '../server/generation/court-evidence.js';
 import assert from 'node:assert/strict';
-import { executeMaterialCommand, commandTemplates, workspaceAction, workspaceMaterial, investigationProgress }
+import { executeMaterialCommand, commandTemplates, sourceLines, workspaceAction, workspaceMaterial, investigationProgress, requiredCourtEvidence }
   from '../server/generation/investigation-workspace.js';
 import { buildTechnicalEvidenceCatalog, technicalEvidenceCoverageIssues } from '../server/generation/technical-evidence-catalog.js';
 import { AutoGenerationManager, createAutoAuthorSession } from '../server/auto-generation-service.js';
@@ -49,13 +50,59 @@ test('observations never collect evidence and forged facts are rejected; complet
   assert.throws(() => workspaceAction(session, game, { action: 'save-observation', materialId: 'auth', field: 'source_ip', value: '192.0.2.20' }), { code: 'OBSERVATION_NOT_SEEN' });
   workspaceAction(session, game, { action: 'save-fact', materialId: 'auth', line: 1 });
   assert.equal(investigationProgress(session, game).complete, false);
-  session.collectedEvidenceIds.push('policy'); assert.equal(investigationProgress(session, game).complete, true);
+  workspaceAction(session, game, { action: 'remove-fact', materialId: 'auth', line: 1 });
+  assert.equal(session.collectedEvidenceIds.includes('auth'), true);
+  assert.equal(session.roundCollectedEvidenceIds.includes('auth'), false);
+  assert.deepEqual(workspaceMaterial(session, log).savedFacts, []);
+  workspaceAction(session, game, { action: 'save-fact', materialId: 'auth', line: 1 });
+  session.collectedEvidenceIds.push('policy'); session.roundCollectedEvidenceIds.push('policy');
+  assert.equal(investigationProgress(session, game).complete, true);
   const unusual = structuredClone(game);
   unusual.detective.evidence[0].evidenceId = 'constructor';
   unusual.detective.evidenceDiscoveryRules[0].evidenceId = 'constructor';
   workspaceAction(session, unusual, { action: 'workspace-read', materialId: 'constructor' });
   workspaceAction(session, unusual, { action: 'save-fact', materialId: 'constructor', line: 1 });
   assert.equal(workspaceMaterial(session, unusual.detective.evidence[0]).savedFacts[0].line, 1);
+});
+
+test('bulk clear removes current saved evidence without erasing investigation history or notes', () => {
+  const game = { detective: { evidence: [log], evidenceDiscoveryRules: [{ evidenceId: 'auth', targetId: 'server', actionId: 'read',
+    prerequisites: { requiredEvidenceIds: [], requiredCompletedActionIds: [] } }] },
+  progression: { courtIssues: [{ requiredEvidenceIds: ['auth'] }] } };
+  const session = { currentRound: 1, collectedEvidenceIds: ['auth', 'older'], roundCollectedEvidenceIds: ['auth', 'older'],
+    savedFacts: { auth: [{ line: 1, text: 'saved' }] }, wholeDocumentEvidenceIds: ['older'],
+    discoveredEvidenceIds: ['auth', 'older'], observedLines: { auth: [1] }, commandHistory: { auth: [{ command: 'head', output: 'line' }] },
+    savedObservations: [{ materialId: 'auth', field: 'source_ip', value: '192.0.2.10' }] };
+  workspaceAction(session, game, { action: 'clear-saved-evidence' });
+  assert.deepEqual(session.savedFacts, {});
+  assert.deepEqual(session.wholeDocumentEvidenceIds, []);
+  assert.deepEqual(session.roundCollectedEvidenceIds, []);
+  assert.deepEqual(session.collectedEvidenceIds, ['auth', 'older']);
+  assert.deepEqual(session.discoveredEvidenceIds, ['auth', 'older']);
+  assert.deepEqual(session.observedLines, { auth: [1] });
+  assert.deepEqual(session.commandHistory, { auth: [{ command: 'head', output: 'line' }] });
+  assert.equal(session.savedObservations.length, 1);
+});
+
+test('all source lines can be saved atomically from the selected material without client supplied text', () => {
+  const game = { detective: { evidence: [log], evidenceDiscoveryRules: [{ evidenceId: 'auth', targetId: 'server', actionId: 'read',
+    prerequisites: { requiredEvidenceIds: [], requiredCompletedActionIds: [] } }] },
+  progression: { courtIssues: [{ requiredEvidenceIds: ['auth'] }] } };
+  const session = { currentRound: 1, collectedEvidenceIds: [], discoveredEvidenceIds: [],
+    completedInvestigationActions: [], wholeDocumentEvidenceIds: ['auth'] };
+  workspaceAction(session, game, { action: 'save-all-facts', materialId: 'auth' });
+  assert.deepEqual(session.savedFacts.auth,
+    sourceLines(log).map((text, index) => ({ line: index + 1, text })));
+  assert.deepEqual(session.roundCollectedEvidenceIds, ['auth']);
+  assert.deepEqual(session.collectedEvidenceIds, ['auth']);
+  assert.deepEqual(session.discoveredEvidenceIds, ['auth']);
+  assert.deepEqual(session.wholeDocumentEvidenceIds, []);
+  assert.equal(workspaceMaterial(session, log).lineCount, 41);
+  assert.equal(workspaceMaterial(session, log).allFactsSaved, true);
+  workspaceAction(session, game, { action: 'remove-fact', materialId: 'auth', line: 2 });
+  assert.equal(workspaceMaterial(session, log).allFactsSaved, false);
+  workspaceAction(session, game, { action: 'save-all-facts', materialId: 'auth' });
+  assert.equal(session.savedFacts.auth.length, 41);
 });
 
 test('technical preflight and coverage require the available route and correct non-testimony type', () => {
@@ -91,6 +138,12 @@ for (const attacks of [['unauthorized_login'], ['password_spray'], ['password_sp
     const saved = structuredClone(session.savedObservations ?? []);
     assert.deepEqual(generatedPlayerView(session, runtime).workbench.savedObservations, saved);
     for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round++) {
+      for (const materialId of requiredCourtEvidence(runtime.gameCase, round)) {
+        actGenerated(session, runtime, { action: 'workspace-read', materialId });
+        for (const line of courtEvidenceLines(runtime.gameCase, round, materialId)) {
+          actGenerated(session, runtime, { action: 'save-fact', materialId, line });
+        }
+      }
       assert.equal(generatedPlayerView(session, runtime).workbench.progress.complete, true);
       const pair = currentCorrectPair(runtime, round);
       const court = actGenerated(session, runtime, { action: 'retrial', ...pair });
@@ -98,7 +151,12 @@ for (const attacks of [['unauthorized_login'], ['password_spray'], ['password_sp
         assert.deepEqual(item.savedFacts, session.savedFacts[item.evidenceId]);
         assert.equal(item.publicContent, session.savedFacts[item.evidenceId].map(fact => fact.text).join('\n'));
       }
-      actGenerated(session, runtime, { action: 'objection', ...pair });
+      const result = actGenerated(session, runtime, { action: 'objection', ...pair });
+      if (round < runtime.gameCase.progression.courtRoundCount) {
+        assert.deepEqual(session.roundCollectedEvidenceIds, []);
+        assert.deepEqual(session.savedFacts, {});
+        assert.ok(result.dialogue.some(line => line.text === result.investigationClaim.spokenContent));
+      }
     }
     assert.equal(session.currentState, 'ACQUITTED');
     const fresh = createGeneratedGame(runtime); actGenerated(fresh, runtime, { action: 'begin' });

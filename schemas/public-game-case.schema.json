@@ -7,6 +7,7 @@
     "gameCaseId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z][a-z0-9_-]*$" },
     "title": { "const": "セキュリティインシデント調査" },
     "synopsis": { "const": "取得可能な証拠と証言を確認し、主張の矛盾を指摘してください。" },
+    "networkDiagram": { "type": "object", "additionalProperties": true },
     "characters": {
       "type": "array",
       "items": {

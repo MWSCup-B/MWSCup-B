@@ -1,6 +1,8 @@
 import { correctCourtChoiceId } from '../../server/generation/court-questions.js';
 import { actGenerated } from '../../server/generated-game.js';
 import { procedureMethods } from '../../server/generation/investigation-procedures.js';
+import { requiredCourtEvidence } from '../../server/generation/investigation-workspace.js';
+import { courtEvidenceLines } from '../../server/generation/court-evidence.js';
 
 export function inspectMaterial(session, runtime, materialId) {
   const plan = runtime.gameCase.progression.materialInvestigations?.find(item => item.evidenceId === materialId);
@@ -14,6 +16,15 @@ export function inspectMaterial(session, runtime, materialId) {
 }
 
 export function collectCurrentTarget(session, runtime) {
+  if (runtime.gameCase.progression.investigationMode === 'OPEN_MATERIALS') {
+    for (const materialId of requiredCourtEvidence(runtime.gameCase, session.currentRound)) {
+      actGenerated(session, runtime, { action: 'workspace-read', materialId });
+      for (const line of courtEvidenceLines(runtime.gameCase, session.currentRound, materialId)) {
+        actGenerated(session, runtime, { action: 'save-fact', materialId, line });
+      }
+    }
+    return;
+  }
   const targetId = runtime.gameCase.progression.courtIssues[session.currentRound - 1].investigationTargetId;
   for (const rule of runtime.gameCase.detective.evidenceDiscoveryRules.filter(item => item.targetId === targetId)) {
     if (runtime.gameCase.progression.materialInvestigations) { inspectMaterial(session, runtime, rule.evidenceId); continue; }
@@ -41,7 +52,7 @@ export function addDistinctClaims(draft, count) {
     const statement = { ...structuredClone(original), statementId,
       spokenContent: claims[i] ?? `資料${i + 1}に記録があるので、操作した人の意図まで読み取れます。` };
     testimony.testimony.statements.splice(i, 0, statement);
-    testimony.publicContent += `\n架空の調査担当者の主張: 「${statement.spokenContent}」`;
+    testimony.publicContent += `\n検察側調査官の主張: 「${statement.spokenContent}」`;
     draft.contradictions.push({ ...structuredClone(draft.contradictions[0]),
       contradictionId: `contradiction_issue_${i + 1}`, statementRef: statementId,
       reason: 'この主張は資料の記録範囲を越えている。' });
@@ -50,7 +61,7 @@ export function addDistinctClaims(draft, count) {
     technicalAssessment: 'CONSISTENT', contradictionCandidate: false,
     groundTruthRefs: [...original.groundTruthRefs] };
   testimony.testimony.statements.push(statement);
-  testimony.publicContent += `\n架空の調査担当者の発言: 「${statement.spokenContent}」`;
+  testimony.publicContent += `\n検察側調査官の発言: 「${statement.spokenContent}」`;
   return draft;
 }
 

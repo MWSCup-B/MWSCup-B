@@ -82,8 +82,12 @@ for (const broken of [false, true]) test(`compact drafts ${broken ? 'reject brok
           for (const choice of step.choices) if (choice.operation.kind === 'LINES' && choice.operation.lastLine === lines.length)
             choice.operation.lastLine = 1;
       }
-      for (const quote of draft.courtQuestions.flatMap(question => question.supportingQuotes))
-        quote.quote = draft.evidenceArtifacts.find(item => item.evidenceId === quote.evidenceId).publicContent.split('\n')[0];
+      for (const quote of draft.courtQuestions.flatMap(question => question.supportingQuotes)) {
+        const source = draft.evidenceArtifacts.find(item => item.evidenceId === quote.evidenceId);
+        // Only compact the logs: the report still needs its observation and
+        // preserved target identifiers, not merely its heading.
+        if (source.type.endsWith('_LOG')) quote.quote = source.publicContent.split('\n')[0];
+      }
       return draft;
     }
   }

@@ -171,8 +171,8 @@ export function buildEvidenceGenerationDraftInput(input) {
     // Fingerprints still identify the canonical input, not this projection.
     evidenceAgentInput: structuredClone({ schemaVersion: agent.schemaVersion,
       evidenceAgentInputId: agent.evidenceAgentInputId, inputFingerprint: agent.inputFingerprint,
-      scenarioVerificationInput: agent.scenarioVerificationInput,
-      verificationResult: agent.verificationResult }),
+      scenarioVerificationInput: structuredClone(agent.scenarioVerificationInput),
+      verificationResult: structuredClone(agent.verificationResult) }),
     outputContract: { name: 'evidence-generation-draft', schemaVersion: '1.0',
       jsonSchema: structuredClone(EVIDENCE_GENERATION_DRAFT_SCHEMA) },
   };

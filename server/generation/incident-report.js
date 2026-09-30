@@ -1,5 +1,4 @@
 import { fail } from './schema.js';
-import { INCIDENT_DESIGN, INCIDENT_PROFILES } from './incident-design.js';
 
 // The opening is an allegation, never the private attack chain.
 const INCIDENTS = Object.freeze({
@@ -14,11 +13,10 @@ const INCIDENTS = Object.freeze({
   ransomware: '端末内のファイルが使用できなくなり、金銭を要求する文面が残される事案が発生しました。',
   unrestricted_file_upload: 'サービスで許可されていない内容のファイルが保存される事案が発生しました。',
 });
-export function buildIncidentOverview(configuration) {
+export function buildIncidentOverview(configuration, generationInput = null) {
   const context = configuration.incidentContext;
   const events = [...new Set(configuration.attacks.map(attack =>
-    (configuration.incidentDesign === INCIDENT_DESIGN && INCIDENT_PROFILES[attack.attackId]?.impact)
-      || INCIDENTS[attack.attackId]).filter(Boolean))];
+    INCIDENTS[attack.attackId]).filter(Boolean))];
   return `${context.incidentDate}、${context.organizationName}の${context.victimSystem}で、セキュリティ上の事件が発生しました。`
     + events.join('');
 }
@@ -31,10 +29,10 @@ const submittedMaterials = Object.freeze({
   AUTHENTICATION_LOG: 'サービスへの認証試行を記録した監査資料が提出されています',
   APPLICATION_LOG: 'アプリケーションで扱われた処理を調べるため、監査資料が提出されています',
   DATABASE_LOG: 'データベースで扱われたSQLを調べるため、監査資料が提出されています',
-  DEVICE_INFORMATION: '端末上の処理を調べるため、取得された計測資料が提出されています',
+  DEVICE_INFORMATION: '端末上の処理を調べるため、端末の動作記録が提出されています',
   FILE_METADATA: '保存ファイルの状態を調べるため、検査資料が提出されています',
   DOCUMENT: '事件に関係する文面・設定を確認するため、保存資料が提出されています',
-  NETWORK_LOG: '通信の状況を調べるため、取得された通信資料が提出されています',
+  NETWORK_LOG: '通信の状況を調べるため、通信記録が提出されています',
 });
 
 export function buildProsecutionOpening(openingEvidence, openingStatements = [], configuration = null) {
@@ -48,5 +46,5 @@ export function buildProsecutionOpening(openingEvidence, openingStatements = [],
   return (allegation ? `検察側の嫌疑：${allegation}\n\n` :
     '検察側は、提出資料に記録された操作を被告人によるものとし、事件への関与を主張する。\n\n')
     + `提出資料：${descriptions.join('。')}。`
-    + (hasTestimony ? '\n\n根拠となる供述は、関係者の供述欄に記載する。' : '');
+    + (hasTestimony ? '\n\n根拠となる供述は、関係者の供述欄に記載されています。' : '');
 }

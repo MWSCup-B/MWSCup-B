@@ -9,8 +9,8 @@ export const dummyCase = {
     text: '資料Aは存在しません。',
   },
   evidence: [
-    { id: 'document-a', title: '資料A', kind: '架空設定（ダミー資料）', text: 'これは資料Aです。資料の存在を確認できます。' },
-    { id: 'document-b', title: '資料B', kind: '架空設定（ダミー資料）', text: 'これは資料Bです。資料Aの有無についての記載はありません。' },
+    { id: 'document-a', title: '資料A', kind: '教材用ダミー資料', text: 'これは資料Aです。資料の存在を確認できます。' },
+    { id: 'document-b', title: '資料B', kind: '教材用ダミー資料', text: 'これは資料Bです。資料Aの有無についての記載はありません。' },
   ],
 };
 

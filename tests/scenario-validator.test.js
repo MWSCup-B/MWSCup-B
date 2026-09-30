@@ -66,7 +66,7 @@ function contract(result = graphResult()) {
   const timeline = {
     schemaVersion: '1.0', timelineId: 'timeline_fixture', scenarioId,
     attackGraphRef: { ...attackGraphRef }, events,
-    narrativeTimestamps: [{ eventId: events[0].eventId, displayTimestamp: '架空時刻・午前' }],
+    narrativeTimestamps: [{ eventId: events[0].eventId, displayTimestamp: '教材時刻・午前' }],
   };
   const learningObjectives = {
     schemaVersion: '1.0', learningObjectiveSetId: 'objectives_fixture', scenarioId,
@@ -91,9 +91,6 @@ function contract(result = graphResult()) {
           attackNodeId: artifactNode.nodeId }], learningObjectiveIds: ['objective_derived'] },
       { requirementId: 'requirement_timeline', purpose: 'TIMELINE_PROOF', description: '時系列の合成要件',
         grounds: [{ sourceType: 'TIMELINE_EVENT', sourceId: events[0].eventId, attackNodeId: null }],
-        learningObjectiveIds: [] },
-      { requirementId: 'requirement_identity', purpose: 'IDENTITY_PROOF', description: '人物関係の合成要件',
-        grounds: [{ sourceType: 'CHARACTER', sourceId: 'character_attacker', attackNodeId: null }],
         learningObjectiveIds: [] },
       { requirementId: 'requirement_contradiction', purpose: 'CONTRADICTION_PROOF', description: '矛盾確認の合成要件',
         grounds: [{ sourceType: 'GROUND_TRUTH_FACT', sourceId: technicalFacts[0].factId, attackNodeId: null }],
@@ -128,6 +125,47 @@ test('単一Attack Graphを参照するScenario Contract全体をVALIDにする'
   assert.ok(input.evidenceRequirements.requirements
     .filter(item => item.grounds.some(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT')).length
     < artifactCount);
+});
+
+function caseFactContract() {
+  const input = contract();
+  const ground = input.evidenceRequirements.requirements[0].grounds[0];
+  const fact = { schemaVersion: '1.0', factId: 'case_fact_observation', attackNodeId: ground.attackNodeId,
+    witnessCharacterId: 'character_witness', subjectCharacterId: 'character_attacker',
+    excludedCharacterId: 'character_defendant', observation: '同席者は、その人物が保全対象のメールを作成する場面を見た。',
+    relatedArtifactIds: [ground.sourceId] };
+  input.groundTruth.caseFacts = [fact];
+  return input;
+}
+
+test('case observations stay internal and separate from technical facts', () => {
+  const input = caseFactContract();
+  const before = structuredClone(input);
+  const result = validateScenarioContract(input);
+  assert.equal(result.status, 'VALID', JSON.stringify(result.issues));
+  assert.deepEqual(input, before);
+  assert.ok(!input.groundTruth.technicalFacts.some(item => item.factId === input.groundTruth.caseFacts[0].factId));
+});
+
+test('case observations reject missing people, shared identities, unavailable sources and cross-node references', () => {
+  for (const [label, mutate, code] of [
+    ['duplicate technical ID', input => { input.groundTruth.caseFacts[0].factId = input.groundTruth.technicalFacts[0].factId; }, 'DUPLICATE_ID'],
+    ['missing node', input => { input.groundTruth.caseFacts[0].attackNodeId = 'attack_missing'; }, 'CASE_FACT_UNGROUNDED'],
+    ['missing witness', input => { input.groundTruth.caseFacts[0].witnessCharacterId = 'character_missing'; }, 'CASE_FACT_CHARACTER_MISMATCH'],
+    ['same attacker and defendant', input => { input.groundTruth.caseFacts[0].excludedCharacterId = 'character_attacker'; }, 'CASE_FACT_CHARACTER_MISMATCH'],
+    ['witness is subject', input => { input.groundTruth.caseFacts[0].witnessCharacterId = 'character_attacker'; }, 'CASE_FACT_CHARACTER_MISMATCH'],
+    ['missing observable', input => { input.groundTruth.caseFacts[0].relatedArtifactIds = ['unknown_record']; }, 'CASE_FACT_ARTIFACT_UNAVAILABLE'],
+  ]) {
+    const input = caseFactContract(); mutate(input);
+    const result = validateScenarioContract(input);
+    assert.equal(result.status, 'BLOCKED', label);
+    assert.equal(result.issues[0].code, code, `${label}: ${JSON.stringify(result.issues)}`);
+  }
+  const exposed = caseFactContract();
+  const fact = exposed.groundTruth.caseFacts[0];
+  exposed.evidenceRequirements.requirements.find(item => item.requirementId === 'requirement_exoneration')
+    .grounds.push({ sourceType: 'CASE_FACT', sourceId: fact.factId, attackNodeId: fact.attackNodeId });
+  assert.equal(validateScenarioContract(exposed).issues[0].code, 'UNSUPPORTED_VALUE');
 });
 
 test('成果物間のgraphIdまたはinputDigest不一致を拒否する', () => {
@@ -196,7 +234,7 @@ test('Timelineをgraph nodeと根拠付き依存関係へ完全一致させる',
   assert.equal(validateScenarioContract(self).issues[0].code, 'BROKEN_REFERENCE');
 
   const narrative = contract();
-  narrative.timeline.narrativeTimestamps[0].displayTimestamp = '順序判定に使用しない架空表示';
+  narrative.timeline.narrativeTimestamps[0].displayTimestamp = '順序判定に使用しない教材用表示';
   assert.equal(validateScenarioContract(narrative).status, 'VALID');
 });
 
@@ -219,7 +257,7 @@ test('Learning Objectiveの任意入力と技術導出根拠を区別する', ()
 test('artifact以外のEvidence Requirementを許可し、観測不能artifactは拒否する', () => {
   const valid = contract();
   assert.deepEqual(new Set(valid.evidenceRequirements.requirements.map(item => item.purpose)),
-    new Set(['ATTACK_TRACE', 'TIMELINE_PROOF', 'IDENTITY_PROOF', 'CONTRADICTION_PROOF', 'EXONERATION_PROOF']));
+    new Set(['ATTACK_TRACE', 'TIMELINE_PROOF', 'CONTRADICTION_PROOF', 'EXONERATION_PROOF']));
   assert.equal(validateScenarioContract(valid).status, 'VALID');
 
   const unknown = contract();

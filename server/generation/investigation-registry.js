@@ -3,7 +3,7 @@ import { fail } from './schema.js';
 import { learningProfile, investigationSourceLabel } from './attack-learning.js';
 
 // Artifactの取得条件はAttack Graphで確認し、取得操作は既存Networkの取得元へ割り当てる。
-// ブラウザ履歴をスクリプト実行の証明へ置き換えない。実行計測は端末資料として扱う。
+// ブラウザ履歴をスクリプト実行の証明へ置き換えない。実行記録は端末資料として扱う。
 const artifactSources = Object.freeze({
   email_record: { binding: 'mail', logSource: 'EMAIL', type: 'EMAIL',
     actionId: 'action_check_email', targetType: 'MAILBOX' },
@@ -87,20 +87,23 @@ export function buildInvestigationStages(configuration, generationInput) {
   const stages = [];
   // Graph nodes are identifier-ordered, which can put ClickFix before its email
   // entry. Follow the selected sequence and each attack's teaching source order.
-  // Grouping, hosts, actions and obtainable observations remain unchanged.
+  // Each issue owns one attack. Reusing a host does not merge unrelated claims;
+  // the original host, action and observable record remain unchanged.
   const ranks = new Map(generationInput.technicalInput.attackGraph.nodes.map(node => [node.nodeId, {
     attack: configuration.attacks.find(attack => attack.attackId === node.attackDefinitionId)?.order ?? Infinity,
-    sources: learningProfile(node)?.sources ?? [],
+    sources: learningProfile(node, generationInput.technicalInput.attackDefinitions)?.sources ?? [],
   }]));
   const routes = buildEvidenceInvestigationPlan(configuration, generationInput).sort((a, b) => {
     const left = ranks.get(a.ground.attackNodeId); const right = ranks.get(b.ground.attackNodeId);
     return left.attack - right.attack || left.sources.indexOf(a.ground.sourceId) - right.sources.indexOf(b.ground.sourceId);
   });
   for (const route of routes) {
-    let stage = stages.find(item => item.sourceNodeId === route.sourceNodeId
+    let stage = stages.find(item => item.attackNodeId === route.ground.attackNodeId
+      && item.sourceNodeId === route.sourceNodeId
       && item.targetType === route.targetType);
     if (!stage) {
-      stage = { targetId: `target_auto_${stages.length + 1}`, sourceNodeId: route.sourceNodeId,
+      stage = { targetId: `target_auto_${stages.length + 1}`, attackNodeId: route.ground.attackNodeId,
+        sourceNodeId: route.sourceNodeId,
         displayName: route.sourceLabel, targetType: route.targetType, routes: [] };
       stages.push(stage);
     }

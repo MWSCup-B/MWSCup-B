@@ -1,6 +1,8 @@
 // Pure operations on sealed teaching data. No filesystem, process, shell or eval.
 import { GameError } from '../game.js';
 import { investigationCompletionId } from './investigation-validator.js';
+import { requiredCourtEvidence } from './court-evidence.js';
+export { requiredCourtEvidence } from './court-evidence.js';
 
 export const sourceLines = item => {
   const lines = item.publicContent.split(/\r?\n/);
@@ -136,28 +138,42 @@ export function executeMaterialCommand(item, input) {
     matchedRecords: aggregateCount ?? (count ? rows.length : selected.length), totalRecords: rows.length };
 }
 
-export function requiredCourtEvidence(gameCase, round) {
-  const issue = gameCase.progression.courtIssues?.[round - 1];
-  return [...new Set([...(issue?.requiredEvidenceIds ?? gameCase.progression.investigation.requiredForCourtIds),
-    ...(issue?.question?.supportingQuotes.map(quote => quote.evidenceId) ?? [])])];
+// `collectedEvidenceIds` is the acquisition history.  Court submission is
+// deliberately scoped to the current issue so an earlier issue cannot
+// accidentally satisfy a later one.
+export function activeCourtEvidenceIds(session) {
+  return session.roundCollectedEvidenceIds ?? session.collectedEvidenceIds ?? [];
 }
 
 export function investigationProgress(session, gameCase) {
   const required = requiredCourtEvidence(gameCase, session.currentRound);
-  const collected = required.filter(id => session.collectedEvidenceIds.includes(id));
-  return { required: required.length, collected: collected.length, complete: required.length > 0 && required.length === collected.length };
+  const active = activeCourtEvidenceIds(session);
+  const collected = required.filter(id => active.includes(id));
+  return { required: required.length, collected: collected.length,
+    complete: required.length > 0 && required.length === collected.length };
 }
 
 export function workspaceMaterial(session, item) {
   const history = ownList(session.commandHistory, item.evidenceId);
   const seen = ownList(session.observedLines, item.evidenceId);
+  const lines = sourceLines(item);
+  const savedFacts = ownList(session.savedFacts, item.evidenceId);
   // Candidates use only displayed original rows, never private answer quotations.
-  const facts = sourceLines(item).flatMap((text, index) => seen.includes(index + 1) ? [{ line: index + 1, text }] : []);
+  const facts = lines.flatMap((text, index) => seen.includes(index + 1) ? [{ line: index + 1, text }] : []);
   return { capabilities: materialCapabilities(item), templates: commandTemplates(item), history, facts,
-    savedFacts: ownList(session.savedFacts, item.evidenceId) };
+    savedFacts, lineCount: lines.length,
+    allFactsSaved: lines.length > 0 && lines.every((_, index) => savedFacts.some(fact => fact.line === index + 1)) };
 }
 
 export function workspaceAction(session, gameCase, { action, materialId, command, field, value, line }) {
+  if (action === 'clear-saved-evidence') {
+    // Clear only the current court submission; retain discovery, read history,
+    // saved search notes, and the historical record of previously collected items.
+    session.savedFacts = {};
+    session.wholeDocumentEvidenceIds = [];
+    session.roundCollectedEvidenceIds = [];
+    return;
+  }
   const item = gameCase.detective.evidence.find(item => item.evidenceId === materialId && item.type !== 'TESTIMONY');
   const rule = gameCase.detective.evidenceDiscoveryRules.find(rule => rule.evidenceId === materialId
     && rule.prerequisites.requiredEvidenceIds.every(id => session.discoveredEvidenceIds.includes(id))
@@ -189,8 +205,32 @@ export function workspaceAction(session, gameCase, { action, materialId, command
     if (!Number.isInteger(line) || !ownList(session.observedLines, materialId).includes(line))
       throw new GameError('FACT_NOT_SEEN', 'line', '表示した原文の行を選んでください。');
     session.savedFacts ??= {}; const facts = session.savedFacts[materialId] = ownList(session.savedFacts, materialId);
+    session.wholeDocumentEvidenceIds = (session.wholeDocumentEvidenceIds ?? []).filter(id => id !== materialId);
     if (!facts.some(fact => fact.line === line)) facts.push({ line, text: sourceLines(item)[line - 1] });
     if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
     if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
+    session.roundCollectedEvidenceIds ??= [];
+    if (!session.roundCollectedEvidenceIds.includes(materialId)) session.roundCollectedEvidenceIds.push(materialId);
+  } else if (action === 'save-all-facts') {
+    const lines = sourceLines(item);
+    if (!lines.length) throw new GameError('MATERIAL_EMPTY', 'materialId', '原文行のない資料は保存できません。');
+    session.savedFacts ??= {};
+    session.savedFacts[materialId] = lines.map((text, index) => ({ line: index + 1, text }));
+    session.wholeDocumentEvidenceIds = (session.wholeDocumentEvidenceIds ?? []).filter(id => id !== materialId);
+    if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
+    if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
+    session.roundCollectedEvidenceIds ??= [];
+    if (!session.roundCollectedEvidenceIds.includes(materialId)) session.roundCollectedEvidenceIds.push(materialId);
+  } else if (action === 'remove-fact') {
+    if (!Number.isInteger(line)) throw new GameError('INVALID_FACT_LINE', 'line', '保存を取り消す行を選んでください。');
+    session.savedFacts ??= {};
+    const facts = ownList(session.savedFacts, materialId);
+    if (!facts.some(fact => fact.line === line))
+      throw new GameError('FACT_NOT_SAVED', 'line', '保存済みの証拠行を選んでください。');
+    session.savedFacts[materialId] = facts.filter(fact => fact.line !== line);
+    if (session.savedFacts[materialId].length === 0) {
+      delete session.savedFacts[materialId];
+      session.roundCollectedEvidenceIds = activeCourtEvidenceIds(session).filter(id => id !== materialId);
+    }
   }
 }

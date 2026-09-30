@@ -20,7 +20,7 @@ function appendGroundedObservation(draft) {
   artifact.testimony.statements.push({ statementId: observationId, spokenContent,
     technicalAssessment: 'CONSISTENT', contradictionCandidate: false,
     groundTruthRefs: [...artifact.testimony.statements[0].groundTruthRefs] });
-  artifact.publicContent += `\n架空の調査担当者の発言: 「${spokenContent}」`;
+  artifact.publicContent += `\n検察側調査官の発言: 「${spokenContent}」`;
 }
 
 async function generate({ difficulty = 1, alreadyPlayable = false, repair = appendGroundedObservation } = {}) {
@@ -33,11 +33,11 @@ async function generate({ difficulty = 1, alreadyPlayable = false, repair = appe
       draft = structuredClone(args.data.courtChoiceRevisionBase);
       repair(draft);
     } else {
-      // メール・Web記録のどちらも同じ人物断定への反駁資料となる実生成相当の構成。
-      // 通常mockはメールだけを正解にするため、この全組合せ正解のケースを見落としていた。
-      // The final attribution claim uses both sources; the first stage remains solvable with its own source.
+      // The final claim requires the mail, Web record and independent witness
+      // report. Preserve every source while exercising the all-pairs legacy gate.
+      // The first stage remains solvable with its own source.
       draft.contradictions.find(item => item.statementRef === 'statement_seen_operation')
-        .conflictingEvidenceIds = ['evidence_technical_a', 'evidence_technical_b'];
+        .conflictingEvidenceIds = draft.evidenceArtifacts.filter(item => item.type !== 'TESTIMONY').map(item => item.evidenceId);
       syncQuestionQuotes(draft);
       const testimony = draft.evidenceArtifacts.find(item => item.type === 'TESTIMONY');
       testimony.testimony.statements = testimony.testimony.statements.filter(item => item.technicalAssessment === 'CONTRADICTED');
@@ -117,7 +117,8 @@ for (const difficulty of [1, 2, 3]) {
     }
     const runtime = session.runtime;
     const rule = runtime.gameCase.judgment.judgmentRules.find(item => item.targetStatementId === 'statement_seen_operation');
-    assert.deepEqual(rule.acceptedEvidenceIds, ['evidence_technical_a', 'evidence_technical_b']);
+    assert.deepEqual([...rule.acceptedEvidenceIds].sort(),
+      set.evidenceArtifacts.filter(item => item.type !== 'TESTIMONY').map(item => item.evidenceId).sort());
     const incorrect = { ...currentCorrectPair(runtime), statementId: observationId, evidenceId: 'evidence_technical_a' };
     const player = collectAll(runtime);
     enterCurrentCourt(player, runtime);

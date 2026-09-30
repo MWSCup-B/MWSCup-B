@@ -20,11 +20,11 @@ export function makeScenarioPackage(input) {
   const characters = {
     schemaVersion: '1.0', characterSetId: 'characters_evidence', scenarioId, attackGraphRef,
     characters: [
-      { characterId: 'character_defendant', displayName: '架空の被告人',
+      { characterId: 'character_defendant', displayName: '被告人',
         provenance: 'AI_GENERATED_SYNTHETIC', roles: ['defendant'], bindingRefs: [] },
-      { characterId: 'character_attacker', displayName: '架空の攻撃者',
+      { characterId: 'character_attacker', displayName: '別の攻撃者',
         provenance: 'AI_GENERATED_SYNTHETIC', roles: ['attacker'], bindingRefs: [] },
-      { characterId: 'character_witness', displayName: '架空の証言者',
+      { characterId: 'character_witness', displayName: '検察側調査官',
         provenance: 'AI_GENERATED_SYNTHETIC', roles: ['witness'], bindingRefs: [] },
     ],
   };

@@ -13,10 +13,20 @@
   ],
   "authoring": {
     "preferredInvestigationType": "CONFIGURATION",
-    "evidenceAnswer": "対象ユーザーに適用されるsudoersの許可と実効設定を確認する。 / 端末計測の親子プロセスと実効UIDからrootでの起動を確認する。",
+    "evidenceAnswer": "対象ユーザーに適用されるsudoersの許可コマンドと実効設定を確認する。 / 端末記録の実行コマンド、親子プロセス、実効UIDを照合してrootでの起動を確認する。",
     "sourceNodeBinding": "host",
     "targetServiceBinding": "service",
     "investigationServiceBinding": "service"
+  },
+  "incidentNarrative": {
+    "impactEffectPredicate": "privileged_execution",
+    "requiredArtifactIds": ["sudo_policy_record", "sudo_execution_record"],
+    "attackerAction": "被告人とは別の攻撃者が、対象ホストで得ていた一般利用者の権限を足掛かりに、危険なsudo許可を悪用した。その結果、攻撃者が操作できるプロセスがroot実効UIDで起動した。",
+    "impact": "危険なsudo許可を通じ、対象ホスト上でroot権限のプロセスが起動した。",
+    "allegation": "sudo実行記録に、被告人のアカウントが開始ユーザーとして、rootが実効UIDとして残っていたため、検察側は、被告人が管理者権限で処理を直接実行したと主張している。",
+    "prosecutionKnowledge": "検察側は、被告人のアカウントを開始ユーザーとしてrootプロセスが起動した記録を把握している。一方、事件時に適用された危険なsudo許可と親子プロセスの関係を評価せず、記録上の開始アカウントを実際の操作者と取り違えている。",
+    "causalRefutation": "取得可能な技術資料を、対象・処理識別子・記録範囲に基づいて段階ごとに照合し、攻撃の処理経路・対象・結果と各記録の限界を確認する。アカウント名・IPアドレス・端末情報だけから人物や意図を特定せず、被告人による攻撃処理の準備・作成・直接操作という検察側の主張が資料で裏付けられるかを検討する。必要な技術資料又は対応関係が不足する場合は論証未成立として差し戻す。",
+    "verdictBasis": "取得可能な技術資料から被告人による攻撃処理の準備・作成・直接操作を確認できず、第三者による操作、認証情報の悪用、誘導又は自動処理の可能性を排除できない場合、その合理的な疑いを無罪判決の根拠とする。第三者が実行したと断定したり、その人物を技術資料だけから特定したりしない。"
   },
   "bindings": [
     {
@@ -128,13 +138,13 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     },
     {
       "id": "sudo_execution_record",
-      "description": "端末計測の親子プロセスと実効UIDからrootでの起動を確認する。",
+      "description": "端末記録の実行コマンド、親子プロセス、実効UIDを確認し、sudoersで許可されたコマンドと照合する。",
       "acquisition": {
         "binding": "host",
         "logSource": "DEVICE",
@@ -149,7 +159,7 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     }

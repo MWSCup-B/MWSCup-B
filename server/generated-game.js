@@ -7,7 +7,7 @@ import { materialEntries, materialMethods, materialOutput, materialQuestion, mat
 import { publicCourtQuestion, publicInvestigationQuestion } from './generation/court-questions.js';
 import { procedureMethods, procedureOutput } from './generation/investigation-procedures.js';
 import { generatedSceneDialogue } from './generation/dialogue-template.js';
-import { investigationProgress, workspaceAction } from './generation/investigation-workspace.js';
+import { activeCourtEvidenceIds, investigationProgress, workspaceAction } from './generation/investigation-workspace.js';
 
 export function createGeneratedGame(runtime) {
   if (!runtime || runtime.mode !== 'GENERATED') throw new GameError('GAME_BUILD_BLOCKED',
@@ -17,6 +17,7 @@ export function createGeneratedGame(runtime) {
     availableInvestigationTargets:
       [...runtime.gameCase.progression.investigation.initialAvailableTargetIds],
     completedInvestigationActions: [], discoveredEvidenceIds: [], collectedEvidenceIds: [],
+    roundCollectedEvidenceIds: [], savedFacts: {}, wholeDocumentEvidenceIds: [],
     lastInvestigationResult: null, selectedStatementId: null, selectedInterpretationChoiceId: null, attemptCount: 0,
     previousAttempts: [], result: null };
 }
@@ -37,8 +38,10 @@ function publicEvidence(item) {
 function collectedEvidenceView(item, session) {
   // Legacy investigation APIs collect a whole document. Workspace saves instead
   // own explicit excerpts; never replace those excerpts with the original file.
-  if (!Object.hasOwn(session.savedFacts ?? {}, item.evidenceId)) return publicEvidence(item);
-  const savedFacts = structuredClone(session.savedFacts[item.evidenceId]).sort((a, b) => a.line - b.line);
+  if (!Object.hasOwn(session.savedFacts ?? {}, item.evidenceId)
+    && session.wholeDocumentEvidenceIds?.includes(item.evidenceId)) return publicEvidence(item);
+  const savedFacts = structuredClone(Object.hasOwn(session.savedFacts ?? {}, item.evidenceId)
+    ? session.savedFacts[item.evidenceId] : []).sort((a, b) => a.line - b.line);
   return { ...publicEvidence(item), publicContent: savedFacts.map(fact => fact.text).join('\n'), savedFacts };
 }
 
@@ -48,13 +51,14 @@ function prerequisitesMet(rule, discovered, completed) {
 }
 
 function canReturnToCourt(session, internal) {
+  const active = activeCourtEvidenceIds(session);
   if (isOpenMaterials(internal)) return investigationProgress(session, internal).complete;
   if (isSequential(internal)) return stageEvidenceIds(internal, session.currentRound)
-    .every(id => session.collectedEvidenceIds.includes(id));
+    .every(id => active.includes(id));
   const investigation = internal.progression.investigation;
   return investigation.returnToCourtCondition === 'ALL_REQUIRED_EVIDENCE_COLLECTED'
-    ? investigation.requiredForCourtIds.every(id => session.collectedEvidenceIds.includes(id))
-    : internal.courtroom.presentableEvidenceIds.some(id => session.collectedEvidenceIds.includes(id));
+    ? investigation.requiredForCourtIds.every(id => active.includes(id))
+    : internal.courtroom.presentableEvidenceIds.some(id => active.includes(id));
 }
 
 // Sequential play opens the current desk's documents as one operation. Reuse
@@ -95,6 +99,7 @@ function playerView(session, runtime) {
   const base = { mode: 'GENERATED', gameCaseId: publicCase.gameCaseId,
     ...(isSequential(runtime.gameCase) ? { investigationMode: runtime.gameCase.progression.investigationMode } : {}),
     currentState: session.currentState, title: publicCase.title, synopsis: publicCase.synopsis,
+    ...(publicCase.networkDiagram ? { networkDiagram: structuredClone(publicCase.networkDiagram) } : {}),
     answerMode: publicCase.progression.courtQuestions ? 'INTERPRETATION_AND_EVIDENCE' : 'STATEMENT_AND_EVIDENCE',
     participants: publicCase.characters.filter(item => ['DEFENDANT', 'WITNESS'].includes(item.publicRole)),
     currentRound: session.currentRound, totalRounds,
@@ -118,7 +123,7 @@ function playerView(session, runtime) {
       ? [issue.investigationTargetId] : session.availableInvestigationTargets);
     const completedActions = new Set(session.completedInvestigationActions);
     const discovered = new Set(session.discoveredEvidenceIds);
-    const collected = new Set(session.collectedEvidenceIds);
+    const collected = new Set(activeCourtEvidenceIds(session));
     const actions = new Map(publicCase.detective.investigationActions
       .map(item => [item.actionId, item]));
     const testimony = isSequential(runtime.gameCase) ? publicCase.courtroom.testimonies
@@ -158,16 +163,15 @@ function playerView(session, runtime) {
         .filter(id => collected.has(id)) } : {}) };
   }
   if (session.currentState === 'RETRIAL_COURT') {
-    const collected = new Set(session.collectedEvidenceIds);
+    const collected = new Set(activeCourtEvidenceIds(session));
     const courtQuestion = publicCase.progression.courtQuestions?.find(question =>
       question.statementId === issue?.question?.statementId);
     return { ...base, canInvestigate: Boolean(issue),
     ...(isSequential(runtime.gameCase) ? { pendingInterpretation: {
       statementId: courtQuestion.statementId,
       ...(isOpenMaterials(runtime.gameCase)
-        ? publicInvestigationQuestion(materialQuestion(runtime.gameCase, session.selectedMaterialId, session.currentRound))
+        ? publicInvestigationQuestion(materialQuestion(runtime.gameCase, null, session.currentRound))
         : courtQuestion).choices.find(choice => choice.choiceId === session.selectedInterpretationChoiceId),
-      ...(isOpenMaterials(runtime.gameCase) ? { evidenceId: session.selectedMaterialId } : {}),
     } } : courtQuestion ? { courtQuestion: structuredClone(courtQuestion) } : {}),
     testimonies: publicCase.progression.retrialCourt.testimonies.map(testimony => ({
       ...testimony, statements: testimony.statements.filter(item => !issue || issue.statementIds.includes(item.statementId)),
@@ -205,7 +209,8 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     requireState(session, 'TITLE'); session.currentState = 'INITIAL_COURT';
   } else if (action === 'continue') {
     requireState(session, 'INITIAL_COURT'); session.currentState = 'INVESTIGATION';
-  } else if (['workspace-command', 'workspace-read', 'save-observation', 'save-fact'].includes(action)) {
+  } else if (['workspace-command', 'workspace-read', 'save-observation', 'save-fact', 'save-all-facts',
+    'remove-fact', 'clear-saved-evidence'].includes(action)) {
     requireState(session, 'INVESTIGATION');
     if (!isOpenMaterials(internal)) throw new GameError('UNKNOWN_ACTION', 'action', '資料調査モードの操作です。');
     workspaceAction(session, internal, { action, materialId, command, field, value, line });
@@ -234,6 +239,12 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     if (complete) {
       if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
       if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
+      session.roundCollectedEvidenceIds ??= [];
+      if (!session.roundCollectedEvidenceIds.includes(materialId)) session.roundCollectedEvidenceIds.push(materialId);
+      if (!Object.hasOwn(session.savedFacts ?? {}, materialId)) {
+        session.wholeDocumentEvidenceIds ??= [];
+        if (!session.wholeDocumentEvidenceIds.includes(materialId)) session.wholeDocumentEvidenceIds.push(materialId);
+      }
       const completionId = investigationCompletionId(rule.targetId, rule.actionId);
       if (!session.completedInvestigationActions.includes(completionId)) session.completedInvestigationActions.push(completionId);
     }
@@ -301,24 +312,30 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
         '調査で発見済みのEvidenceだけを証拠品として取得できます。');
     }
     if (!session.collectedEvidenceIds.includes(evidenceId)) session.collectedEvidenceIds.push(evidenceId);
+    session.roundCollectedEvidenceIds ??= [];
+    if (!session.roundCollectedEvidenceIds.includes(evidenceId)) session.roundCollectedEvidenceIds.push(evidenceId);
+    if (!Object.hasOwn(session.savedFacts ?? {}, evidenceId)) {
+      session.wholeDocumentEvidenceIds ??= [];
+      if (!session.wholeDocumentEvidenceIds.includes(evidenceId)) session.wholeDocumentEvidenceIds.push(evidenceId);
+    }
   } else if (action === 'retrial') {
     requireState(session, 'INVESTIGATION');
     const allowed = canReturnToCourt(session, internal);
     if (!allowed) throw new GameError('COURT_RETURN_CONDITION_NOT_MET', 'evidence',
       '証拠の調査が不足しています。', 409);
     if (isSequential(internal)) {
-      const question = isOpenMaterials(internal) ? materialQuestion(internal, evidenceId, session.currentRound)
+      const question = isOpenMaterials(internal) ? materialQuestion(internal, null, session.currentRound)
         : internal.progression.courtIssues[session.currentRound - 1].question;
-      if (isOpenMaterials(internal) && (!session.collectedEvidenceIds.includes(evidenceId)
-        || !question?.supportingQuotes.every(quote => session.collectedEvidenceIds.includes(quote.evidenceId)))) {
-        throw new GameError('MATERIAL_NOT_EXAMINED', 'evidenceId', '選択した資料と、主張の照合に使う資料を先に調査してください。');
+      const active = activeCourtEvidenceIds(session);
+      if (isOpenMaterials(internal) && !question?.supportingQuotes.every(quote => active.includes(quote.evidenceId))) {
+        throw new GameError('MATERIAL_NOT_EXAMINED', 'evidenceId', '主張の照合に使う資料をすべて先に調査してください。');
       }
       if (!publicCourtQuestion(question).choices.some(choice => choice.choiceId === interpretationChoiceId)) {
         throw new GameError('INTERPRETATION_CHOICE_REQUIRED', 'interpretationChoiceId',
           '調べた資料から分かることを、4択から選んでください。');
       }
       session.selectedInterpretationChoiceId = interpretationChoiceId;
-      if (isOpenMaterials(internal)) session.selectedMaterialId = evidenceId;
+      if (isOpenMaterials(internal)) session.selectedMaterialId = null;
     }
     session.currentState = 'RETRIAL_COURT';
     session.result = null;
@@ -334,10 +351,15 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     requireState(session, 'RETRIAL_COURT');
     if (typeof statementId !== 'string') throw new GameError('STATEMENT_REQUIRED',
       'statementId', '指摘するstatementを選択してください。');
+    const activeEvidenceIds = activeCourtEvidenceIds(session);
+    if (internal.progression.courtIssues) {
+      const issue = internal.progression.courtIssues[session.currentRound - 1];
+      const accepted = issue.judgmentRuleIds.flatMap(id => internal.judgment.judgmentRules
+        .find(rule => rule.ruleId === id)?.acceptedEvidenceIds ?? []);
+      evidenceId = accepted.find(id => activeEvidenceIds.includes(id));
+    }
     if (typeof evidenceId !== 'string') throw new GameError('EVIDENCE_REQUIRED',
       'evidenceId', '提示するEvidenceを選択してください。');
-    if (!session.collectedEvidenceIds.includes(evidenceId)) throw new GameError('EVIDENCE_NOT_OWNED',
-      'evidenceId', '取得済みEvidenceだけを提示できます。');
     if (isSequential(internal)) {
       const issue = internal.progression.courtIssues[session.currentRound - 1];
       if (!issue.statementIds.includes(statementId)) throw new GameError('STATEMENT_NOT_IN_CURRENT_ISSUE',
@@ -347,16 +369,16 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
           '推理を変えるときは、調査へ戻って選び直してください。');
       }
       interpretationChoiceId = session.selectedInterpretationChoiceId;
-      if (isOpenMaterials(internal) && evidenceId !== session.selectedMaterialId) {
-        throw new GameError('MATERIAL_CHANGED_IN_COURT', 'evidenceId', '提出資料を変える場合は調査へ戻って選び直してください。');
-      }
     }
+    if (!activeEvidenceIds.includes(evidenceId)) throw new GameError('EVIDENCE_NOT_OWNED',
+      'evidenceId', 'この争点で保存したEvidenceだけを提示できます。');
     session.selectedStatementId = statementId;
     session.currentState = 'OBJECTION';
     let outcome;
     try { outcome = evaluateObjection(internal, { statementId, evidenceId, interpretationChoiceId,
       attemptCount: session.attemptCount, currentRound: session.currentRound,
-      collectedEvidenceIds: session.collectedEvidenceIds }); }
+      collectedEvidenceIds: activeEvidenceIds, savedFacts: session.savedFacts,
+      wholeDocumentEvidenceIds: session.wholeDocumentEvidenceIds }); }
     catch (error) {
       session.currentState = 'RETRIAL_COURT';
       throw new GameError(error.code ?? 'INVALID_OBJECTION', error.field ?? 'objection',
@@ -371,11 +393,15 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     session.result = outcome.outcome === 'SUCCESS'
       ? { outcome: 'SUCCESS', objection: '証言の食い違いを示した！', hasNextRound,
         ...(!hasNextRound && internal.progression.courtIssues?.[session.currentRound - 1]?.question ? {
-          publicExplanation: internal.progression.courtIssues[session.currentRound - 1].question.explanation,
+          publicExplanation: internal.progression.outcomes.acquitted.publicExplanation,
         } : {}) }
       : { outcome: 'FAILURE', publicFeedback: outcome.publicFailureFeedback };
     if (hasNextRound) { session.currentRound += 1; session.attemptCount = 0;
       session.currentState = 'INVESTIGATION';
+      session.roundCollectedEvidenceIds = [];
+      session.savedFacts = {};
+      session.wholeDocumentEvidenceIds = [];
+      session.savedObservations = [];
       session.selectedStatementId = null;
       session.selectedInterpretationChoiceId = null;
       if (isSequential(internal) && !isOpenMaterials(internal)) {

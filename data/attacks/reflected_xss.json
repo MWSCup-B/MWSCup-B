@@ -12,10 +12,20 @@
   ],
   "authoring": {
     "preferredInvestigationType": "WEB_LOG",
-    "evidenceAnswer": "Webアクセス記録から反射された入力を含む対象リクエストを確認し、端末の実行計測記録と対応付ける。",
+    "evidenceAnswer": "Webアクセス記録から反射された入力を含む対象リクエストを確認し、端末の実行観測記録と対応付ける。",
     "sourceNodeBinding": "client",
     "targetServiceBinding": "web",
     "investigationServiceBinding": "web"
+  },
+  "incidentNarrative": {
+    "impactEffectPredicate": "script_executed_in_origin",
+    "requiredArtifactIds": ["web_access_record", "browser_execution_record"],
+    "attackerAction": "被告人とは別の攻撃者が、Web応答へ反射される入力を含むURLを作成して被告人のブラウザに開かせた。Webアプリケーションがその入力を安全に処理せず応答へ含めたため、攻撃者のスクリプトが被告人のブラウザで対象オリジンの権限により実行された。",
+    "impact": "Web要求に含まれた反射入力に由来するスクリプトが、被告人のブラウザで対象Webオリジンのスクリプトとして実行された。",
+    "allegation": "スクリプト実行記録に、被告人が使用していたブラウザの識別情報と、被告人のアカウントで認証されたWebセッションの識別子が残っていたため、検察側は、被告人が当該スクリプトを作成して直接実行したと主張している。",
+    "prosecutionKnowledge": "検察側は、被告人のブラウザからのWeb要求とスクリプト実行を把握している。一方、要求に含まれた反射入力、Web応答、ブラウザ実行の対応を評価せず、実行されたブラウザの利用者をスクリプトの作成者と取り違えている。",
+    "causalRefutation": "取得可能な技術資料を、対象・処理識別子・記録範囲に基づいて段階ごとに照合し、攻撃の処理経路・対象・結果と各記録の限界を確認する。アカウント名・IPアドレス・端末情報だけから人物や意図を特定せず、被告人による攻撃処理の準備・作成・直接操作という検察側の主張が資料で裏付けられるかを検討する。必要な技術資料又は対応関係が不足する場合は論証未成立として差し戻す。",
+    "verdictBasis": "取得可能な技術資料から被告人による攻撃処理の準備・作成・直接操作を確認できず、第三者による操作、認証情報の悪用、誘導又は自動処理の可能性を排除できない場合、その合理的な疑いを無罪判決の根拠とする。第三者が実行したと断定したり、その人物を技術資料だけから特定したりしない。"
   },
   "bindings": [
     {
@@ -163,7 +173,7 @@
         "$request"
       ],
       "value": true,
-      "description": "当該応答についてJavaScript設定・CSP等の実効制御がスクリプト実行を阻止しない。"
+      "description": "当該応答について、ブラウザのJavaScript設定やCSPなどの実行時のセキュリティ制御が、スクリプトの実行を阻止しない。"
     },
     {
       "source": "authenticationConditions",
@@ -214,7 +224,7 @@
   "observableArtifacts": [
     {
       "id": "web_access_record",
-      "description": "対象リクエストのアクセス記録。取得設定と保持が確認された場合のみ候補にする。これだけではスクリプト実行や実際の操作者を断定できない。",
+      "description": "対象リクエストのアクセス記録。取得設定と保持が確認された場合のみ候補にする。これだけではスクリプト実行や実際の操作者を断定できない。 JSON Linesでtimestamp、request_id、request_targetを保持する。要求先は絶対URL、またはorigin/hostとpathの組で記録し、異なるホストを同じパスだけで同一視しない。",
       "conditions": [
         {
           "source": "loggingConfiguration",
@@ -230,7 +240,7 @@
     },
     {
       "id": "browser_execution_record",
-      "description": "当該スクリプトの実行を示すブラウザのスクリプト実行記録。標準のアクセスログやCSP違反ログを実行成功の証明に置き換えない。",
+      "description": "当該スクリプトの実行を示すブラウザのスクリプト実行記録。標準のアクセスログやCSP違反ログを実行成功の証明に置き換えない。 専用記録はtimestamp、閲覧元のrequest_id、要求先request_target、execution_resultを保持し、Webの当該要求と対応する実行を識別する。",
       "conditions": [
         {
           "source": "loggingConfiguration",

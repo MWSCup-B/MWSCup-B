@@ -7,14 +7,14 @@
 | 攻撃 | 比較する既存資料 | 学ぶ点 |
 | --- | --- | --- |
 | フィッシング | 保存メール・Web要求 | 表示URL、href、実際の要求対象の違い。アクセスとクリック原因は別 |
-| 認証情報フィッシング | メール・Web要求・専用送受信計測 | 誘導、アクセス、フォーム送受信を区別。秘密値を記録しない |
+| 認証情報フィッシング | メール・Web要求・専用送受信記録 | 誘導、アクセス、フォーム送受信を区別。秘密値を記録しない |
 | Stored XSS | 保存投稿・閲覧要求・ブラウザのスクリプト実行記録 | 保存した内容が後の閲覧で解釈される特徴。保存・閲覧だけで実行を断定しない |
 | Reflected XSS（既存API） | Web要求・ブラウザのスクリプト実行記録 | 要求に対応する応答とブラウザ側の実行を照合 |
 | SQLインジェクション | Web要求・DB監査 | 入力がSQLの値・条件・構造のどこに影響するか。要求とDB実行、DB権限とOS権限を区別 |
 | 不正ログイン | 認証監査・Webセッション監査 | 資格情報の受理、セッション利用、投稿権限と投稿完了を区別 |
-| ClickFix | 保存された案内・端末プロセス計測 | 案内が利用者に求める端末操作、親子プロセス、起動結果を比較 |
+| ClickFix | 保存された案内・端末プロセス記録 | 案内が利用者に求める端末操作、親子プロセス、起動結果を比較 |
 | パスワードスプレー | 複数アカウントの試行・事件時の認証設定 | 集中・分散、成否と適用条件を比較。同じ候補の使用は秘密値を記録しない監査だけでは確定不可 |
-| ランサムウェア | 起動計測・ファイル前後検査 | 起動、内容変更、暗号化の確認を区別。相関IDと検査対象の範囲を確認 |
+| ランサムウェア | プロセス起動記録・ファイル前後検査 | 起動、内容変更、暗号化の確認を区別。相関IDと検査対象の範囲を確認 |
 | 不正ファイルアップロード | 受付監査・保存ファイル検査 | 同じ保存IDの申告値と内容検査を比較。保存と実行を区別 |
 
 `attack-learning.js`は教材の比較課題であり、新しい技術的事実を作るモジュールではない。取得可能性は従来どおりAttack Graphで検証する。資料が一つだけの初期段階では、その観測と未確認点を読む。別資料の取得後は、同じ攻撃ノードの取得済み資料を段階別Requirementのgroundsへ含める。最後の争点も攻撃固有の比較を扱い、人物への帰属は別の証明問題として区別する。必要な比較資料をRevisionで外した場合は独立Reviewの前に拒否する。
@@ -31,4 +31,4 @@
 
 新しい生成は従来の最大2回のEvidence修正内でこれらを検査する。未解消ならゲームを公開せず停止する。公開API・保存データSchema・旧外部Evidence Importは変更しない。すでに生成済みの証拠や正解は書き換えず、新しい設計は再生成するゲームへ適用する。
 
-技術的な読み方の確認先： [OWASP XSS](https://community.owasp.org/attacks/xss/)、[OWASP SQL Injection](https://community.owasp.org/attacks/SQL_Injection)、[OWASP File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)、[MITRE Password Spraying](https://attack.mitre.org/techniques/T1110/003/)、[MITRE Data Encrypted for Impact](https://attack.mitre.org/techniques/T1486/)、[Microsoft ClickFix](https://www.microsoft.com/en-us/security/blog/2025/08/21/think-before-you-clickfix-analyzing-the-clickfix-social-engineering-technique/)。これらは架空の個別事件や被告人の操作を裏付ける資料ではない。
+技術的な読み方の確認先： [OWASP XSS](https://community.owasp.org/attacks/xss/)、[OWASP SQL Injection](https://community.owasp.org/attacks/SQL_Injection)、[OWASP File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)、[MITRE Password Spraying](https://attack.mitre.org/techniques/T1110/003/)、[MITRE Data Encrypted for Impact](https://attack.mitre.org/techniques/T1486/)、[Microsoft ClickFix](https://www.microsoft.com/en-us/security/blog/2025/08/21/think-before-you-clickfix-analyzing-the-clickfix-social-engineering-technique/)。これらは教材内の個別事件や被告人の操作を裏付ける資料ではない。

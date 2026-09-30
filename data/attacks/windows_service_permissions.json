@@ -6,17 +6,27 @@
   "stages": [
     "PRIVILEGE_ESCALATION"
   ],
-  "description": "書換え可能なサービス実行ファイルを、高権限サービスとして次に起動した場合の権限昇格。再起動権限や起動イベントも必要。",
+  "description": "書き換え可能なサービス実行ファイルを、高権限サービスとして次に起動した場合の権限昇格。再起動権限や起動イベントも必要。",
   "supportedInvestigationTypes": [
     "CONFIGURATION",
     "DEVICE"
   ],
   "authoring": {
     "preferredInvestigationType": "CONFIGURATION",
-    "evidenceAnswer": "対象サービスの実行パス・実行アカウント・ファイルACLを確認する。 / ファイル変更とサービス再起動、および実効主体の計測を時系列で照合する。",
+    "evidenceAnswer": "対象サービスの実行パス・実行アカウント・ファイルACLを確認する。 / ファイル変更とサービス再起動、および実効主体の記録を時系列で照合する。",
     "sourceNodeBinding": "host",
     "targetServiceBinding": "service",
     "investigationServiceBinding": "service"
+  },
+  "incidentNarrative": {
+    "impactEffectPredicate": "system_execution",
+    "requiredArtifactIds": ["service_acl_record", "service_execution_record"],
+    "attackerAction": "被告人とは別の攻撃者が、対象ホストで得ていた一般利用者の権限を使い、書き換え可能なWindowsサービス実行ファイルを置き換えた。その後にサービスが再起動し、攻撃者が用意した処理がLocalSystemとして起動した。",
+    "impact": "書き換え可能なWindowsサービス実行ファイルが置き換えられ、その後のサービス起動でLocalSystem権限の処理が実行された。",
+    "allegation": "サービスがLocalSystem権限で起動した記録があり、被告人が当該ホストの利用者または管理者だったことから、検察側は、被告人が高権限の処理を直接実行したと主張している。",
+    "prosecutionKnowledge": "検察側は、サービスのLocalSystem起動と実行ファイルの変更を把握している。一方、事件時のファイルACL、置換、サービス再起動、実効主体の時系列を評価せず、サービス実行主体またはホスト管理者を実際の操作者と取り違えている。",
+    "causalRefutation": "取得可能な技術資料を、対象・処理識別子・記録範囲に基づいて段階ごとに照合し、攻撃の処理経路・対象・結果と各記録の限界を確認する。アカウント名・IPアドレス・端末情報だけから人物や意図を特定せず、被告人による攻撃処理の準備・作成・直接操作という検察側の主張が資料で裏付けられるかを検討する。必要な技術資料又は対応関係が不足する場合は論証未成立として差し戻す。",
+    "verdictBasis": "取得可能な技術資料から被告人による攻撃処理の準備・作成・直接操作を確認できず、第三者による操作、認証情報の悪用、誘導又は自動処理の可能性を排除できない場合、その合理的な疑いを無罪判決の根拠とする。第三者が実行したと断定したり、その人物を技術資料だけから特定したりしない。"
   },
   "bindings": [
     {
@@ -91,7 +101,7 @@
         "$host"
       ],
       "value": true,
-      "description": "書換え後に、許可されたサービス再起動または記録された管理者の再起動が発生する。低権限ユーザーに再起動権限を仮定しない。"
+      "description": "書き換え後に、許可されたサービス再起動または記録された管理者の再起動が発生する。低権限ユーザーに再起動権限を仮定しない。"
     },
     {
       "source": "otherConditions",
@@ -146,13 +156,13 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     },
     {
       "id": "service_execution_record",
-      "description": "ファイル変更とサービス再起動、および実効主体の計測を時系列で照合する。",
+      "description": "ファイル変更とサービス再起動、および実効主体の記録を時系列で照合する。",
       "acquisition": {
         "binding": "host",
         "logSource": "DEVICE",
@@ -167,7 +177,7 @@
             "$host"
           ],
           "value": true,
-          "description": "この教材では、対象の操作・時刻・実効主体を識別できる計測を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
+          "description": "この教材では、対象の操作・時刻・実効主体を識別できる記録を事前に有効化し、当該記録を取得・保持している。標準設定での記録を仮定しない。"
         }
       ]
     }

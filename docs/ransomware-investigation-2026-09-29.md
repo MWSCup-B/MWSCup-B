@@ -22,7 +22,7 @@
 
 生成時は資料の由来に加え、同じ攻撃の正常版と被害側、実行・書込み・改名・検査の順序、直接の親、要求文の作成を照合する。不備は既存の最大2回の証拠生成へ差し戻し、解消しない資料はビルドへ渡さない。Importが不成立でも段階別の根拠不足を同時に収集し、最後の試行まで別の不備を隠さない。旧保存ゲームの本文・正解・保存形式は書き換えず、新しい資料構成は再生成時に適用する。
 
-技術説明の確認先：一般ファイルの暗号化・改名・金銭要求は[MITRE ATT&CK T1486](https://attack.mitre.org/techniques/T1486/)、プロセス生成監査のPID・実行ファイル・コマンドラインの記録条件は[Microsoftのイベント4688資料](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4688)を確認した。今回の資料は事前に設定した専用の合成計測であり、Windowsの既定ログに全項目が必ず残るとは扱わない。
+技術説明の確認先：一般ファイルの暗号化・改名・金銭要求は[MITRE ATT&CK T1486](https://attack.mitre.org/techniques/T1486/)、プロセス生成監査のPID・実行ファイル・コマンドラインの記録条件は[Microsoftのイベント4688資料](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4688)を確認した。今回の資料は事前に設定した専用の合成記録であり、Windowsの既定ログに全項目が必ず残るとは扱わない。
 
 ## 2026-09-30：各ログを100件程度へ拡充
 

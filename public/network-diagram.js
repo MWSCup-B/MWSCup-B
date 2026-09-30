@@ -10,39 +10,97 @@ export function wrapDiagramText(value, limit = 34) {
   return lines.length ? lines : [''];
 }
 
+// Put nodes into left-to-right access layers. Cycles stay in the last layer reached
+// instead of making the diagram grow indefinitely.
+function accessRanks(nodes, connections) {
+  const nodeIds = new Set(nodes.map(node => node.nodeId));
+  const incoming = new Map(nodes.map(node => [node.nodeId, 0]));
+  const outgoing = new Map(nodes.map(node => [node.nodeId, []]));
+  for (const connection of connections) {
+    if (!nodeIds.has(connection.fromNodeId) || !nodeIds.has(connection.toNodeId)) continue;
+    incoming.set(connection.toNodeId, incoming.get(connection.toNodeId) + 1);
+    outgoing.get(connection.fromNodeId).push(connection.toNodeId);
+  }
+  const ranks = new Map(nodes.map(node => [node.nodeId, 0]));
+  const queue = nodes.filter(node => incoming.get(node.nodeId) === 0).map(node => node.nodeId);
+  const visited = new Set();
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const from = queue[cursor]; visited.add(from);
+    for (const to of outgoing.get(from)) {
+      ranks.set(to, Math.max(ranks.get(to), ranks.get(from) + 1));
+      incoming.set(to, incoming.get(to) - 1);
+      if (incoming.get(to) === 0) queue.push(to);
+    }
+  }
+  // Keep cyclic components usable: place them after any already-ranked predecessor.
+  for (let pass = 0; pass < nodes.length; pass += 1) {
+    let changed = false;
+    for (const connection of connections) {
+      if (visited.has(connection.toNodeId) || !ranks.has(connection.fromNodeId)
+        || !ranks.has(connection.toNodeId)) continue;
+      const next = Math.min(nodes.length - 1, ranks.get(connection.fromNodeId) + 1);
+      if (next > ranks.get(connection.toNodeId)) { ranks.set(connection.toNodeId, next); changed = true; }
+    }
+    if (!changed) break;
+  }
+  return ranks;
+}
+
 export function layoutNetwork(network) {
-  const boxWidth = 258, gap = 38, margin = 28;
-  const rows = network.subnets.map(subnet => ({ subnet, nodes: network.nodes.filter(node => node.subnetId === subnet.subnetId) }));
-  const contentWidth = Math.max(620, ...rows.map(row => row.nodes.length * (boxWidth + gap) + margin * 2));
-  const width = contentWidth + network.connections.length * 12 + 30;
+  const boxWidth = 258, columnGap = 92, rowGap = 24, margin = 28;
+  const ranks = accessRanks(network.nodes, network.connections);
+  const maxRank = Math.max(0, ...ranks.values());
+  const width = margin * 2 + (maxRank + 1) * boxWidth + maxRank * columnGap;
   let y = 12;
   const positions = new Map();
-  const groups = rows.map(({ subnet, nodes }, rowIndex) => {
+  const groups = network.subnets.map((subnet, rowIndex) => {
+    const nodes = network.nodes.filter(node => node.subnetId === subnet.subnetId);
     const heading = wrapDiagramText(`${subnet.label} / ${subnet.cidr} / ${subnet.trustBoundaryId}`, 90);
-    const laneTop = y + 20 + heading.length * 18;
-    const top = laneTop + (network.connections.length + 1) * 12 + 14;
-    const cards = nodes.map((node, index) => {
+    const contentTop = y + 20 + heading.length * 18 + 18;
+    const columns = new Map();
+    for (const node of nodes) {
+      const rank = ranks.get(node.nodeId) ?? 0;
       const services = network.services.filter(service => service.nodeId === node.nodeId);
       const lines = [node.label, `IP: ${node.ip}`, `Type: ${node.nodeType}`, `OS: ${node.os}`,
         `Role: ${node.roles.join(', ')}`, ...services.map(service => `${service.label} [${service.serviceType}]`)]
         .flatMap(value => wrapDiagramText(value));
-      return { node, rowIndex, x: margin + index * (boxWidth + gap), y: top, width: boxWidth, lines };
-    });
-    const height = Math.max(108, ...cards.map(card => card.lines.length * 18 + 28));
-    for (const card of cards) { card.height = height; positions.set(card.node.nodeId, card); }
-    const group = { subnet, heading, y, laneTop, bottom: top + height + 24, cards };
-    y = group.bottom + 28; return group;
+      const card = { node, rowIndex, rank, x: margin + rank * (boxWidth + columnGap),
+        y: 0, width: boxWidth, height: lines.length * 18 + 38, lines };
+      const column = columns.get(rank) ?? []; column.push(card); columns.set(rank, column);
+    }
+    let contentHeight = 108;
+    for (const cards of columns.values()) {
+      let cardY = contentTop;
+      for (const card of cards) {
+        card.y = cardY; positions.set(card.node.nodeId, card);
+        cardY += card.height + rowGap;
+      }
+      contentHeight = Math.max(contentHeight, cardY - contentTop - rowGap);
+    }
+    const cards = [...columns.values()].flat();
+    const group = { subnet, heading, y, bottom: contentTop + contentHeight + 24, cards };
+    y = group.bottom + 28;
+    return group;
   });
-  const edges = network.connections.flatMap((connection, index) => {
+  const edges = network.connections.flatMap(connection => {
     const from = positions.get(connection.fromNodeId), to = positions.get(connection.toNodeId);
     if (!from || !to) return [];
-    const x1 = from.x + from.width / 2, x2 = to.x + to.width / 2;
-    const lane1 = groups[from.rowIndex].laneTop + index * 12;
-    const lane2 = groups[to.rowIndex].laneTop + index * 12;
-    const side = contentWidth + index * 12;
-    return [{ ...connection, path: from.rowIndex === to.rowIndex
-      ? `M ${x1} ${from.y} V ${lane1} H ${x2} V ${to.y}`
-      : `M ${x1} ${from.y} V ${lane1} H ${side} V ${lane2} H ${x2} V ${to.y}` }];
+    let path;
+    if (from.x < to.x) {
+      const x1 = from.x + from.width, y1 = from.y + from.height / 2;
+      const x2 = to.x, y2 = to.y + to.height / 2;
+      const bend = Math.max(34, Math.min(90, (x2 - x1) / 2));
+      path = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+    } else {
+      // Same-column and cycle edges use the free gutter beside the cards.
+      const goRight = from.x + from.width + 24 <= width - 8;
+      const x1 = goRight ? from.x + from.width : from.x;
+      const x2 = goRight ? to.x + to.width : to.x;
+      const side = goRight ? Math.max(x1, x2) + 24 : Math.min(x1, x2) - 24;
+      const y1 = from.y + from.height / 2, y2 = to.y + to.height / 2;
+      path = `M ${x1} ${y1} H ${side} V ${y2} H ${x2}`;
+    }
+    return [{ ...connection, path }];
   });
   return { width, height: y, groups, edges };
 }
@@ -58,7 +116,12 @@ export function renderNetworkDiagram(svg, network, document) {
     return element;
   };
   svg.append(node('title', {}, 'ネットワーク構成図'), node('desc', {},
-    '線は設定されたノード間の接続を示します。通信の許可・禁止は到達制御の設定に従います。'));
+    '矢印は送信元ノードからアクセス可能な接続先ノードを示します。'));
+  const defs = node('defs');
+  const marker = node('marker', { id: 'diagram-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5,
+    markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' });
+  marker.append(node('polygon', { points: '0,0 10,5 0,10', class: 'diagram-arrowhead' }));
+  defs.append(marker); svg.append(defs);
   const backgrounds = node('g', { 'data-layer': 'subnets' });
   const edges = node('g', { 'data-layer': 'connections' });
   const cards = node('g', { 'data-layer': 'nodes' });
@@ -80,8 +143,8 @@ export function renderNetworkDiagram(svg, network, document) {
     }
   }
   for (const edge of layout.edges) {
-    const path = node('path', { d: edge.path, class: 'diagram-connection',
+    const path = node('path', { d: edge.path, class: 'diagram-connection', 'marker-end': 'url(#diagram-arrow)',
       'data-from': edge.fromNodeId, 'data-to': edge.toNodeId });
-    path.append(node('title', {}, `${edge.fromNodeId} — ${edge.toNodeId}`)); edges.append(path);
+    path.append(node('title', {}, `${edge.fromNodeId} → ${edge.toNodeId}`)); edges.append(path);
   }
 }

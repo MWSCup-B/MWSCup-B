@@ -15,6 +15,7 @@ import {
   validateEvidenceFeedback,
   validateEvidenceImportResult,
   validateEvidenceSet,
+  validateEvidenceConsistency,
   validateGameCaseHandoff,
 } from '../server/generation/evidence-validator.js';
 import { verifiedScenarioFixture } from './helpers/verified-scenario.js';
@@ -62,7 +63,7 @@ function evidencePackage(input = generationInput()) {
       requirementIds: ['requirement_timeline', 'requirement_exoneration'],
       purpose: ['TIMELINE_PROOF', 'EXONERATION_PROOF'] }),
     artifact(input, { evidenceId: 'evidence_testimony', type: 'TESTIMONY', title: '証言者の供述',
-      publicContent: '架空の証言者は「その操作を直接見た」と発言した。', sourceRefs: [contradictionGround],
+      publicContent: '検察側調査官は「その操作を直接見た」と発言した。', sourceRefs: [contradictionGround],
       requirementIds: ['requirement_contradiction'], purpose: ['CONTRADICTION_PROOF'],
       testimony: { witnessCharacterId: 'character_witness', statements: [{
         statementId: 'statement_seen_operation', spokenContent: 'その操作を直接見た',
@@ -97,6 +98,54 @@ function generationDraft(input = generationInput()) {
   for (const item of draft.evidenceArtifacts) delete item.integrity;
   return draft;
 }
+
+function caseReportFixture() {
+  const input = generationInput();
+  const agent = input.evidenceAgentInput;
+  const evidence = evidencePackage(input);
+  const technical = evidence.evidenceArtifacts[0];
+  technical.type = 'EMAIL';
+  technical.publicContent = 'Subject: 保全対象のお知らせ\n<a href="https://training.example.invalid/account-review">アカウント確認</a>';
+  updateDigest(technical);
+  const technicalGround = agent.evidenceRequirements.requirements.find(item => item.requirementId === 'requirement_attack').grounds[0];
+  const fact = { schemaVersion: '1.0', factId: 'case_fact_observation', attackNodeId: technicalGround.attackNodeId,
+    witnessCharacterId: 'character_witness', subjectCharacterId: 'character_attacker',
+    excludedCharacterId: 'character_defendant', observation: '同席者は保全対象のメールの作成を直接見た。',
+    relatedArtifactIds: [technicalGround.sourceId] };
+  const ground = { sourceType: 'CASE_FACT', sourceId: fact.factId, attackNodeId: fact.attackNodeId };
+  agent.groundTruth.caseFacts = [fact];
+  agent.evidenceRequirements.requirements.push({ requirementId: 'requirement_observation', purpose: 'IDENTITY_PROOF',
+    description: '直接観察の報告と技術記録を照合する。', grounds: [ground], learningObjectiveIds: [] });
+  agent.evidenceRequirements.requirements.find(item => item.requirementId === 'requirement_exoneration').grounds.push(ground);
+  const report = artifact(input, { evidenceId: 'evidence_observation_report', type: 'DOCUMENT', title: '直接観察者の調査報告',
+    publicContent: `${fact.observation}\n保全したメール：\n${technical.publicContent}`,
+    sourceRefs: [ground], requirementIds: ['requirement_observation', 'requirement_exoneration'],
+    purpose: ['IDENTITY_PROOF', 'EXONERATION_PROOF'] });
+  report.caseSupport = { observationQuote: fact.observation,
+    supportingQuotes: [{ evidenceId: evidence.evidenceArtifacts[0].evidenceId, quote: evidence.evidenceArtifacts[0].publicContent }] };
+  evidence.evidenceArtifacts.push(report);
+  evidence.exonerations[0].supportingEvidenceIds.push(report.evidenceId);
+  evidence.exonerations[0].groundTruthRefs.push(fact.factId);
+  return { input, evidence, report };
+}
+
+test('direct-observation reports cannot be generated or imported as player evidence', () => {
+  const { input, evidence } = caseReportFixture();
+  const result = validateEvidenceConsistency(evidence, input.evidenceAgentInput);
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some(item => ['UNSUPPORTED_VALUE', 'UNKNOWN_FIELD',
+    'INTERNAL_CASE_FACT_EXPOSED', 'INTERNAL_CASE_REPORT_EXPOSED'].includes(item.code)), JSON.stringify(result.issues));
+});
+
+test('Evidence契約から直接観察の証拠種別・目的・caseSupportを排除する', () => {
+  const input = generationInput();
+  const artifactSchema = input.outputContract.schemas.find(item => item.name === 'evidence-artifact').jsonSchema;
+  const requirementSchema = input.evidenceAgentInput.evidenceRequirements.requirements[0];
+  assert.ok(!artifactSchema.properties.sourceRefs.items.properties.sourceType.enum.includes('CASE_FACT'));
+  assert.ok(!artifactSchema.properties.purpose.items.enum.includes('IDENTITY_PROOF'));
+  assert.ok(!Object.hasOwn(artifactSchema.properties, 'caseSupport'));
+  assert.notEqual(requirementSchema.purpose, 'IDENTITY_PROOF');
+});
 
 test('CLI draft契約だけintegrityを除外し、外部Import契約と検証済み入力を保持する', () => {
   const input = generationInput(); const before = structuredClone(input);
@@ -285,6 +334,14 @@ test('存在しないEvidence Requirement参照をINVALIDにする', () => {
   assert.ok(result.errors.some(item => item.code === 'BROKEN_EVIDENCE_REQUIREMENT_REFERENCE'));
 });
 
+test('別の技術資料に同じ表示名を付けることを拒否する', () => {
+  const input = generationInput(); const pkg = evidencePackage(input);
+  pkg.evidenceArtifacts[1].title = pkg.evidenceArtifacts[0].title;
+  const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
+  assert.equal(result.status, 'INVALID');
+  assert.ok(result.errors.some(item => item.code === 'DUPLICATE_EVIDENCE_TITLE'));
+});
+
 test('存在しないGround Truth参照をINVALIDにする', () => {
   const input = generationInput(); const pkg = evidencePackage(input);
   pkg.contradictions[0].groundTruthRefs = ['fact_missing'];
@@ -360,6 +417,30 @@ test('ContradictionのTESTIMONY・statement・競合Evidence参照を検証す�
   assert.ok(result.errors.some(item => item.code === 'BROKEN_CONFLICTING_EVIDENCE_REFERENCE'));
 });
 
+test('反駁対象の証言が「それだけで」で推論の弱点を自白する文体を拒否する', () => {
+  const input = generationInput(); const pkg = evidencePackage(input);
+  const testimony = pkg.evidenceArtifacts.find(item => item.evidenceId === 'evidence_testimony');
+  const spokenContent = '投稿が保存されていました。それだけで、ブラウザで実行された証拠になります。';
+  testimony.testimony.statements[0].spokenContent = spokenContent;
+  testimony.publicContent = `検察側調査官は「${spokenContent}」と発言した。`;
+  updateDigest(testimony);
+  const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
+  assert.equal(result.status, 'INVALID');
+  assert.ok(result.errors.some(item => item.code === 'TESTIMONY_CLAIM_STYLE_UNNATURAL'));
+});
+
+test('記録・セッション・人物を混同する曖昧な証言を拒否する', () => {
+  const input = generationInput(); const pkg = evidencePackage(input);
+  const testimony = pkg.evidenceArtifacts.find(item => item.evidenceId === 'evidence_testimony');
+  const spokenContent = '虚偽の投稿が被告人の利用セッションに記録されたため、被告人が投稿したと判断しました。';
+  testimony.testimony.statements[0].spokenContent = spokenContent;
+  testimony.publicContent = `検察側調査官は「${spokenContent}」と発言した。`;
+  updateDigest(testimony);
+  const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
+  assert.equal(result.status, 'INVALID');
+  assert.ok(result.errors.some(item => item.code === 'TESTIMONY_RECORD_ATTRIBUTION_AMBIGUOUS'));
+});
+
 test('ExonerationのGround Truthと複数Evidence根拠不足を拒否する', () => {
   const input = generationInput(); const pkg = evidencePackage(input);
   pkg.exonerations[0].supportingEvidenceIds = ['evidence_technical_a', 'evidence_technical_a'];
@@ -383,7 +464,7 @@ test('Evidence purposeをRequirementにない値へ拡張できない', () => {
   pkg.evidenceArtifacts[0].purpose = ['IDENTITY_PROOF'];
   const result = importEvidencePackage({ generationInput: input, evidencePackage: pkg });
   assert.equal(result.status, 'INVALID');
-  assert.ok(result.errors.some(item => item.code === 'EVIDENCE_PURPOSE_MISMATCH'));
+  assert.ok(result.errors.some(item => ['EVIDENCE_PURPOSE_MISMATCH', 'UNSUPPORTED_VALUE'].includes(item.code)));
 });
 
 test('External Evidence GeneratorのSchema不正出力をINVALIDにする', () => {

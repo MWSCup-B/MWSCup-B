@@ -30,21 +30,41 @@ test('every selected attack has an obtainable comparison of its own distinct obs
     for (const [index, requirement] of requirements.entries()) {
       const available = new Set(stages.slice(0, index + 1).flatMap(stage => stage.routes.map(route => key(route.ground))));
       assert.ok(requirement.grounds.every(ground => available.has(key(ground))));
+      assert.equal(new Set(requirement.grounds.map(ground => ground.attackNodeId)).size, 1);
+      assert.equal(new Set(stages[index].routes.map(route => route.ground.attackNodeId)).size, 1);
     }
+    const acquisitionKeys = stages.flatMap(stage => stage.routes.map(route => key(route.ground)));
+    assert.equal(acquisitionKeys.length, new Set(acquisitionKeys).size);
     for (const node of generationInput.technicalInput.attackGraph.nodes) {
-      const profile = learningProfile(node);
+      const profile = learningProfile(node, generationInput.technicalInput.attackDefinitions);
       const comparison = requirements.find(requirement => profile.sources.every(sourceId => requirement.grounds
         .some(ground => ground.attackNodeId === node.nodeId && ground.sourceId === sourceId)));
       assert.ok(comparison, node.attackDefinitionId);
       assert.ok(comparison.grounds.length >= 2);
       assert.ok(requirements.some(requirement => requirement.description.includes(profile.comparison)));
+      assert.ok(comparison.grounds.every(ground => ground.sourceType !== 'CASE_FACT'));
+      const ownStages = stages.filter(stage => stage.routes.some(route => route.ground.attackNodeId === node.nodeId));
+      assert.ok(ownStages.every(stage => stage.routes.every(route => route.ground.sourceType !== 'CASE_FACT')));
+      // A bounded revision cannot omit a source from that attack's own proof.
+      const originalGrounds = comparison.grounds;
+      comparison.grounds = comparison.grounds.filter(ground => ground.sourceId !== profile.sources[0]);
+      assert.ok(validateScenarioEvidenceCoverage({ configuration, generationInput, scenarioPackage })
+        .some(issue => issue.code === 'INVESTIGATION_STAGE_PLAN_INVALID'));
+      comparison.grounds = originalGrounds;
     }
     assert.deepEqual(validateScenarioEvidenceCoverage({ configuration, generationInput, scenarioPackage }), []);
+    const routes = stages.flatMap(stage => stage.routes);
+    if (attackIds.includes('phishing') || attackIds.includes('credential_phishing')) {
+      assert.ok(routes.some(route => route.ground.sourceId === 'email_record' && route.evidenceType === 'EMAIL'));
+    }
+    if (attackIds.includes('clickfix')) {
+      assert.ok(routes.some(route => route.ground.sourceId === 'clickfix_page_record'
+        && route.evidenceType === 'DOCUMENT'), 'saved page/source material remains player-obtainable');
+    }
     assert.deepEqual({ configuration, generationInput }, original);
-    // A later scenario revision cannot quietly remove the earlier comparison record.
-    requirements.at(-1).grounds = stages.at(-1).routes.map(route => route.ground);
-    assert.ok(validateScenarioEvidenceCoverage({ configuration, generationInput, scenarioPackage })
-      .some(issue => issue.code === 'INVESTIGATION_STAGE_PLAN_INVALID'));
+    // The final issue is not a second presentation of every earlier attack.
+    const finalNode = stages.at(-1).routes[0].ground.attackNodeId;
+    assert.ok(requirements.at(-1).grounds.every(ground => ground.attackNodeId === finalNode));
   }
 });
 
@@ -54,7 +74,8 @@ function artifact(sourceId, publicContent, attackNodeId = 'attack_upload') {
 }
 function uploadRecords() {
   return [artifact('upload_receipt_record', JSON.stringify({ timestamp: '2026-09-18T09:10:00+09:00',
-    request_id: 'upload-17', filename: 'document.png', content_type: 'image/png', result: 'stored', storage_id: 'saved-42' })),
+    request_id: 'upload-17', source_ref: 'external-sender-01', filename: 'document.png',
+    content_type: 'image/png', result: 'stored', storage_id: 'saved-42' })),
   artifact('uploaded_file_record', JSON.stringify({ storage_id: 'saved-42', stored_at: '2026-09-18T09:10:00+09:00',
     hash: 'synthetic-hash-42', detected_type: 'text/plain', content_check: 'disallowed', executable_storage: false }))];
 }
@@ -73,6 +94,40 @@ test('upload comparison retains declared type, actual inspection and a shared st
   // Two separate attacks must never be joined solely by a shared artifact type.
   unrelated[1].sourceRefs[0].attackNodeId = 'another_attack';
   assert.doesNotThrow(() => validateLearningObservations(unrelated));
+});
+
+test('ClickFix joins the saved instruction to the executed content without equating request and process IDs', () => {
+  const records = [
+    artifact('clickfix_page_record', [
+      'request_id: web-request-17',
+      'response_time: 2026-09-18T09:10:00+09:00',
+      'instruction_ref: synthetic-instruction-42',
+      'body: 端末で確認操作を行うよう求める保存案内。',
+    ].join('\n'), 'attack_clickfix'),
+    artifact('process_execution_record', JSON.stringify({
+      timestamp: '2026-09-18T09:10:30+09:00', device_id: 'training-device-01',
+      process_ref: 'endpoint-process-91', parent_ref: 'endpoint-parent-12',
+      user_ref: 'training-user', start_result: 'started', instruction_ref: 'synthetic-instruction-42',
+    }), 'attack_clickfix'),
+  ];
+  assert.doesNotThrow(() => validateLearningObservations(records));
+  assert.notEqual(JSON.parse(records[1].publicContent).process_ref, 'web-request-17');
+  const unrelated = structuredClone(records);
+  unrelated[1].publicContent = unrelated[1].publicContent.replace('synthetic-instruction-42', 'another-instruction');
+  assert.throws(() => validateLearningObservations(unrelated), { code: 'EVIDENCE_LEARNING_CAUSAL_CHAIN_MISSING' });
+});
+
+test('phishing joins the recorded mail link to the Web request target instead of relying on nearby times', () => {
+  const records = [
+    artifact('email_record', '案内: https://portal.example.invalid/notice?ref=training-01', 'attack_phishing'),
+    artifact('web_access_record', JSON.stringify({
+      timestamp: '2026-09-18T09:10:00+09:00', host: 'portal.example.invalid', request_target: '/notice?ref=training-01',
+    }), 'attack_phishing'),
+  ];
+  assert.doesNotThrow(() => validateLearningObservations(records));
+  const unrelated = structuredClone(records);
+  unrelated[1].publicContent = unrelated[1].publicContent.replace('training-01', 'unrelated-99');
+  assert.throws(() => validateLearningObservations(unrelated), { code: 'EVIDENCE_LEARNING_CAUSAL_CHAIN_MISSING' });
 });
 
 test('password spray requires observable account distribution, not a one-line conclusion', () => {

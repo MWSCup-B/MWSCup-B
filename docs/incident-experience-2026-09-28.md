@@ -20,7 +20,7 @@
 
 Stored XSSでCookie窃取・管理者権限を仮定しない。通信の開始元・スクリプト実行は事件前から有効な記録を取得し、アクセス履歴やCSP違反ログで代用しない。SQLインジェクションを単なる投稿閲覧で成立させず、入力によるSQL構造の改変とDB側権限・返却条件を確認する。OSコマンド実行は追加しない。
 
-真相は内部の `groundTruth.incidentNarratives` に先に確定する。攻撃主体と被告人は別の架空の役割である。公開資料では「被告人が直接行った」とされる処理と別の発生原因を比較する。単に意図を証明できないという結末へ戻さず、攻撃で被害が生じた経路を示す。ただし、IPやアカウントから人物の実名を同定したことにはしない。未定義のアリバイ・供述・人物対応を生成して不足を補わない。
+真相は内部の `groundTruth.incidentNarratives` に先に確定する。攻撃主体と被告人は教材内で別の役割として定義する。公開資料では「被告人が直接行った」とされる処理と別の発生原因を比較する。単に意図を証明できないという結末へ戻さず、攻撃で被害が生じた経路を示す。ただし、IPやアカウントから人物の実名を同定したことにはしない。未定義のアリバイ・供述・人物対応を生成して不足を補わない。
 
 SQLの旧モデルでは、statement欄で保証された構造改変と要求・実行の対応だけを問い、特定の検索範囲・検索件数・漏えいを推定しない。新モデルの被害返却は追加した明示条件と取得資料に基づく。
 
@@ -38,7 +38,7 @@ SQLの旧モデルでは、statement欄で保証された構造改変と要求�
 
 画面の改善は保存済みゲームにも適用する。被害・ログ・証拠・法廷の新しい内容は再生成が必要。
 
-技術資料：[OWASP XSS](https://community.owasp.org/attacks/xss/)、[OWASP SQL Injection](https://community.owasp.org/attacks/SQL_Injection)、[Chrome DevTools Network reference](https://developer.chrome.com/docs/devtools/network/reference)。これらは攻撃や観測の一般的な意味を説明する資料で、架空の被告人の行動を立証する資料ではない。
+技術資料：[OWASP XSS](https://community.owasp.org/attacks/xss/)、[OWASP SQL Injection](https://community.owasp.org/attacks/SQL_Injection)、[Chrome DevTools Network reference](https://developer.chrome.com/docs/devtools/network/reference)。これらは攻撃や観測の一般的な意味を説明する資料で、教材内の被告人の行動を立証する資料ではない。
 
 ## 確認結果
 

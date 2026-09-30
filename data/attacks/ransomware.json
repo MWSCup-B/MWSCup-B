@@ -3,12 +3,22 @@
   "id": "ransomware",
   "label": "ランサムウェア",
   "category": "impact",
-  "description": "一般利用者が書込み可能な端末内の教材ファイルを暗号化し身代金を要求する事案。侵入経路は初期条件または選択された前段で明示し、横展開・情報窃取・バックアップ破壊を効果に含めない。",
+  "description": "一般利用者が書き込み可能な端末内の教材ファイルを暗号化し身代金を要求する事案。侵入経路は初期条件または選択された前段で明示し、横展開・情報窃取・バックアップ破壊を効果に含めない。",
   "supportedInvestigationTypes": [
     "DEVICE",
     "FILE",
     "CONFIGURATION"
   ],
+  "incidentNarrative": {
+    "impactEffectPredicate": "target_files_encrypted",
+    "requiredArtifactIds": ["file_operation_record", "process_execution_record", "damaged_file_record", "original_file_record", "ransom_note_record"],
+    "attackerAction": "被告人とは別の攻撃者が、対象端末で既に得ていた一般利用者の権限による実行経路を使って教材用暗号化処理を起動した。その処理が、当該利用者に書き込み可能な対象ファイルを暗号化し、合成の身代金要求文を残した。",
+    "impact": "対象端末内の書き込み可能な教材ファイルが暗号化処理によって変更され、通常利用できなくなった。",
+    "allegation": "暗号化処理が、被告人の使用端末上で、被告人のアカウントを示すユーザー識別子に紐づく処理として起動したため、検察側は、被告人が自らランサムウェアを実行したと主張している。",
+    "prosecutionKnowledge": "検察側は、被告人の端末上でのプロセス起動、対象ファイルの変更、身代金要求文の作成を把握している。一方、親子プロセスの関係とファイルへの暗号化書き込みを照合しておらず、実行に至る経路を確認しないまま、OS上の実行ユーザーを実際の操作者本人と取り違えている。",
+    "causalRefutation": "取得可能な技術資料を、対象・処理識別子・記録範囲に基づいて段階ごとに照合し、攻撃の処理経路・対象・結果と各記録の限界を確認する。アカウント名・IPアドレス・端末情報だけから人物や意図を特定せず、被告人による攻撃処理の準備・作成・直接操作という検察側の主張が資料で裏付けられるかを検討する。必要な技術資料又は対応関係が不足する場合は論証未成立として差し戻す。",
+    "verdictBasis": "取得可能な技術資料から被告人による攻撃処理の準備・作成・直接操作を確認できず、第三者による操作、認証情報の悪用、誘導又は自動処理の可能性を排除できない場合、その合理的な疑いを無罪判決の根拠とする。第三者が実行したと断定したり、その人物を技術資料だけから特定したりしない。"
+  },
   "bindings": [
     {
       "id": "attacker",
@@ -98,7 +108,7 @@
         "$client"
       ],
       "value": true,
-      "description": "当該端末の一般利用者権限で処理を実行できる。選択されたClickFixの効果、または明示した取得済みの初期権限。未選択の侵入攻撃を生成しない。"
+      "description": "当該端末の一般利用者の権限で処理を実行できる。選択されたClickFixの効果、または明示した取得済みの初期権限。未選択の侵入攻撃を生成しない。"
     },
     {
       "source": "authenticationConditions",
@@ -143,13 +153,13 @@
         "$files"
       ],
       "value": true,
-      "description": "書込み権限のある対象ファイルが暗号化され、通常の利用ができなくなる。拡張子変更だけで暗号化と判断しない。"
+      "description": "書き込み権限のある対象ファイルが暗号化され、通常の利用ができなくなる。拡張子変更だけで暗号化と判断しない。"
     }
   ],
   "observableArtifacts": [
     {
       "id": "process_execution_record",
-      "description": "事前に有効化した専用のプロセス実行計測。JSON Linesでtimestamp、device_id、process_ref、parent_ref、user_ref、start_resultに加え、OSのpid、parent_pid、executable、command_lineを保持する。process_refはPID再利用を区別する相関IDであり、PIDと別の欄。対象プロセスと少なくとも直接の親の起動行を保存し、同じ端末の親子関係を追跡できる。コマンドラインは非実行の教材識別子だけとし、標準ログが無条件に記録するとは扱わない。ClickFix等の選択された前段または初期実行条件を維持し、SSHログインシェルを補完しない。",
+      "description": "事前に有効化した専用のプロセス実行記録。JSON Linesでtimestamp、device_id、process_ref、parent_ref、user_ref、start_resultに加え、OSのpid、parent_pid、executable、command_lineを保持する。process_refはPID再利用を区別する相関IDであり、PIDと別の欄。対象プロセスと少なくとも直接の親の起動行を保存し、同じ端末の親子関係を追跡できる。コマンドラインは非実行の教材識別子だけとし、標準ログが無条件に記録するとは扱わない。ClickFix等の選択された前段または初期実行条件を維持し、SSHログインシェルを補完しない。",
       "conditions": [
         {
           "source": "loggingConfiguration",
@@ -158,13 +168,13 @@
             "$endpoint"
           ],
           "value": true,
-          "description": "この教材では対象の計測・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+          "description": "この教材では対象の記録・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
         }
       ]
     },
     {
       "id": "file_operation_record",
-      "description": "ファイル操作ログ。JSON Linesでtimestamp、device_id、user_ref、process_ref、pid、executable、operation、pathを記録する。operationはwrite、rename、create、read等。rename行は改名前pathと改名後new_pathを持つ。短い被害時間帯の複数種類の業務ファイルへの書込み、共通拡張子を追加する改名、複数ディレクトリへの同名要求文作成を別々の操作行として保存する。通常時間帯の操作も同じ計測範囲で保存し、期間をそろえてPID・実行ファイル・操作種別別に比較可能にする。集計結論や操作者名は書かない。",
+      "description": "ファイル操作ログ。JSON Linesでtimestamp、device_id、user_ref、process_ref、pid、executable、operation、pathを記録する。operationはwrite、rename、create、read等。rename行は改名前pathと改名後new_pathを持つ。短い被害時間帯の複数種類の業務ファイルへの書き込み、共通拡張子を追加する改名、複数ディレクトリへの同名要求文作成を別々の操作行として保存する。通常時間帯の操作も同じ記録範囲で保存し、期間をそろえてPID・実行ファイル・操作種別別に比較可能にする。集計結論や操作者名は書かない。",
       "acquisition": {
         "binding": "endpoint",
         "logSource": "DEVICE",
@@ -179,7 +189,7 @@
             "$endpoint"
           ],
           "value": true,
-          "description": "この教材で事前に保存・保全され、調査取得できる明示的な計測条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
         }
       ]
     },
@@ -200,7 +210,7 @@
             "$files"
           ],
           "value": true,
-          "description": "この教材で事前に保存・保全され、調査取得できる明示的な計測条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
         }
       ]
     },
@@ -221,13 +231,13 @@
             "$files"
           ],
           "value": true,
-          "description": "この教材で事前に保存・保全され、調査取得できる明示的な計測条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
         }
       ]
     },
     {
       "id": "ransom_note_record",
-      "description": "身代金要求文の保存本文。JSON Linesでtimestamp、device_id、path、process_ref、bodyを記録する。bodyは使用不能化、復旧と引換えの金銭要求、架空の連絡方法を含む非実行の合成文面。実在送金先は使わない。ファイル操作ログのcreate対象と対応させ、要求文の自己申告だけで暗号化や実際の人物を断定しない。",
+      "description": "身代金要求文の保存本文。JSON Linesでtimestamp、device_id、path、process_ref、bodyを記録する。bodyは使用不能化、復旧と引換えの金銭要求、教材用の無効な連絡先を含む非実行の合成文面。実在送金先は使わない。ファイル操作ログのcreate対象と対応させ、要求文の自己申告だけで暗号化や実際の人物を断定しない。",
       "acquisition": {
         "binding": "files",
         "logSource": "FILE",
@@ -242,7 +252,7 @@
             "$files"
           ],
           "value": true,
-          "description": "この教材で事前に保存・保全され、調査取得できる明示的な計測条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
         }
       ]
     }

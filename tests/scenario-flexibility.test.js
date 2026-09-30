@@ -13,6 +13,17 @@ import { resolveAuthoringBindings, linkRequestBindings } from '../server/generat
 
 const catalog = await loadCatalog();
 
+test('検察側調査官の表示名から所属を外すことはできない', () => {
+  const configuration = createDefaultConfiguration();
+  const generationInput = validateScenarioConfiguration(configuration, catalog).technical.generationInput;
+  const template = buildScenarioTemplate({ configuration, generationInput });
+  const invalid = structuredClone(template);
+  invalid.characters.characters.find(character => character.characterId === 'character_witness').displayName =
+    '調査担当者';
+  assert.throws(() => validateScenarioDesignBoundary(template, invalid),
+    { code: 'SCENARIO_PROSECUTION_INVESTIGATOR_ROLE_UNCLEAR' });
+});
+
 test('記述変更は許可し、Ground Truth・時刻・取得要件の改変は拒否する', () => {
   const configuration = createDefaultConfiguration();
   const generationInput = validateScenarioConfiguration(configuration, catalog).technical.generationInput;
@@ -119,7 +130,7 @@ test('初回にScenario Agentが事件条件に沿って設計し、独立検証
     async runJson(args) {
       const result = await super.runJson(args);
       if (args.phase === 'GENERATING_SCENARIO') {
-        result.characters.characters.find(c => c.characterId === 'character_witness').displayName = '架空の支店監査担当者';
+        result.characters.characters.find(c => c.characterId === 'character_witness').displayName = '検察側支店監査担当者';
       }
       return result;
     }
@@ -127,13 +138,13 @@ test('初回にScenario Agentが事件条件に沿って設計し、独立検証
   const runner = new Designer(); const manager = new AutoGenerationManager({ jsonRunner: runner });
   const session = createAutoAuthorSession();
   const configuration = createDefaultConfiguration();
-  configuration.incidentContext.organizationName = '架空の支店';
+  configuration.incidentContext.organizationName = '青海支店';
   manager.submitManual(session, configuration); await manager.waitForIdle();
   const design = runner.calls.find(c => c.phase === 'GENERATING_SCENARIO');
   assert.ok(design, '初回Scenario Agentが呼ばれていない');
-  assert.equal(design.data.scenarioConfiguration.incidentContext.organizationName, '架空の支店');
+  assert.equal(design.data.scenarioConfiguration.incidentContext.organizationName, '青海支店');
   assert.equal(session.scenarioPackage.characters.characters.find(c => c.characterId === 'character_witness').displayName,
-    '架空の支店監査担当者');
+    '検察側支店監査担当者');
   assert.equal(session.auto.state, 'SCENARIO_PREVIEW');
   assert.equal(runner.reviewCalls, 1); assert.equal(runner.evidenceCalls, 0);
   manager.approve(session); await manager.waitForIdle();

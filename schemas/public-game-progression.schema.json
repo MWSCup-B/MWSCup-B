@@ -92,7 +92,7 @@
           "properties": {
             "state": { "const": "ACQUITTED" },
             "publicRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
-            "publicExplanation": { "type": "string", "minLength": 1, "maxLength": 2000 }
+            "publicExplanation": { "type": "string", "minLength": 1, "maxLength": 16000 }
           },
           "required": ["state", "publicRuling", "publicExplanation"],
           "additionalProperties": false

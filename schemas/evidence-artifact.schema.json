@@ -31,7 +31,7 @@
     },
     "purpose": {
       "type": "array",
-      "items": { "enum": ["ATTACK_TRACE", "TIMELINE_PROOF", "CONTRADICTION_PROOF", "EXONERATION_PROOF", "IDENTITY_PROOF"] },
+      "items": { "enum": ["ATTACK_TRACE", "TIMELINE_PROOF", "CONTRADICTION_PROOF", "EXONERATION_PROOF"] },
       "minItems": 1,
       "maxItems": 5
     },

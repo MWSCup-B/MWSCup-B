@@ -25,12 +25,12 @@ function revisionFor(requirement, values) {
     description: null, grounds: null, stageText: null, ...values }] };
 }
 
-test('3攻撃5調査先の争点と資料を具体化し、送受信・実行・認証は取得後にだけ扱う', () => {
+test('3攻撃6調査先を攻撃と取得元で分け、各攻撃で被告人直接操作説の限界を検証する', () => {
   const value = fixture();
   const { scenarioPackage, configuration, generationInput } = value;
   const originalInput = structuredClone(generationInput);
   const requirements = stageRequirements(scenarioPackage);
-  assert.equal(requirements.length, 5);
+  assert.equal(requirements.length, 6);
   const stages = buildInvestigationStages(configuration, generationInput);
   assert.deepEqual(requirements.map(item => item.investigationStage.sourceNodeId), stages.map(item => item.sourceNodeId));
   for (const [index, requirement] of requirements.entries()) {
@@ -40,21 +40,36 @@ test('3攻撃5調査先の争点と資料を具体化し、送受信・実行・
       assert.ok(requirement.investigationStage[field].length > 10, field);
     }
     assert.equal(requirement.investigationStage.subjectCharacterId, 'character_defendant');
+    assert.equal(new Set(requirement.grounds.map(ground => ground.attackNodeId)).size, 1);
   }
   assert.deepEqual(requirements[0].grounds.map(item => item.sourceId), ['email_record']);
   assert.match(requirements[0].investigationStage.questionFocus, /保存メールの誘導内容・リンク.*実際のアクセス/);
   assert.match(requirements[0].investigationStage.limitedRefutation, /URLの不一致を必要条件にしない/);
+  assert.doesNotMatch(requirements[0].investigationStage.expectedInference,
+    /因果の結論に使うリンク先と要求対象|一致を示せない資料は合格させない/);
   assert.ok(requirements[1].grounds.some(item => item.sourceId === 'credential_submission_record'));
-  assert.match(requirements[1].investigationStage.expectedInference, /送信・受信/);
+  assert.match(requirements[1].description, /送信・受信/);
   assert.deepEqual(requirements[2].grounds.map(item => item.sourceId), ['authentication_record']);
   assert.match(requirements[2].investigationStage.expectedInference, /投稿完了までは示さない/);
   assert.ok(requirements[3].grounds.some(item => item.sourceId === 'application_session_record'));
   assert.ok(requirements[3].grounds.every(item => item.sourceId !== 'browser_execution_record'));
-  assert.match(requirements[3].investigationStage.claim, /アカウントとWeb側のセッション.*どんな操作/);
-  assert.match(requirements[3].investigationStage.expectedInference, /資格情報の受理、セッション利用、投稿完了/);
-  assert.ok(requirements[4].grounds.some(item => item.sourceId === 'browser_execution_record'));
-  assert.match(requirements[4].investigationStage.expectedInference, /保存・閲覧要求だけでは実行成功は分からない/);
-  assert.match(requirements[4].investigationStage.limitedRefutation, /別の法廷を追加しない/);
+  assert.match(requirements[3].investigationStage.claim,
+    /認証記録とアプリケーションセッション.*被告人本人がログインして当該セッションを操作/);
+  assert.match(requirements[3].description, /認証成功、セッション利用、投稿完了/);
+  assert.equal(requirements[3].investigationStage.sourceNodeId, requirements[4].investigationStage.sourceNodeId);
+  assert.notEqual(requirements[3].investigationStage.targetId, requirements[4].investigationStage.targetId);
+  assert.ok(requirements[4].grounds.some(item => item.sourceId === 'stored_content_record'));
+  assert.ok(requirements[4].grounds.every(item => !['authentication_record', 'application_session_record', 'browser_execution_record'].includes(item.sourceId)));
+  assert.match(requirements[4].investigationStage.expectedInference, /実行成功は分からない/);
+  assert.ok(requirements[5].grounds.some(item => item.sourceId === 'browser_execution_record'));
+  assert.match(requirements[5].investigationStage.claim, /被告人.*(?:作成|投稿)/);
+  assert.match(requirements[5].description, /保存・閲覧要求だけでは実行成功は分からない/);
+  assert.ok(requirements.every(requirement => requirement.grounds.every(ground =>
+    ground.sourceType === 'ATTACK_GRAPH_ARTIFACT')));
+  assert.ok(requirements.every(requirement => !/CASE_FACT|caseSupport|調査報告|直接観察/
+    .test(`${requirement.description} ${requirement.investigationStage.expectedInference}`)));
+  const acquisitionKeys = stages.flatMap(stage => stage.routes.map(route => groundKey(route.ground)));
+  assert.equal(new Set(acquisitionKeys).size, acquisitionKeys.length);
   assert.deepEqual(validateScenarioEvidenceCoverage(value), []);
   assert.equal(importScenarioPackage({ generationInput, scenarioPackage }).status, 'VALID');
   assert.deepEqual(generationInput, originalInput);
@@ -172,7 +187,7 @@ test('Revision timeoutは再試行せず停止し、未検証のScenarioやゲ�
   assert.equal(runner.timeouts, 1); assert.equal(runner.evidenceCalls, 0); assert.equal(session.runtime, null);
 });
 
-test('5調査先のEvidenceも段階別の必要資料を満たし、抜けた資料を検出する', async () => {
+test('6調査先のEvidenceも段階別の必要資料を満たし、抜けた資料を検出する', async () => {
   const runner = new MockCodexRunner(); const manager = new AutoGenerationManager({ jsonRunner: runner });
   const session = createAutoAuthorSession(); manager.submitManual(session, fixture().configuration);
   await manager.waitForIdle(); manager.approve(session); await manager.waitForIdle();
@@ -180,5 +195,5 @@ test('5調査先のEvidenceも段階別の必要資料を満たし、抜けた�
   const set = structuredClone(session.evidenceImportResult.evidenceSet);
   assert.deepEqual(stageEvidenceProblems(set, session.scenarioPackage), []);
   set.contradictions.forEach(item => { item.conflictingEvidenceIds = []; });
-  assert.equal(stageEvidenceProblems(set, session.scenarioPackage).filter(item => item.code === 'INVESTIGATION_STAGE_EVIDENCE_MISSING').length, 5);
+  assert.equal(stageEvidenceProblems(set, session.scenarioPackage).filter(item => item.code === 'INVESTIGATION_STAGE_EVIDENCE_MISSING').length, 6);
 });

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Independent Evidence Semantic Review v1 (Backend internal)",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "enum": ["VERIFIED", "NEEDS_REVISION", "BLOCKED"] },
+    "checks": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "properties": {
+          "checkId": { "enum": ["OBSERVATION_GROUNDING", "ATTRIBUTION_GROUNDING", "CLAIM_REFUTATION_ALIGNMENT", "EXPLANATION_GROUNDING"] },
+          "status": { "enum": ["PASS", "FAIL"] },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        },
+        "required": ["checkId", "status", "reason"],
+        "additionalProperties": false
+      }
+    },
+    "issues": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "enum": ["EVIDENCE_OBSERVATION_UNSUPPORTED", "EVIDENCE_ATTRIBUTION_UNSUPPORTED", "EVIDENCE_CLAIM_REFUTATION_CONFLICT", "EVIDENCE_EXPLANATION_CONFLICT"] },
+          "field": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "correctionHint": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        },
+        "required": ["code", "field", "reason", "correctionHint"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "status", "checks", "issues"],
+  "additionalProperties": false
+}

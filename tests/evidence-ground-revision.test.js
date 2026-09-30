@@ -33,13 +33,13 @@ function executionClaim(draft, input) {
   testimony.publicContent = testimony.publicContent.replace(statement.spokenContent, claim);
   statement.spokenContent = claim; statement.groundTruthRefs = [executionFact.factId];
   contradiction.contradictionId = 'contradiction_execution';
-  // 検証済み段階の保存・閲覧・実行計測への参照は維持し、Ground Truth参照だけを壊す。
+  // 検証済み段階の保存・閲覧・実行記録への参照は維持し、Ground Truth参照だけを壊す。
   assert.ok(contradiction.conflictingEvidenceIds.includes(evidence.evidenceId));
   contradiction.groundTruthRefs = [executionFact.factId];
   contradiction.reason = 'ブラウザのスクリプト実行記録資料が存在しないという主張と競合する。';
   const question = draft.courtQuestions.find(item => item.statementId === statement.statementId);
   question.prompt = 'training-script-01を含む保存・閲覧後のブラウザの動作記録資料から、どこまで言えますか。';
-  question.choices = ['対象応答に対応するブラウザのスクリプト実行記録記録がある。',
+  question.choices = ['対象応答に対応するブラウザのスクリプト実行記録がある。',
     '保存された投稿の資料だけで実行成功を確認できる。', '認証成功の記録だけでブラウザ実行まで確認できる。',
     'ブラウザのスクリプト実行記録だけで操作者の氏名が確定する。'];
   question.correctOptionIndex = 0; question.explanation = question.choices[0];
@@ -120,7 +120,15 @@ for (const side of ['contradiction', 'statement']) {
     assert.deepEqual(set.contradictions, validDraft.contradictions);
     assert.deepEqual(set.exonerations, validDraft.exonerations);
     assert.deepEqual(set.evidenceArtifacts.map(({ integrity, ...artifact }) => artifact), validDraft.evidenceArtifacts);
-    assert.deepEqual(session.progressionPlan.courtQuestions, validDraft.courtQuestions);
+    const withoutExplanation = question => {
+      const { explanation, ...rest } = question; return rest;
+    };
+    assert.deepEqual(session.progressionPlan.courtQuestions.map(withoutExplanation),
+      validDraft.courtQuestions.map(withoutExplanation));
+    // Reference repair must not append private incident settings as if they
+    // had been demonstrated by the cited public records.
+    assert.deepEqual(session.progressionPlan.courtQuestions.map(question => question.explanation),
+      validDraft.courtQuestions.map(question => question.explanation));
     assert.doesNotMatch(JSON.stringify(autoAuthorView(session)), /evidenceGroundRevision|unexpectedGroundTruthRefs/);
 
     // The invalid first draft is still rejected by the unchanged canonical Import.

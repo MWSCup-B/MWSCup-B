@@ -110,7 +110,7 @@
         "prosecutionOpening": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "initialRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "acquittalRuling": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "acquittalExplanation": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "acquittalExplanation": { "type": "string", "minLength": 1, "maxLength": 16000 },
         "failureFeedback": { "type": "string", "minLength": 1, "maxLength": 1000 }
       },
       "required": ["initialRuling", "acquittalRuling", "acquittalExplanation", "failureFeedback"],

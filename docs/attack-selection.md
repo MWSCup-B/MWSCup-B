@@ -6,7 +6,7 @@
 
 通常の制作入力は `scenario-selection.schema.json` の `schemaVersion: "1.0"`、`attackIds`（発生順・重複なし1～3件）、`settingId` のみ。POST `/api/author/selection` の本文は `{ "request": { ... } }`。舞台は `company / government / school / university / hospital`。未知値、内部限定型、4件以上、重複、Network・難易度などの追加フィールドを拒否する。Author tokenと既存の同一生成ロックが必要。attackIdsの順序は保持し、並べ替えて成立させる処理は行わない。
 
-`createSelectionConfiguration` が架空の設定を生成し、既存のConfiguration Schema・到達性・攻撃条件を検証したうえで、隣り合う各攻撃の直接の因果関係も検査する。取得経路・独立Review等の後続ゲートは維持する。旧manual APIは入力を補完しない。通常UIに詳細入力画面はないが、旧MANUAL/MAKOTOMARU APIとそのbootstrapフィールドは互換用に維持する。新UIは `attackChoices / attackSelectionPaths / settings / selectionDefaults / maxSelectedAttacks` を使う。
+`createSelectionConfiguration` が教材用の設定を生成し、既存のConfiguration Schema・到達性・攻撃条件を検証したうえで、隣り合う各攻撃の直接の因果関係も検査する。取得経路・独立Review等の後続ゲートは維持する。旧manual APIは入力を補完しない。通常UIに詳細入力画面はないが、旧MANUAL/MAKOTOMARU APIとそのbootstrapフィールドは互換用に維持する。新UIは `attackChoices / attackSelectionPaths / settings / selectionDefaults / maxSelectedAttacks` を使う。
 
 自動既定値は事件日2026-09-18、順に09:10/09:18/09:26（+09:00）、難易度・evidenceCountは攻撃数。組織名、被告人の役割、被害システム、内部ネットワーク表示名は舞台から生成する。医療機関のモデルは事務用システムだけを対象とし、実患者情報や医療機器は含めない。ネットワークは合成のアドレス、資料は合成データを使い、実接続・実攻撃をしない。
 
@@ -39,7 +39,7 @@
 | upload_receipt_record | web / APPLICATION_LOG | APPLICATION_LOG・監査確認 |
 | uploaded_file_record | files / FILE | FILE_METADATA・ファイル調査 |
 
-記録の計測・保持・調査取得を技術入力で明示する。製品固有のイベントIDや既定の記録は仮定しない。条件・取得元がなくなった場合は停止し、後段で補完しない。各対象につき1争点、調査→4択→法廷の既存進行と、後続資料を要求しない検証を維持する。
+必要な記録の取得・保持・調査での利用可否を技術入力で明示する。製品固有のイベントIDや既定の記録は仮定しない。条件・取得元がなくなった場合は停止し、後段で補完しない。各対象につき1争点、調査→4択→法廷の既存進行と、後続資料を要求しない検証を維持する。
 
 ## 複数攻撃
 
@@ -55,7 +55,7 @@
 
 ## 一次資料
 
-技術モデルの根拠であり、架空の個別記録や被告人の行動を証明するものではない。
+技術モデルの根拠であり、教材内の個別記録や被告人の行動を証明するものではない。
 
 - [Microsoft: Think before you Click(Fix)](https://www.microsoft.com/en-us/security/blog/2025/08/21/think-before-you-clickfix-analyzing-the-clickfix-social-engineering-technique/)：利用者を端末操作へ誘導する仕組み。
 - [MITRE ATT&CK: Password Spraying](https://attack.mitre.org/techniques/T1110/003/)：少数候補を多数アカウントへ試行する性質。

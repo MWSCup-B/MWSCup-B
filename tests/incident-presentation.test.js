@@ -108,10 +108,28 @@ test('two-person courtroom dialogue preserves testimony attribution and the unju
   assert.deepEqual([...new Set(lines.map(item => item.role))].sort(), ['defense', 'prosecutor']);
   const quoted = lines.find(item => item.badge.includes('引用'));
   assert.equal(quoted.role, 'prosecutor');
-  assert.ok(quoted.text.includes(`記録の調査担当者は、こう述べています。\n「${claim}」`));
+  assert.ok(quoted.text.includes(`記録の調査担当者は、こう話しています。\n「${claim}」`));
   const answer = lines.find(item => item.badge.includes('まだ確認前'));
   assert.equal(answer.text, hypothesis); assert.equal(answer.speaker, '弁護士（あなた）');
   assert.deepEqual(game, original);
+});
+
+test('the defense closing argument is spoken prose and leaves the verdict to the judge', () => {
+  const explanation = [
+    '事件で確認されたこと：別の攻撃者が外部から要求を送信した。',
+    '検察側の把握と主張：検察側は処理結果を被告人の直接操作だと主張した。',
+    '資料を照合して分かること：要求と処理記録は別の攻撃経路を示している。',
+    '弁護側の結論：この事実は、弁護側が被告人に無罪判決を求める根拠となる。',
+  ].join('\n');
+  const lines = generatedSceneDialogue({ currentState: 'ACQUITTED', result: { publicExplanation: explanation } });
+  const defense = lines.filter(line => line.role === 'defense');
+  assert.match(defense[0].text, /ここまでに分かったことを、もう一度整理します/);
+  assert.match(defense[0].text, /この点を見過ごしたまま、有罪とは言えません/);
+  assert.doesNotMatch(defense[0].text, /申し上げます|根拠となる/);
+  assert.doesNotMatch(defense[0].text, /事件で確認されたこと：|検察側の把握と主張：|判決理由：/);
+  assert.doesNotMatch(defense.map(line => line.text).join('\n'), /被告人を無罪とする/);
+  assert.match(defense.at(-1).text, /被告人に無罪判決を求めます/);
+  assert.match(lines.find(line => line.role === 'prosecutor').text, /追加の反論はありません/);
 });
 
 test('suspicion never quotes native values or testimony and stays within schema bounds', () => {
@@ -126,4 +144,21 @@ test('suspicion never quotes native values or testimony and stays within schema 
     [{ spokenContent: '😀'.repeat(4000) }]);
   assert.ok(long.length <= 1000);
   assert.ok(long.isWellFormed());
+});
+
+test('verified case explanation becomes speech using technical materials and limits', () => {
+  const explanation = [
+    '## 技術資料で確認した処理', '- 要求と処理結果の対応が確認されています。',
+    '**照合による反駁：**', '- 保存されたページの内容と端末記録の処理内容が対応しています。',
+    '照合による反駁：保全された入力内容は要求の記録と一致しています。',
+    '### 判断の限界', '- アカウントの記録から人物を特定したわけではありません。',
+    '判決理由：被告人を無罪とする。',
+  ].join('\n');
+  const game = { currentState: 'ACQUITTED', result: { publicExplanation: explanation } };
+  const speech = generatedSceneDialogue(game)[0].text;
+  assert.doesNotMatch(speech, /技術資料で確認した処理|資料間の照合|第三者の直接観察|調査報告|照合による反駁|判断の限界|判決理由|被告人を無罪とする|^[-#*]/m);
+  assert.match(speech, /保存されたページの内容と端末記録の処理内容が対応/);
+  assert.match(speech, /保全された入力内容は要求の記録と一致/);
+  assert.match(speech, /アカウントの記録から人物を特定したわけではありません/);
+  assert.equal(game.result.publicExplanation, explanation);
 });

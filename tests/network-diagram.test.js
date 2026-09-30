@@ -15,6 +15,11 @@ test('network preview draws each configured link above backgrounds and wraps lon
   };
   const before = structuredClone(network), layout = layoutNetwork(network);
   assert.equal(layout.edges.length, 2);
+  const cards = new Map(layout.groups.flatMap(group => group.cards.map(card => [card.node.nodeId, card])));
+  assert.ok(cards.get('sender').x < cards.get('web').x);
+  assert.ok(cards.get('web').x < cards.get('database').x);
+  assert.ok(layout.width < 1200); // Link count must not add empty routing space to the right.
+  assert.ok(layout.edges.every(edge => edge.path.includes(' C ')));
   for (const group of layout.groups) for (const card of group.cards) {
     const lastBaseline = card.y + 23 + (card.lines.length - 1) * 18;
     assert.ok(lastBaseline < card.y + card.height - 10);
@@ -25,6 +30,8 @@ test('network preview draws each configured link above backgrounds and wraps lon
   renderNetworkDiagram(svg, network, { createElementNS: (_, tag) => new Element(tag) });
   assert.deepEqual(svg.children.filter(child => child.tagName === 'G').map(child => child.dataset.layer), ['subnets', 'connections', 'nodes']);
   assert.equal(svg.querySelectorAll('path').length, network.connections.length);
+  assert.ok(svg.querySelectorAll('.diagram-connection')
+    .every(path => path.getAttribute('marker-end') === 'url(#diagram-arrow)'));
   for (const text of svg.querySelector('[data-layer="nodes"]').querySelectorAll('text')) {
     assert.ok(Number(text.getAttribute('textLength')) <= 234);
   }

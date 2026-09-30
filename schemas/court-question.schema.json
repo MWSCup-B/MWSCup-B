@@ -14,7 +14,7 @@
         "evidenceId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9_-]*$" },
         "quote": { "type": "string", "minLength": 6, "maxLength": 1000 }
       }, "required": ["evidenceId", "quote"], "additionalProperties": false } },
-    "explanation": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    "explanation": { "type": "string", "minLength": 1, "maxLength": 12000 }
   },
   "required": ["schemaVersion", "statementId", "prompt", "choices", "correctOptionIndex", "supportingQuotes", "explanation"],
   "additionalProperties": false

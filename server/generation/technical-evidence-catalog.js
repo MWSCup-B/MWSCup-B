@@ -4,7 +4,7 @@ import { ValidationError, validateDocument } from './schema.js';
 // registry's SATISFIED artifact, network source and investigation checks.
 const groundKey = ground => `${ground.attackNodeId}/${ground.sourceId}`;
 export function buildTechnicalEvidenceCatalog(stages, requirements) {
-  const routes = stages.flatMap(stage => stage.routes);
+  const routes = stages.flatMap(stage => stage.routes).filter(route => route.ground.sourceType === 'ATTACK_GRAPH_ARTIFACT');
   const entries = routes.map(route => ({ ground: structuredClone(route.ground),
     evidenceType: route.evidenceType, sourceNodeId: route.sourceNodeId,
     logSource: route.logSource, actionId: route.actionId,

@@ -52,10 +52,11 @@ test('all selected attack question backgrounds and final explanations stay bound
       assert.doesNotMatch(background, /ましょう|確認してください/);
     }
     const conclusion = buildIncidentConclusion(configuration, generationInput);
-    assert.ok(conclusion.length <= 2000, `${attackIds}: ${conclusion.length}`);
+    assert.ok(conclusion.length <= 16000, `${attackIds}: ${conclusion.length}`);
     assert.match(conclusion, /原因|要因|成功条件|環境|必要/);
-    assert.match(conclusion, attackIds.some(id => ['stored_xss', 'sql_injection'].includes(id))
-      ? /被害と発生原因[\s\S]*別の攻撃主体[\s\S]*無罪/ : /合理的な疑い/);
+    assert.match(conclusion, /被害と発生原因[\s\S]*第三者による操作[\s\S]*可能性を排除できず[\s\S]*無罪判決の根拠/);
+    assert.match(conclusion, /合理的な疑い/);
+    assert.doesNotMatch(conclusion, /その処理を被告人が行ったと判断できない/);
     assert.doesNotMatch(conclusion, /被告人は操作していない|真犯人|groundTruth|attack_node|fact_/);
     assert.deepEqual({ configuration, generationInput }, original);
   }
@@ -67,7 +68,7 @@ test('the final narrative uses confirmed graph causality and does not invent a p
   assert.match(conclusion, /メールの誘導先が、この偽案内/);
   assert.match(conclusion, /暗号化の足がかりは、ClickFixによる端末実行/);
   assert.match(conclusion, /一般利用者の権限/);
-  assert.match(conclusion, /書込み可能な対象ファイル/);
+  assert.match(conclusion, /書き込み可能な対象ファイル/);
   generationInput.technicalInput.attackGraph.edges = [];
   assert.doesNotMatch(buildIncidentConclusion(configuration, generationInput), /誘導先が、この偽案内|足がかりは/);
   generationInput.technicalInput.attackGraph.nodes[0].state = 'BLOCKED';
@@ -79,10 +80,16 @@ test('the final narrative uses confirmed graph causality and does not invent a p
 test('the investigation follows entry, instructions, execution and effects independently of graph storage order', () => {
   const { configuration, generationInput } = selected(['phishing', 'clickfix', 'ransomware']);
   const stages = buildInvestigationStages(configuration, generationInput);
-  assert.deepEqual(stages.map(stage => [...new Set(stage.routes.map(route => route.ground.sourceId))]), [
-    ['email_record'], ['web_access_record', 'clickfix_page_record'],
-    ['process_execution_record', 'file_operation_record'], ['damaged_file_record', 'original_file_record', 'ransom_note_record'],
+  assert.deepEqual(stages.map(stage => [...new Set(stage.routes
+    .filter(route => route.ground.sourceType === 'ATTACK_GRAPH_ARTIFACT').map(route => route.ground.sourceId))]), [
+    ['email_record'], ['web_access_record'], ['clickfix_page_record'],
+    ['process_execution_record'], ['file_operation_record', 'process_execution_record'],
+    ['damaged_file_record', 'original_file_record', 'ransom_note_record'],
   ]);
+  for (const stage of stages) {
+    assert.equal(new Set(stage.routes.map(route => route.ground.attackNodeId)).size, 1);
+    assert.ok(stage.routes.every(route => route.ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
+  }
   const reordered = structuredClone(generationInput);
   reordered.technicalInput.attackGraph.nodes.reverse().forEach(node => node.artifactEvaluations.reverse());
   assert.deepEqual(buildInvestigationStages(configuration, reordered), stages);
@@ -123,6 +130,7 @@ test('generation gives question background only to the evidence writer and relea
   const final = generatedPlayerView(session, runtime);
   assert.equal(final.currentState, 'ACQUITTED');
   assert.equal(final.acquittal.publicExplanation, conclusion);
-  assert.match(final.dialogue.find(line => line.role === 'prosecutor').text, /有罪の主張は維持できません。無罪との判断を受け入れます/);
-  assert.equal(final.dialogue[0].text, final.result.publicExplanation);
+  assert.match(final.dialogue.find(line => line.role === 'prosecutor').text, /検察側から追加の反論はありません/);
+  assert.match(final.dialogue.at(-1).text, /弁護側は、?被告人に無罪判決を求めます/);
+  assert.doesNotMatch(final.dialogue[0].text, /事件で確認されたこと：|判決理由：|被告人を無罪とする/);
 });

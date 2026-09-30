@@ -1,10 +1,12 @@
 import test from 'node:test';
+import { courtEvidenceLines } from '../server/generation/court-evidence.js';
 import assert from 'node:assert/strict';
 import { AutoGenerationManager, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { createGeneratedGame, actGenerated, generatedPlayerView } from '../server/generated-game.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 import { currentCorrectPair } from './helpers/court-issues.js';
 import { validateExplorableWebLogs } from '../server/generation/evidence-log-format.js';
+import { requiredCourtEvidence } from '../server/generation/investigation-workspace.js';
 
 for (const state of ['FAILED', 'CANCELLED', 'READY', 'MODE_SELECTION']) {
   test(`${state}から制作条件を保持して戻り、失敗した成果物を再利用しない`, () => {
@@ -56,6 +58,12 @@ for (const attack of ['sql_injection', 'stored_xss']) {
       if (item.type.endsWith('_LOG')) assert.ok(item.publicContent.trim().split('\n').length >= 100);
     }
     for (let round = 1; round <= runtime.gameCase.progression.courtRoundCount; round++) {
+      for (const materialId of requiredCourtEvidence(runtime.gameCase, round)) {
+        actGenerated(session, runtime, { action: 'workspace-read', materialId });
+        for (const line of courtEvidenceLines(runtime.gameCase, round, materialId)) {
+          actGenerated(session, runtime, { action: 'save-fact', materialId, line });
+        }
+      }
       const view = generatedPlayerView(session, runtime);
       const questions = view.workbench.materials.map(item => item.question);
       assert.ok(questions.every(question => JSON.stringify(question) === JSON.stringify(questions[0])));
@@ -70,7 +78,9 @@ for (const attack of ['sql_injection', 'stored_xss']) {
     }
     const ending = generatedPlayerView(session, runtime);
     assert.equal(ending.currentState, 'ACQUITTED');
-    assert.ok(ending.caseStudy.incident.includes(attack === 'sql_injection' ? 'SQLインジェクション' : 'Stored XSS'));
+    assert.equal(ending.caseStudy.incident,
+      runtime.publicGameCase.progression.outcomes.acquitted.publicExplanation,
+      '解説は審査済みの結論を表示し、非公開の事件設定や攻撃名を別途補わない');
     for (const issue of ending.caseStudy.issues) {
       assert.ok(issue.claim && issue.answer && issue.explanation && issue.references.length);
       for (const ref of issue.references) assert.ok(runtime.gameCase.detective.evidence
