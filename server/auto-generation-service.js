@@ -33,6 +33,7 @@ import { buildInvestigationStages, buildInvestigationAssignments }
 import { assignDialogueTemplate } from './generation/dialogue-template.js';
 import { buildIncidentOverview, buildProsecutionOpening } from './generation/incident-report.js';
 import { evidenceDraftProblems } from './generation/evidence-draft-validation.js';
+import { validateRansomwareObservations } from './generation/ransomware-observations.js';
 import { createSelectionConfiguration, buildAttackSelectionPaths } from './generation/scenario-selection.js';
 import { prepareLogBackgrounds } from './generation/log-backgrounds.js';
 import { courtIssueGenerationProblems, requestedCourtIssueCount } from './generation/court-issues.js';
@@ -971,8 +972,19 @@ export class AutoGenerationManager {
         const issue = { code: error.code, field: error.field ?? 'evidence-generation-draft',
           reason: error.message,
           correctionHint: error.correctionHint ?? '指定draft Schemaに適合する単一JSONオブジェクトを返し、integrityは出力しないでください。既存のRequirement・ground・証言・複数資料の参照を維持してください。' };
-        session.auto.details.push(detail(issue, 'GENERATING_EVIDENCE', evidenceAttempt));
-        evidenceFeedback = feedbackFromIssues([issue], 'REPAIRABLE_BLOCKED');
+        const issues = [issue];
+        // Background defects must not hide incident defects until the last retry.
+        // Diagnose only the original draft; no invalid artifact reaches build.
+        if (compactDraft && ['EVIDENCE_LOG_BACKGROUND_INVALID', 'EVIDENCE_LOG_FORMAT_INVALID'].includes(error.code)) {
+          try { validateRansomwareObservations(compactDraft.evidenceArtifacts, session.evidenceGenerationInput.evidenceAgentInput.attackGraph); }
+          catch (observationError) {
+            if (!(observationError instanceof ValidationError)) throw observationError;
+            issues.push({ code: observationError.code, field: observationError.field,
+              reason: observationError.message, correctionHint: observationError.correctionHint });
+          }
+        }
+        session.auto.details.push(...issues.map(item => detail(item, 'GENERATING_EVIDENCE', evidenceAttempt)));
+        evidenceFeedback = feedbackFromIssues(issues, 'REPAIRABLE_BLOCKED');
         continue;
       }
       if (evidenceGroundRevision && !preservesEvidenceGroundRevision(evidenceGroundRevision, compactDraft)) {
@@ -996,13 +1008,13 @@ export class AutoGenerationManager {
       const evidenceImported = session.evidenceImportResult;
       let issues = [...evidenceImported.errors, ...technicalEvidenceCoverageIssues(technicalEvidenceCatalog, evidencePackage.evidenceArtifacts), ...evidenceDraftProblems(draft, evidencePackage,
         session.evidenceGenerationInput.evidenceAgentInput, compactDraft.evidenceArtifacts)];
+      issues.push(...stageEvidenceProblems(evidencePackage, session.scenarioPackage));
       // The draft's artifact/contradiction schemas have already been checked.
       // Collect question defects even when provenance failed, so the same bounded
       // repair can address both. No invalid import can proceed to game creation.
       if (evidenceImported.status === 'VALID') {
         issues.push(...courtIssueGenerationProblems(evidenceImported.evidenceSet,
           requestedCourtIssueCount(session.configuration, session.generationInput)));
-        issues.push(...stageEvidenceProblems(evidenceImported.evidenceSet, session.scenarioPackage));
         if (issues.length) {
           session.auto.details.push(...issues.map(item => detail(item, 'GENERATING_EVIDENCE', evidenceAttempt)));
           evidenceFeedback = feedbackFromIssues(issues, 'REPAIRABLE_BLOCKED');

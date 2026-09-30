@@ -505,6 +505,9 @@ html:has(body.playing-generated), body.playing-generated { height: 100%; overflo
 .workspace-source { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: .35rem; padding: .6rem; background: #f8f6ee; color: #18283c; }
 .workspace-source > h2 { margin: 0; font-size: 1rem; flex-shrink: 0; }
 .workspace-console { flex: 1; min-height: 0; margin: 0; padding: .7rem; overflow: auto; white-space: pre; background: #0b1825; color: #e6f0f5; font: .85rem/1.6 ui-monospace, monospace; }
+.workspace-comparisons { flex: 0 1 35%; min-height: 0; overflow: auto; border-top: 1px solid #8d744a; }
+.workspace-comparison h3, .workspace-comparison p { margin: .35rem 0; }
+.workspace-comparison pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
 .workspace-composer { display: flex; align-items: end; gap: .5rem; flex-shrink: 0; }
 .workspace-composer label { flex: 1; min-width: 0; font-size: .8rem; }
 .workspace-composer input { display: block; box-sizing: border-box; width: 100%; padding: .5rem; color: #18283c; background: #fff; font: .9rem ui-monospace, monospace; }

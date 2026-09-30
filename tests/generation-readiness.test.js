@@ -39,7 +39,7 @@ test('ClickFix has distinct observation and comparison disputes, with the full p
   assert.match(requirements[0].investigationStage.claim, /案内どおりの処理.*実行.*みるべき/);
   const final = requirements[1];
   assert.deepEqual(new Set(final.grounds.map(item => item.sourceId)), new Set(['clickfix_page_record', 'process_execution_record']));
-  assert.match(final.investigationStage.claim, /要求IDと端末のプロセスID/);
+  assert.match(final.investigationStage.claim, /要求IDと端末のプロセス相関ID/);
   assert.match(final.investigationStage.claim, /被告人/);
   for (const meaning of [/プロセスは動いているプログラム/, /親子関係とは/, /実行アカウント/, /起動結果/, /アカウントは実際の人物とは限りません/]) {
     assert.match(final.description, meaning);
@@ -74,7 +74,7 @@ test('a process observation never supplies an unrecorded privilege level', () =>
   const generationInput = validateScenarioConfiguration(configuration, catalog).technical.generationInput;
   const first = buildScenarioTemplate({ configuration, generationInput }).evidenceRequirements.requirements
     .find(requirement => requirement.investigationStage);
-  assert.deepEqual(first.grounds.map(item => item.sourceId), ['process_execution_record']);
+  assert.deepEqual(first.grounds.map(item => item.sourceId), ['file_operation_record', 'process_execution_record']);
   assert.doesNotMatch(first.investigationStage.expectedInference, /記録された権限/);
   assert.match(first.investigationStage.expectedInference, /実行ユーザー識別子は権限や実際の操作者を示すものではなく/);
 });

@@ -1,6 +1,7 @@
 import { publicInvestigationQuestion } from './court-questions.js';
 import { procedureMethods } from './investigation-procedures.js';
 import { activeCourtEvidenceIds, investigationProgress, workspaceMaterial, COMMAND_HELP } from './investigation-workspace.js';
+import { observedFileComparisons } from './ransomware-observations.js';
 
 const labels = { EMAIL: '保存メール', WEB_ACCESS_LOG: 'Webアクセスログ', AUTHENTICATION_LOG: '認証ログ',
   APPLICATION_LOG: 'アプリケーションログ', DATABASE_LOG: 'DB監査ログ', NETWORK_LOG: '通信ログ',
@@ -50,6 +51,7 @@ export function materialQuestion(gameCase, materialId, round) {
 export function materialWorkbench(session, gameCase) {
   const active = activeCourtEvidenceIds(session);
   return { schemaVersion: '1.0', workspaceVersion: '1.0', help: COMMAND_HELP,
+    comparisons: observedFileComparisons(gameCase.detective.evidence, session.observedLines),
     progress: investigationProgress(session, gameCase), savedObservations: session.savedObservations ?? [],
     canChooseEvidence: active.length > 0,
     materials: materialEntries(gameCase).map(material => {

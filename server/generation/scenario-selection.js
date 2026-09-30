@@ -54,8 +54,8 @@ export function createSelectionConfiguration(request, catalog) {
       notes: '少数候補を多数アカウントへ試行する。対象の一つで候補が一致し、パスワードのみの認証で当該試行が制限に遮断されない限定条件。秘密値は保存しない。後続のサービス利用は別の処理。' },
     ransomware: { sourceNodeId: 'client-host', targetNodeId: 'client-host', targetServiceId: 'endpoint-files',
       investigationTypes: ['DEVICE'], investigationSourceNodeId: 'client-host',
-      evidenceAnswer: 'プロセス起動とファイル暗号化の確認結果を照合する。起動・拡張子変更だけで暗号化完了とはせず、影響範囲や実際の操作者を過大に断定しない。',
-      notes: `${selected.has('clickfix') ? '選択したClickFixによる実行' : '初期条件として取得済みの一般利用者の権限による実行環境'}を使用。端末内で読み書き可能な教材ファイルに限定。暗号化確認記録と合成の身代金要求文を保持する。横展開・情報窃取・バックアップ破壊は含めない。` },
+      evidenceAnswer: 'ファイル操作の集中、被害ファイルとバックアップ正常版の形式・ハッシュ・先頭データ、要求文を調べる。プロセス相関ID・PID・親PIDで記録された実行経路をたどり、アカウント利用と本人の操作・意図を区別する。',
+      notes: `${selected.has('clickfix') ? '選択したClickFixによる実行' : '初期条件として取得済みの一般利用者権限の実行環境'}を使用。端末内で読み書き可能な教材ファイルに限定。事前の専用ファイル操作記録・プロセス記録、被害ファイル検査、攻撃前の正常版の保全資料、合成の要求文を個別に保持する。SSHは追加しない。横展開・情報窃取・バックアップ破壊は含めない。` },
     unrestricted_file_upload: { investigationTypes: ['APPLICATION_LOG'], investigationSourceNodeId: 'web-host',
       evidenceAnswer: '申告された拡張子・Content-Typeと保存ファイルの内容検査を照合する。許可外ファイルの保存とサーバーでのコード実行は別である。',
       notes: '機能利用権限と書き込み可能な保存先を初期条件として明示。内容検証が不足し許可外ファイルが保存される。保存領域は非実行。Webシェル・OS実行・追加のXSSは生成しない。' },
@@ -95,6 +95,8 @@ export function createSelectionConfiguration(request, catalog) {
   const allegations = configuration.attacks.map(attack =>
     incidentProfile(impactCatalog, attack.attackId)?.allegation).filter(Boolean);
   if (allegations.length) configuration.incidentContext.initialSuspicionReason = allegations.join('\n');
+  if (request.attackIds.at(-1) === 'ransomware') configuration.incidentContext.initialSuspicionReason =
+    '端末内の業務ファイルが短時間で使用不能となり、共通の拡張子が追加された事案。検察側は「被告人のアカウントで不審なプログラムが実行されているため、被告人本人が意図的に業務ファイルを破壊した」と主張する。これは人物と意図についての主張であり、記録から確定した事実とは区別する。';
   validateSelectionChain(configuration, catalog);
   return configuration;
 }

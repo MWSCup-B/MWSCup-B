@@ -88,6 +88,20 @@ export function renderInvestigationWorkspace(game, state, action, redraw, { el, 
     el('span', `${state.page + 1} / ${pageCount}ページ · 結果 ${selected?.matchedRecords ?? 0} / 全 ${selected?.totalRecords ?? 0}件`),
     button('次ページ', () => { state.page++; redraw(); }, '', state.page + 1 >= pageCount));
   source.append(paging);
+  const comparisons = el('div', undefined, 'workspace-comparisons');
+  const filePairs = (game.workbench.comparisons ?? []).filter(pair =>
+    [pair.damaged.materialId, pair.original.materialId].includes(material.materialId));
+  for (const pair of filePairs) {
+    const comparison = el('section', undefined, 'workspace-comparison');
+    comparison.append(el('h3', `閲覧済みファイルの比較 — ${pair.originalPath}`));
+    for (const [label, snapshot] of [['被害側', pair.damaged], ['正常版', pair.original]]) {
+      comparison.append(el('p', `${label} / 行${snapshot.line}`),
+        el('pre', `形式: ${snapshot.format}\nSHA-256: ${snapshot.sha256}\n先頭データ: ${snapshot.headerHex}`));
+    }
+    comparison.append(el('p', `ハッシュ: ${pair.hashChanged ? '異なる' : '一致'} / 先頭データ: ${pair.headerChanged ? '異なる' : '一致'}。この比較だけでは暗号化方式や操作者は特定できません。`));
+    comparisons.append(comparison);
+  }
+  if (filePairs.length) source.append(comparisons);
   if (material.capabilities.console) {
     const composer = el('form', undefined, 'workspace-composer'); composer.setAttribute('aria-label', 'Command Composer');
     const label = el('label', 'Command Composer'); const input = el('input'); input.type = 'text'; input.value = state.command ?? '';

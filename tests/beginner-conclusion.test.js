@@ -81,7 +81,7 @@ test('the investigation follows entry, instructions, execution and effects indep
   const stages = buildInvestigationStages(configuration, generationInput);
   assert.deepEqual(stages.map(stage => [...new Set(stage.routes.map(route => route.ground.sourceId))]), [
     ['email_record'], ['web_access_record', 'clickfix_page_record'],
-    ['process_execution_record'], ['file_encryption_record'],
+    ['process_execution_record', 'file_operation_record'], ['damaged_file_record', 'original_file_record', 'ransom_note_record'],
   ]);
   const reordered = structuredClone(generationInput);
   reordered.technicalInput.attackGraph.nodes.reverse().forEach(node => node.artifactEvaluations.reverse());

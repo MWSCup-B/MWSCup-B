@@ -2,6 +2,7 @@ import { ValidationError } from './schema.js';
 import { validateGeneratedLogFormats, validateExplorableWebLogs } from './evidence-log-format.js';
 import { validateLearningObservations } from './learning-observations.js';
 import { validatePhishingObservations } from './phishing-evidence.js';
+import { validateRansomwareObservations } from './ransomware-observations.js';
 import { validateMaterialPlans } from './investigation-procedures.js';
 import { courtQuestionSourceErrors } from './court-questions.js';
 
@@ -40,8 +41,8 @@ export function evidenceDraftProblems(draft, evidencePackage, agentInput, observ
     correctionHint: '表示名・問題文・解説では「ブラウザのスクリプト実行記録」または「ブラウザの動作記録」を使ってください。原文・引用・参照・観測値は変更しません。',
   });
   evidencePackage.evidenceArtifacts.forEach((artifact, index) => {
-    inspect(() => validateGeneratedLogFormats([artifact]), index);
-    inspect(() => validateExplorableWebLogs([artifact]), index);
+    inspect(() => validateGeneratedLogFormats([artifact], evidencePackage.evidenceArtifacts), index);
+    inspect(() => validateExplorableWebLogs([artifact], evidencePackage.evidenceArtifacts), index);
     inspect(() => validateLearningObservations([observationArtifacts[index]]), index);
   });
   // Correlations use original authored incident rows. Repeated ordinary samples
@@ -49,6 +50,7 @@ export function evidenceDraftProblems(draft, evidencePackage, agentInput, observ
   if (!issues.some(item => item.code.startsWith('EVIDENCE_LEARNING_')))
     inspect(() => validateLearningObservations(observationArtifacts));
   inspect(() => validatePhishingObservations(evidencePackage.evidenceArtifacts, agentInput.attackGraph));
+  inspect(() => validateRansomwareObservations(observationArtifacts, agentInput.attackGraph));
   inspect(() => validateMaterialPlans(draft.materialInvestigations, evidencePackage.evidenceArtifacts));
   issues.push(...courtQuestionSourceErrors(draft.courtQuestions, evidencePackage, agentInput).map(error => issue(error)));
   return issues;

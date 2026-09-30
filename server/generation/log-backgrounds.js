@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { fail } from './schema.js';
-import { LOG_TYPES, MIN_LOG_RECORDS, validateGeneratedLogFormats } from './evidence-log-format.js';
+import { isExplorableLog, MIN_LOG_RECORDS, validateGeneratedLogFormats } from './evidence-log-format.js';
+import { ransomwareBackgrounds } from './ransomware-log-backgrounds.js';
 
 export const LOG_BACKGROUNDS_SCHEMA = {
   type: 'array', minItems: 0, maxItems: 64, items: {
@@ -31,6 +32,7 @@ export function prepareLogBackgrounds(input) {
   delete draft.logBackgrounds;
   if (!Array.isArray(plans) || plans.length > 64) reject('通常記録の生成例は64資料以内の配列で指定してください。');
   const seen = new Set(), artifacts = draft.evidenceArtifacts ?? [];
+  const expandRansomware = ransomwareBackgrounds(artifacts, plans);
   const occupied = new Set(artifacts.flatMap(item => {
     if (typeof item.publicContent !== 'string') return [];
     return item.publicContent.split(/\r?\n/).flatMap(line => {
@@ -40,14 +42,16 @@ export function prepareLogBackgrounds(input) {
   }));
   for (const plan of plans) {
     const item = artifacts.find(item => item.evidenceId === plan?.evidenceId);
-    if (!item || !LOG_TYPES.includes(item.type) || seen.has(item.evidenceId)
+    if (item && !isExplorableLog(item, artifacts))
+      reject(`${item.evidenceId}は通常記録の展開対象ではありません。この資料のlogBackgroundsだけを削除してください。DEVICE_INFORMATIONでは同じattackNodeIdにfile_operation_recordがある2種類のログだけが対象です。`);
+    if (!item || !isExplorableLog(item, artifacts) || seen.has(item.evidenceId)
       || Object.keys(plan).some(key => !['evidenceId', 'samples'].includes(key))
       || !Array.isArray(plan.samples) || plan.samples.length < 3 || plan.samples.length > 8
       || plan.samples.some(sample => typeof sample !== 'string' || sample.length > 2000 || /[\r\n]/.test(sample))) {
       reject('各ログ資料に一つだけ、同じ取得条件の通常記録を3～8例、各1行のJSONで指定してください。');
     }
     seen.add(item.evidenceId);
-    validateGeneratedLogFormats([item, ...plan.samples.map(publicContent => ({ type: item.type, publicContent }))]);
+    validateGeneratedLogFormats([item, ...plan.samples.map(publicContent => ({ ...item, publicContent }))], artifacts);
     const original = item.publicContent, lines = original.trimEnd().split(/\r?\n/);
     const count = Math.max(0, MIN_LOG_RECORDS - new Set(lines).size);
     if (!count) continue;
@@ -63,7 +67,7 @@ export function prepareLogBackgrounds(input) {
     // Keep the original block intact, without placing every incident on line 51.
     const position = createHash('sha256').update(`${item.evidenceId}:${original}`).digest()[0];
     const before = Math.max(1, Math.min(count, Math.round(count * (0.2 + position / 255 * 0.6))));
-    const expanded = Array.from({ length: count }, (_, index) => {
+    const expanded = expandRansomware?.(item, count, before, formatTimeLike) ?? Array.from({ length: count }, (_, index) => {
       const row = structuredClone(samples[index % samples.length]);
       for (const [key, value] of Object.entries(row)) {
         if (identifierField.test(key) && typeof value === 'string') {

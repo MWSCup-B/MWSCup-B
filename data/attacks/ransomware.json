@@ -11,12 +11,12 @@
   ],
   "incidentNarrative": {
     "impactEffectPredicate": "target_files_encrypted",
-    "requiredArtifactIds": ["process_execution_record", "file_encryption_record"],
+    "requiredArtifactIds": ["file_operation_record", "process_execution_record", "damaged_file_record", "original_file_record", "ransom_note_record"],
     "attackerAction": "被告人とは別の攻撃者が、対象端末で既に得ていた一般利用者の権限による実行経路を使って教材用暗号化処理を起動した。その処理が、当該利用者に書き込み可能な対象ファイルを暗号化し、合成の身代金要求文を残した。",
     "impact": "対象端末内の書き込み可能な教材ファイルが別の攻撃者の処理によって暗号化され、通常利用できなくなった。",
     "allegation": "暗号化処理が、被告人の使用端末上で、被告人のアカウントを示すユーザー識別子に紐づく処理として起動したため、検察側は、被告人が自らランサムウェアを実行したと主張している。",
     "prosecutionKnowledge": "検察側は、被告人の端末上でのプロセス起動、対象ファイルの変更、身代金要求文の作成を把握している。一方、親子プロセスの関係とファイルへの暗号化書き込みを照合しておらず、別の攻撃者が確立した実行経路を見落としたまま、OS上の実行ユーザーを実際の操作者と取り違えている。",
-    "causalRefutation": "端末記録のプロセス相関ID・親子関係・実行ユーザー・起動時刻と、暗号化記録の変更前後ハッシュ・確認結果・書き込み相関IDを照合する。これにより、暗号化は別の攻撃者が起動した処理によるもので、被告人が対象ファイルを直接選んで暗号化したのではないことが分かる。",
+    "causalRefutation": "ファイル操作記録とプロセス実行記録をプロセス相関ID・PID・親PIDで照合し、書き込み、改名、要求文作成を同じ処理経路へ対応付ける。さらに、同じfile_refを持つ被害ファイルと攻撃前の正常版について、形式・ハッシュ・先頭データを比較し、要求文の内容も確認する。これにより、被害は別の攻撃者が起動した処理によるもので、OS上の実行ユーザー識別子は、被告人が対象ファイルを直接選択して処理したことを示すものではないと分かる。",
     "verdictBasis": "暗号化処理を投入して被害を発生させたのは別の攻撃者であり、処理が被告人のユーザー権限で動いたことは被告人本人による操作を意味しない。被告人がランサムウェアを直接実行したという検察側の構成とは両立しない。この事実は、弁護側が被告人に無罪判決を求める根拠となる。"
   },
   "bindings": [
@@ -159,7 +159,7 @@
   "observableArtifacts": [
     {
       "id": "process_execution_record",
-      "description": "専用の端末記録。時刻、端末ID、非秘密のプロセス相関ID、親子関係、実行ユーザー識別子、起動結果。実行内容は非実行の教材識別子のみ。起動だけで暗号化完了を断定しない。",
+      "description": "事前に有効化した専用のプロセス実行記録。JSON Linesでtimestamp、device_id、process_ref、parent_ref、user_ref、start_resultに加え、OSのpid、parent_pid、executable、command_lineを保持する。process_refはPID再利用を区別する相関IDであり、PIDと別の欄。対象プロセスと少なくとも直接の親の起動行を保存し、同じ端末の親子関係を追跡できる。コマンドラインは非実行の教材識別子だけとし、標準ログが無条件に記録するとは扱わない。ClickFix等の選択された前段または初期実行条件を維持し、SSHログインシェルを補完しない。",
       "conditions": [
         {
           "source": "loggingConfiguration",
@@ -173,17 +173,86 @@
       ]
     },
     {
-      "id": "file_encryption_record",
-      "description": "調査用に保存された対象ファイルの変更前後の検査結果。時刻、対象パス、変更前後のハッシュ、暗号化確認結果、書き込み処理との相関ID、身代金要求文（合成）。単なる改名や高エントロピーだけを暗号化の証明にしない。対象外ファイルや外部流出は示さない。",
+      "id": "file_operation_record",
+      "description": "ファイル操作ログ。JSON Linesでtimestamp、device_id、user_ref、process_ref、pid、executable、operation、pathを記録する。operationはwrite、rename、create、read等。rename行は改名前pathと改名後new_pathを持つ。短い被害時間帯の複数種類の業務ファイルへの書き込み、共通拡張子を追加する改名、複数ディレクトリへの同名要求文作成を別々の操作行として保存する。通常時間帯の操作も同じ記録範囲で保存し、期間をそろえてPID・実行ファイル・操作種別別に比較可能にする。集計結論や操作者名は書かない。",
+      "acquisition": {
+        "binding": "endpoint",
+        "logSource": "DEVICE",
+        "type": "DEVICE_INFORMATION",
+        "targetType": "ENDPOINT"
+      },
       "conditions": [
         {
           "source": "loggingConfiguration",
-          "predicate": "file_encryption_record_available",
+          "predicate": "file_operation_record_available",
+          "args": [
+            "$endpoint"
+          ],
+          "value": true,
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
+        }
+      ]
+    },
+    {
+      "id": "damaged_file_record",
+      "description": "被害ファイルの検査。JSON Linesでsnapshot=\"damaged\"、timestamp、device_id、file_ref、original_path、path、detected_format、sha256、header_hex、readable=false、process_refを保存する。実形式と先頭バイトが元の形式に適合しない状態を示す。file_refはバックアップとの対応を示す保存時の識別子。正常版の検査値はこの資料へ転記しない。ハッシュ差や形式不明だけで暗号化方式を断定しない。",
+      "acquisition": {
+        "binding": "files",
+        "logSource": "FILE",
+        "type": "FILE_METADATA",
+        "targetType": "SERVER"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "damaged_file_record_available",
           "args": [
             "$files"
           ],
           "value": true,
-          "description": "この教材では対象の記録・保持・調査取得が有効。下記資料説明で宣言した欄だけを記録し、製品の既定ログとは扱わない。"
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
+        }
+      ]
+    },
+    {
+      "id": "original_file_record",
+      "description": "バックアップから取得した元ファイルの検査。攻撃前に保全した正常版の読み取り専用資料であり、新しいバックアップサーバー・到達性・復元操作は追加しない。JSON Linesでsnapshot=\"backup\"、timestamp（バックアップ取得時刻）、device_id（元端末）、file_ref、original_path、path（保全先）、detected_format、sha256、header_hex、readable=trueを保存する。同じfile_refとoriginal_pathの被害ファイルと比較でき、正常形式・ハッシュ・先頭バイトを確認できる。被害側の値を先に開示しない。",
+      "acquisition": {
+        "binding": "files",
+        "logSource": "FILE",
+        "type": "FILE_METADATA",
+        "targetType": "SERVER"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "original_file_record_available",
+          "args": [
+            "$files"
+          ],
+          "value": true,
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
+        }
+      ]
+    },
+    {
+      "id": "ransom_note_record",
+      "description": "身代金要求文の保存本文。JSON Linesでtimestamp、device_id、path、process_ref、bodyを記録する。bodyは使用不能化、復旧と引換えの金銭要求、架空の連絡方法を含む非実行の合成文面。実在送金先は使わない。ファイル操作ログのcreate対象と対応させ、要求文の自己申告だけで暗号化や実際の人物を断定しない。",
+      "acquisition": {
+        "binding": "files",
+        "logSource": "FILE",
+        "type": "DOCUMENT",
+        "targetType": "SERVER"
+      },
+      "conditions": [
+        {
+          "source": "loggingConfiguration",
+          "predicate": "ransom_note_record_available",
+          "args": [
+            "$files"
+          ],
+          "value": true,
+          "description": "この教材で事前に保存・保全され、調査取得できる明示的な記録条件。説明に定義した欄を保持し、製品の既定ログとは扱わない。"
         }
       ]
     }
@@ -213,6 +282,6 @@
     "targetServiceBinding": "files",
     "investigationServiceBinding": "endpoint",
     "preferredInvestigationType": "DEVICE",
-    "evidenceAnswer": "専用の端末記録。時刻、端末ID、非秘密のプロセス相関ID、親子関係、実行ユーザー識別子、起動結果。実行内容は非実行の教材識別子のみ。起動だけで暗号化完了を断定しない。 / 調査用に保存された対象ファイルの変更前後の検査結果。時刻、対象パス、変更前後のハッシュ、暗号化確認結果、書き込み処理との相関ID、身代金要求文（合成）。単なる改名や高エントロピーだけを暗号化の証明にしない。対象外ファイルや外部流出は示さない。"
+    "evidenceAnswer": "ファイル操作の集中と対象プロセスを調べ、被害ファイルと正常版の形式・ハッシュ・先頭データ、身代金要求文を照合する。親子プロセスを記録範囲でたどり、アカウント利用と本人操作を区別する。SSHは検証済みの経路にある場合だけ扱う。"
   }
 }
