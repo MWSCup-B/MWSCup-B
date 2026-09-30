@@ -12,9 +12,9 @@ export function spokenProsecutionClaim(allegation, fallback) {
   const parts = allegation.trim().match(/^(.*?)、?検察側は、?(.*?)と主張している。?$/);
   if (!parts) return allegation;
   const basis = parts[1].replace(/、$/, '').replace(/を根拠として$|ことから$|ため$/, '')
-    .replace(/こと$/, '').trim();
-  const conclusion = parts[2].trim();
-  return basis && conclusion ? `${basis}。このことから、${conclusion}と判断できます。` : allegation;
+    .replace(/こと$/, '').trim().replaceAll('当該', 'その');
+  const conclusion = parts[2].trim().replaceAll('当該', 'その');
+  return basis && conclusion ? `${basis}。つまり、${conclusion}ということです。` : allegation;
 }
 
 // 記録の取得順と攻撃の実行順は別。登録済みの取得元を変えずに、争点を取得順へ割り当てる。
@@ -30,17 +30,17 @@ export function buildStageRequirements(configuration, generationInput) {
     let grounds = current;
     let claim, questionFocus, expectedInference, limitedRefutation;
     if (has('email_record')) {
-      claim = '保存メールには誘導リンクが記載されています。受信者はこのリンクから対象ページへアクセスしたと考えられます。';
+      claim = '保存メールには誘導リンクがあります。受信者は、このリンクから対象ページを開いたと考えるのが自然です。';
       questionFocus = '保存メールの誘導内容・リンクを読み、本文に書かれた案内と実際のアクセスの記録を区別する4択。';
       expectedInference = '保存メールから確認できるのは案内やリンクの内容であり、保存されているだけでは実際のアクセスやフォームへの送信は確認できない。';
       limitedRefutation = '保存メールのリンクの存在を実際のアクセスと同一視する部分だけを反駁する。未取得のWeb記録やURLの不一致を必要条件にしない。';
     } else if (has('clickfix_page_record')) {
-      claim = '修復案内は端末に表示されています。この表示に続いて、案内どおりの処理も端末上で実行されたとみるべきです。';
+      claim = '修復案内が端末に表示されています。その直後に、案内どおりの処理も端末で動いたと考えています。';
       questionFocus = '偽案内の保存内容と応答の記録から、案内表示と端末側の実行を区別する4択。';
       expectedInference = '保存された案内は端末操作を促しているが、応答の記録だけでは利用者が実行したか分からない。ClickFixの実行には利用者の端末操作が必要。';
       limitedRefutation = '表示から実行成功を断定する部分だけを反駁する。後続の端末記録や暗号化資料をまだ要求しない。';
     } else if (has('spray_authentication_record')) {
-      claim = '複数アカウントへの連続した認証失敗が記録されています。同一のパスワード候補を順に試した記録とみてよいでしょう。';
+      claim = '複数のアカウントで、認証の失敗が続いています。同じパスワード候補を順番に試したのでしょう。';
       questionFocus = '対象アカウント・時刻・成否を読み、認証監査が記録していない秘密値まで推測できるかを選ぶ4択。';
       expectedInference = '複数アカウントへの試行とその成否は確認できる。ただし秘密値を記録しないこの資料だけでは、同じ候補を使ったことまでは断定できない。';
       limitedRefutation = '多数アカウントへの少数候補試行というパスワードスプレーの定義を説明し、観測パターンと秘密値の証明を区別する。失敗を認証成功や操作者の特定へ読み替えない。';
@@ -55,27 +55,27 @@ export function buildStageRequirements(configuration, generationInput) {
       expectedInference = '名前やContent-Typeは送信側が申告する値である。保存後の検査結果と照合して、実際のファイル内容を判断する。';
       limitedRefutation = '申告値だけで実際の内容を断定する部分だけを反駁する。まだ取得していない保存ファイルの内容を正解の必須条件にしない。';
     } else if (has('uploaded_file_record')) {
-      claim = '許可されていない内容のファイルがサーバーに保存されています。このファイルはサーバー上で実行されたと判断できます。';
+      claim = '許可されていない内容のファイルが、サーバーに保存されています。なら、そのファイルはサーバー上で実行されたと考えられます。';
       questionFocus = '内容検査と非実行の保存先設定から、許可外ファイルの保存とコード実行を区別する4択。';
       expectedInference = '保存IDと内容検査で許可外ファイルの保存は確認できるが、非実行の保存領域への保存はコード実行を意味しない。';
       limitedRefutation = '保存から実行への飛躍だけを反駁する。別の未選択攻撃や実際の操作者は補完しない。';
     } else if (has('file_operation_record')) {
-      claim = '不審なプログラムの起動後、短時間に多数のファイル操作が記録されています。この一連の記録から、当該プログラムによって対象ファイルが破壊されたと判断できます。';
+      claim = '不審なプログラムが起動した直後に、多数のファイルが操作されています。このプログラムが対象ファイルを破壊したと考えられます。';
       questionFocus = 'ファイル操作の時間帯・対象・操作種別と、対応するプロセスの実行情報・親子関係を読む4択。';
       expectedInference = '同じ端末の相関ID・PIDで書込み、改名、文書作成を実行情報に対応付け、記録された親プロセスをたどれる。起動だけではファイル内容や全体の被害範囲は確定しない。実行ユーザー識別子は権限や実際の操作者を示すものではなく、本人の操作・意図は断定できない。';
       limitedRefutation = '起動と実際のファイル操作を区別し、未取得の被害ファイル・正常版の比較や暗号化方式を要求しない。SSHや人物・意図を補完しない。';
     } else if (has('process_execution_record')) {
-      claim = '対象プロセスの起動が記録されています。この記録は、計画された処理が完了し、想定した被害が発生したことを示しています。';
+      claim = '対象のプロセスは起動しています。予定されていた処理も終わり、被害が出たと考えられます。';
       questionFocus = '端末記録の起動結果と、その後のファイル変更などの結果を区別する4択。';
       expectedInference = '記録された端末ID・実行ユーザー識別子・起動結果は確認できるが、起動だけで後続の処理完了や被害範囲を断定できない。実行ユーザー識別子は権限や実際の操作者を示すものではなく、被告人本人の操作や意図はこの資料だけでは確認できない。';
       limitedRefutation = '起動を被害完了と同一視する部分だけを反駁する。未取得のファイル検査結果や人物の意図は要求しない。';
     } else if (has('file_encryption_record')) {
-      claim = 'この端末ではファイルの暗号化が確認されています。組織内の対象ファイルにも同様の被害が及んだと考えられます。';
+      claim = 'この端末では、ファイルが暗号化されています。組織内のほかの対象ファイルにも、同じ被害が出たと考えられます。';
       questionFocus = '暗号化確認結果と対象パスから、検査した範囲と未調査の範囲を区別する4択。';
       expectedInference = '変更前後の検査と暗号化確認結果が示す対象範囲だけを確認する。対象外ファイルや外部流出まで証明する記録ではない。';
       limitedRefutation = '一部の検査から全体の被害を断定する部分だけを反駁する。拡張子変更だけを暗号化の証明にしない。';
     } else if (has('database_statement_record')) {
-      claim = 'DB監査にはSQLの実行が記録されています。攻撃者はDBにとどまらず、サーバーOSも操作できる状態だったと考えられます。';
+      claim = 'DB監査には、SQLを実行した記録があります。攻撃者はDBだけでなく、サーバー自体も操作できたと考えられます。';
       questionFocus = 'DB監査が示すSQLの実行と、DB主体の権限・OS実行の違いを選ぶ4択。';
       expectedInference = '対象要求に対応するSQLの実行はDB監査の範囲で確認する。アプリケーションのDB権限を越えた操作やOS実行は示していない。';
       limitedRefutation = 'SQL実行からOS権限への飛躍だけを反駁する。記録にない流出や操作者は断定しない。';
@@ -85,7 +85,7 @@ export function buildStageRequirements(configuration, generationInput) {
       expectedInference = '専用の送信・受信記録に記録された送信先・時刻・非秘密の合成相関IDを照合し、リンクへのアクセスだけでなく偽フォームへの送信・受信を確認する。秘密値や定義されていない処理結果欄は使わない。';
       limitedRefutation = '送受信の有無という記録解釈だけを反駁する。通常のアクセスログに秘密値が残ると仮定せず、正規サービスへの認証成功や操作者は断定しない。';
     } else if (has('stored_content_record')) {
-      claim = '問題の投稿はWebサーバーに保存され、その後に閲覧要求も記録されています。投稿に含まれる処理はブラウザで実行されたと判断できます。';
+      claim = '問題の投稿はWebサーバーに保存され、その後に閲覧もされています。投稿に含まれる処理は、ブラウザで動いたはずです。';
       questionFocus = '保存投稿とWeb要求の記録が示す範囲を読み、保存・閲覧要求と実行成功を区別する4択。';
       expectedInference = '保存資料と閲覧要求は確認できるが、これらだけではブラウザでの実行成功は分からない。';
       limitedRefutation = '「保存されたから実行も成功した」という飛躍だけを反駁する。実行の成否そのものは端末記録を取得するまで結論にしない。認証記録も使わない。';
@@ -96,23 +96,23 @@ export function buildStageRequirements(configuration, generationInput) {
       expectedInference = '対応するブラウザのスクリプト実行記録が示す範囲で実行を確認できる。アクセス成功や保存ソースだけからの推測とは区別する。';
       limitedRefutation = '「実行した記録がない」という主張だけを反駁する。被告人の操作や意図、記録されていない影響は断定しない。';
     } else if (has('authentication_record')) {
-      claim = '対象アカウントの認証成功が記録されています。その認証セッションによる投稿も完了したと判断できます。';
+      claim = '対象アカウントで認証に成功しています。そのセッションから、投稿も行われたと考えています。';
       questionFocus = '認証記録が示す処理範囲を読み、認証成功と投稿完了を区別する4択。';
       expectedInference = '認証成功の記録は認証の結果であり、別の処理である投稿完了までは示さない。';
       limitedRefutation = '認証結果を投稿完了と同一視する部分だけを反駁し、投稿の実行者を断定しない。';
     } else if (current.some(ground => /^(ssh_|traversal_|sudo_|setuid_|service_|collection_)/.test(ground.sourceId))) {
       // 2026-09-24: mainのローカル攻撃にWeb要求を捏造せず、今回の観測範囲を問う。
       const recordLabel = investigationSourceLabel(stage.routes.filter(route => route.ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
-      claim = `${recordLabel}を確認しました。この資料から、関連する処理は必要な権限で成功したと判断できます。`;
+      claim = `${recordLabel}が残っています。関連する処理も、必要な権限で成功したと考えています。`;
       questionFocus = '今回の資料が示す設定・操作・実効権限と、まだ確認できない処理を区別する4択。';
       expectedInference = '取得した資料に記録された対象と状態だけを確認し、設定の存在と実行の観測を区別する。';
       limitedRefutation = '今回の資料の記録範囲を越えた成功・権限の断定だけを反駁する。未取得の資料や操作を追加しない。';
     } else {
-      claim = 'Webアプリケーション側には、対象の要求を受け付けた記録が残っています。したがって、その要求に続く処理も正常に完了したと判断できます。';
+      claim = 'Webアプリケーションには、対象の要求を受け付けた記録があります。その後の処理も、正常に終わったと考えられます。';
       if (tasks.some(task => task.sources.includes('database_statement_record')))
-        claim = 'Web側には対象の要求を受け付けた記録が残っています。対応するSQLの実行も正常に完了したと判断できます。';
+        claim = 'Web側には、対象の要求を受け付けた記録があります。対応するSQLも、問題なく実行されたと考えられます。';
       else if (tasks.some(task => task.sources.includes('browser_execution_record')))
-        claim = 'ページへの要求を受け付けた記録が残っています。ページ内のスクリプトもブラウザで実行されたと判断できます。';
+        claim = 'ページへの要求を受け付けた記録があります。ページ内のスクリプトも、ブラウザで動いたと考えられます。';
       questionFocus = '取得した要求・セッションの記録範囲から、要求の記録と後続処理の成功を区別する4択。';
       expectedInference = '要求の到達やセッションの状態は、その記録範囲で確認する。後続の実行成功は対応する処理側の記録がなければ断定できない。';
       limitedRefutation = '要求の記録だけで後続処理の成功まで断定する部分を反駁する。まだ取得していない端末・DB・認証の資料を要求しない。';
@@ -139,7 +139,7 @@ export function buildStageRequirements(configuration, generationInput) {
       claim = spokenProsecutionClaim(applicableAllegation,
         attackId === 'sql_injection' ? legacySqlClaim : (focus.claim ?? claim));
       if (!applicableAllegation && attackId === 'phishing')
-        claim = '保存メールのリンク先とWeb要求の対象は一致しています。この一致から、受信者がメールのリンクを操作して要求を送ったと判断できます。';
+        claim = '保存メールのリンク先と、Web要求の対象は一致しています。受信者がメールのリンクを開き、この要求を送ったと考えられます。';
       questionFocus = `${completed.map(task => task.name).join('・')}の取得済み資料を比較し、対象・値の対応と攻撃の特徴、記録から判断できる範囲を問う4択。対象が分かる読みやすい問題文にする。`;
       expectedInference = completed.map(task => task.comparison + task.limit).join('\n');
       limitedRefutation = 'この主張を資料の比較で反駁する。各資料が観測する段階を分け、単一資料に攻撃全体の結論を書かない。' + focus.limit;

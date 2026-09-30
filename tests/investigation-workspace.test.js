@@ -1,7 +1,7 @@
 import test from 'node:test';
 import { courtEvidenceLines } from '../server/generation/court-evidence.js';
 import assert from 'node:assert/strict';
-import { executeMaterialCommand, commandTemplates, workspaceAction, workspaceMaterial, investigationProgress, requiredCourtEvidence }
+import { executeMaterialCommand, commandTemplates, sourceLines, workspaceAction, workspaceMaterial, investigationProgress, requiredCourtEvidence }
   from '../server/generation/investigation-workspace.js';
 import { buildTechnicalEvidenceCatalog, technicalEvidenceCoverageIssues } from '../server/generation/technical-evidence-catalog.js';
 import { AutoGenerationManager, createAutoAuthorSession } from '../server/auto-generation-service.js';
@@ -82,6 +82,27 @@ test('bulk clear removes current saved evidence without erasing investigation hi
   assert.deepEqual(session.observedLines, { auth: [1] });
   assert.deepEqual(session.commandHistory, { auth: [{ command: 'head', output: 'line' }] });
   assert.equal(session.savedObservations.length, 1);
+});
+
+test('all source lines can be saved atomically from the selected material without client supplied text', () => {
+  const game = { detective: { evidence: [log], evidenceDiscoveryRules: [{ evidenceId: 'auth', targetId: 'server', actionId: 'read',
+    prerequisites: { requiredEvidenceIds: [], requiredCompletedActionIds: [] } }] },
+  progression: { courtIssues: [{ requiredEvidenceIds: ['auth'] }] } };
+  const session = { currentRound: 1, collectedEvidenceIds: [], discoveredEvidenceIds: [],
+    completedInvestigationActions: [], wholeDocumentEvidenceIds: ['auth'] };
+  workspaceAction(session, game, { action: 'save-all-facts', materialId: 'auth' });
+  assert.deepEqual(session.savedFacts.auth,
+    sourceLines(log).map((text, index) => ({ line: index + 1, text })));
+  assert.deepEqual(session.roundCollectedEvidenceIds, ['auth']);
+  assert.deepEqual(session.collectedEvidenceIds, ['auth']);
+  assert.deepEqual(session.discoveredEvidenceIds, ['auth']);
+  assert.deepEqual(session.wholeDocumentEvidenceIds, []);
+  assert.equal(workspaceMaterial(session, log).lineCount, 41);
+  assert.equal(workspaceMaterial(session, log).allFactsSaved, true);
+  workspaceAction(session, game, { action: 'remove-fact', materialId: 'auth', line: 2 });
+  assert.equal(workspaceMaterial(session, log).allFactsSaved, false);
+  workspaceAction(session, game, { action: 'save-all-facts', materialId: 'auth' });
+  assert.equal(session.savedFacts.auth.length, 41);
 });
 
 test('technical preflight and coverage require the available route and correct non-testimony type', () => {

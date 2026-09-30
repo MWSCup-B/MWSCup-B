@@ -88,7 +88,7 @@ test('検察側の主張は観測事実と結論を自然に述べ、推論の�
     }
     if (attack.id === 'stored_xss') {
       assert.match(plans[0].investigationStage.claim, /投稿.*保存/);
-      assert.match(plans[0].investigationStage.claim, /ブラウザ.*実行.*判断/);
+      assert.match(plans[0].investigationStage.claim, /ブラウザ.*動いたはず/);
     }
   }
   for (const [attackId, profile] of Object.entries(EXTENDED_ATTACK_LEARNING)) {

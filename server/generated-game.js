@@ -209,7 +209,8 @@ function applyGeneratedAction(session, runtime, { action, evidenceId, statementI
     requireState(session, 'TITLE'); session.currentState = 'INITIAL_COURT';
   } else if (action === 'continue') {
     requireState(session, 'INITIAL_COURT'); session.currentState = 'INVESTIGATION';
-  } else if (['workspace-command', 'workspace-read', 'save-observation', 'save-fact', 'remove-fact', 'clear-saved-evidence'].includes(action)) {
+  } else if (['workspace-command', 'workspace-read', 'save-observation', 'save-fact', 'save-all-facts',
+    'remove-fact', 'clear-saved-evidence'].includes(action)) {
     requireState(session, 'INVESTIGATION');
     if (!isOpenMaterials(internal)) throw new GameError('UNKNOWN_ACTION', 'action', '資料調査モードの操作です。');
     workspaceAction(session, internal, { action, materialId, command, field, value, line });

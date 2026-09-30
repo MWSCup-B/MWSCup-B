@@ -156,10 +156,13 @@ export function investigationProgress(session, gameCase) {
 export function workspaceMaterial(session, item) {
   const history = ownList(session.commandHistory, item.evidenceId);
   const seen = ownList(session.observedLines, item.evidenceId);
+  const lines = sourceLines(item);
+  const savedFacts = ownList(session.savedFacts, item.evidenceId);
   // Candidates use only displayed original rows, never private answer quotations.
-  const facts = sourceLines(item).flatMap((text, index) => seen.includes(index + 1) ? [{ line: index + 1, text }] : []);
+  const facts = lines.flatMap((text, index) => seen.includes(index + 1) ? [{ line: index + 1, text }] : []);
   return { capabilities: materialCapabilities(item), templates: commandTemplates(item), history, facts,
-    savedFacts: ownList(session.savedFacts, item.evidenceId) };
+    savedFacts, lineCount: lines.length,
+    allFactsSaved: lines.length > 0 && lines.every((_, index) => savedFacts.some(fact => fact.line === index + 1)) };
 }
 
 export function workspaceAction(session, gameCase, { action, materialId, command, field, value, line }) {
@@ -204,6 +207,16 @@ export function workspaceAction(session, gameCase, { action, materialId, command
     session.savedFacts ??= {}; const facts = session.savedFacts[materialId] = ownList(session.savedFacts, materialId);
     session.wholeDocumentEvidenceIds = (session.wholeDocumentEvidenceIds ?? []).filter(id => id !== materialId);
     if (!facts.some(fact => fact.line === line)) facts.push({ line, text: sourceLines(item)[line - 1] });
+    if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
+    if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
+    session.roundCollectedEvidenceIds ??= [];
+    if (!session.roundCollectedEvidenceIds.includes(materialId)) session.roundCollectedEvidenceIds.push(materialId);
+  } else if (action === 'save-all-facts') {
+    const lines = sourceLines(item);
+    if (!lines.length) throw new GameError('MATERIAL_EMPTY', 'materialId', '原文行のない資料は保存できません。');
+    session.savedFacts ??= {};
+    session.savedFacts[materialId] = lines.map((text, index) => ({ line: index + 1, text }));
+    session.wholeDocumentEvidenceIds = (session.wholeDocumentEvidenceIds ?? []).filter(id => id !== materialId);
     if (!session.discoveredEvidenceIds.includes(materialId)) session.discoveredEvidenceIds.push(materialId);
     if (!session.collectedEvidenceIds.includes(materialId)) session.collectedEvidenceIds.push(materialId);
     session.roundCollectedEvidenceIds ??= [];

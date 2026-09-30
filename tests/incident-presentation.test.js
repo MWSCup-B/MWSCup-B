@@ -108,7 +108,7 @@ test('two-person courtroom dialogue preserves testimony attribution and the unju
   assert.deepEqual([...new Set(lines.map(item => item.role))].sort(), ['defense', 'prosecutor']);
   const quoted = lines.find(item => item.badge.includes('引用'));
   assert.equal(quoted.role, 'prosecutor');
-  assert.ok(quoted.text.includes(`記録の調査担当者は、こう述べています。\n「${claim}」`));
+  assert.ok(quoted.text.includes(`記録の調査担当者は、こう話しています。\n「${claim}」`));
   const answer = lines.find(item => item.badge.includes('まだ確認前'));
   assert.equal(answer.text, hypothesis); assert.equal(answer.speaker, '弁護士（あなた）');
   assert.deepEqual(game, original);
@@ -123,7 +123,9 @@ test('the defense closing argument is spoken prose and leaves the verdict to the
   ].join('\n');
   const lines = generatedSceneDialogue({ currentState: 'ACQUITTED', result: { publicExplanation: explanation } });
   const defense = lines.filter(line => line.role === 'defense');
-  assert.match(defense[0].text, /調査で確認した事実を申し上げます/);
+  assert.match(defense[0].text, /ここまでに分かったことを、もう一度整理します/);
+  assert.match(defense[0].text, /この点を見過ごしたまま、有罪とは言えません/);
+  assert.doesNotMatch(defense[0].text, /申し上げます|根拠となる/);
   assert.doesNotMatch(defense[0].text, /事件で確認されたこと：|検察側の把握と主張：|判決理由：/);
   assert.doesNotMatch(defense.map(line => line.text).join('\n'), /被告人を無罪とする/);
   assert.match(defense.at(-1).text, /被告人に無罪判決を求めます/);

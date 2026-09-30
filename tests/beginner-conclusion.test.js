@@ -131,6 +131,6 @@ test('generation gives question background only to the evidence writer and relea
   assert.equal(final.currentState, 'ACQUITTED');
   assert.equal(final.acquittal.publicExplanation, conclusion);
   assert.match(final.dialogue.find(line => line.role === 'prosecutor').text, /検察側から追加の反論はありません/);
-  assert.match(final.dialogue.at(-1).text, /弁護側は被告人に無罪判決を求めます/);
+  assert.match(final.dialogue.at(-1).text, /弁護側は、?被告人に無罪判決を求めます/);
   assert.doesNotMatch(final.dialogue[0].text, /事件で確認されたこと：|判決理由：|被告人を無罪とする/);
 });

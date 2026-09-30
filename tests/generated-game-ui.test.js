@@ -122,7 +122,7 @@ test('workspace fact picker shows only the original rows in the active filtered 
     canReturnToCourt: false, collectedEvidence: [], workbench: { workspaceVersion: '1.0', help: '',
       canChooseEvidence: false, progress: { complete: false, collected: 0, required: 1 }, savedObservations: [],
       materials: [{ materialId: 'web_log', targetId: 'web', label: 'Webアクセス記録 — Webサーバー',
-        capabilities: { console: true }, collected: false, savedFacts: [],
+        capabilities: { console: true }, collected: false, savedFacts: [], lineCount: 2, allFactsSaved: false,
         history: [{ command: 'cat material.txt', output: 'first\nsecond', lines: [1, 2], matchedRecords: 2, totalRecords: 2 },
           { command: 'grep -F "second" material.txt', output: 'second', lines: [2], matchedRecords: 1, totalRecords: 2 }],
         facts: [{ line: 1, text: 'first' }, { line: 2, text: 'second' }], templates: [] }] } });
@@ -132,6 +132,26 @@ test('workspace fact picker shows only the original rows in the active filtered 
   const overlay = page.screen.querySelector('.workspace-overlay');
   assert.match(overlay.textContent, /2: second/);
   assert.doesNotMatch(overlay.textContent, /1: first/);
+  await page.click('この資料の全2行を一括保存');
+  assert.deepEqual(page.calls, [{ action: 'save-all-facts', materialId: 'web_log' }]);
+});
+
+test('workspace disables all-line saving after every source line is already saved', async () => {
+  const page = ui({ ...base, gameCaseId: 'workspace_all_facts_saved', currentState: 'INVESTIGATION',
+    investigationMode: 'OPEN_MATERIALS', investigationTargets: [{ targetId: 'web', displayName: 'Webサーバー' }],
+    canReturnToCourt: true, collectedEvidence: [], workbench: { workspaceVersion: '1.0', help: '',
+      canChooseEvidence: true, progress: { complete: true, collected: 1, required: 1 }, savedObservations: [],
+      materials: [{ materialId: 'web_log', targetId: 'web', label: 'Webアクセス記録 — Webサーバー',
+        capabilities: { console: true }, collected: true,
+        savedFacts: [{ line: 1, text: 'first' }, { line: 2, text: 'second' }],
+        lineCount: 2, allFactsSaved: true,
+        history: [{ command: 'cat material.txt', output: 'first\nsecond', lines: [1, 2], matchedRecords: 2, totalRecords: 2 }],
+        facts: [{ line: 1, text: 'first' }, { line: 2, text: 'second' }], templates: [] }] } });
+  await page.screen.querySelector('[data-material-id="web_log"]').dispatch('click');
+  await page.click('原文を証拠として保存');
+  const saveAll = page.screen.querySelector('.workspace-save-all-facts');
+  assert.equal(saveAll.textContent, 'この資料の全2行は保存済み');
+  assert.equal(saveAll.disabled, true);
 });
 
 test('workspace bulk-clear button is available only when evidence is saved', async () => {

@@ -10,6 +10,7 @@ import { buildInvestigationStages } from '../server/generation/investigation-reg
 import { buildQuestionBackground } from '../server/generation/investigation-lessons.js';
 import { observationAnchors } from '../server/generation/court-questions.js';
 import { spokenProsecutionClaim } from '../server/generation/scenario-stage-plan.js';
+import { evidencePublicContentAnnotationProblems } from '../server/generation/evidence-draft-validation.js';
 import { AutoGenerationManager, autoAuthorView, createAutoAuthorSession } from '../server/auto-generation-service.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 
@@ -26,7 +27,7 @@ test('ClickFix completes its own technical proof before a separate later harm st
   const clickfix = generationInput.technicalInput.attackGraph.nodes.find(node => node.attackDefinitionId === 'clickfix');
   assert.ok(comparison.grounds.every(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
   assert.ok(comparison.grounds.every(ground => ground.attackNodeId === clickfix.nodeId));
-  assert.match(comparison.investigationStage.claim, /被告人が攻撃用処理を作成し、攻撃目的で当該処理を直接起動/);
+  assert.match(comparison.investigationStage.claim, /被告人が攻撃用処理を作成し、攻撃目的でその処理を直接起動/);
   assert.match(comparison.description, /instruction_ref/);
   assert.match(comparison.investigationStage.expectedInference, /instruction_ref/);
   assert.doesNotMatch(comparison.investigationStage.expectedInference + comparison.investigationStage.limitedRefutation,
@@ -41,7 +42,8 @@ test('all registered attack allegations become direct courtroom claims without a
     assert.ok(allegation, attack.id);
     const claim = spokenProsecutionClaim(allegation, '');
     assert.match(claim, /被告人/, attack.id);
-    assert.match(claim, /判断できます。$/, attack.id);
+    assert.match(claim, /ということです。$/, attack.id);
+    assert.doesNotMatch(claim, /当該|判断できます/, attack.id);
     assert.doesNotMatch(claim, /検察側は|と主張している|それだけで/, attack.id);
   }
 });
@@ -87,12 +89,12 @@ test('ClickFix separates page-content and process-record stages, with the full p
   assert.equal(requirements.length, 2);
   assert.deepEqual(requirements[0].grounds.map(item => item.sourceId), ['clickfix_page_record']);
   assert.match(requirements[0].investigationStage.claim, /修復案内.*表示/);
-  assert.match(requirements[0].investigationStage.claim, /案内どおりの処理.*実行.*みるべき/);
+  assert.match(requirements[0].investigationStage.claim, /案内どおりの処理.*端末で動いた/);
   const final = requirements[1];
   assert.deepEqual(new Set(final.grounds.map(item => item.sourceId)),
     new Set(['clickfix_page_record', 'process_execution_record']));
   assert.match(final.investigationStage.claim, /プロセス実行記録.*ユーザー識別子/);
-  assert.match(final.investigationStage.claim, /攻撃用処理を作成し、攻撃目的で(?:当該処理を)?直接起動/);
+  assert.match(final.investigationStage.claim, /攻撃用処理を作成し、攻撃目的でその処理を直接起動/);
   assert.match(final.investigationStage.claim, /被告人/);
   assert.match(final.description, /同じinstruction_ref/);
   assert.match(final.description, /要求IDとプロセス相関IDを同一の番号にはしない/);
@@ -111,6 +113,26 @@ test('ClickFix separates page-content and process-record stages, with the full p
   assert.match(final.investigationStage.limitedRefutation, /というclaimを反駁/);
   assert.match(final.investigationStage.limitedRefutation, /被告人の利用者としての端末操作/);
   assert.doesNotMatch(final.investigationStage.limitedRefutation, /人物不明を正答/);
+  const timeline = scenario.evidenceRequirements.requirements.find(requirement => requirement.purpose === 'TIMELINE_PROOF');
+  assert.match(timeline.description, /publicContentへ時刻注記の行を追加しない/);
+  assert.doesNotMatch(timeline.description, /合成時刻は合成値と明記/);
+});
+
+test('evidence public content rejects production notes without rejecting recorded ClickFix times', () => {
+  const artifacts = [
+    { publicContent: 'request_id: training-page-01\nresponse_time: 2026-09-18T09:10:00+09:00\ninstruction_ref: training-operation-01' },
+    { publicContent: 'timestamp: 2026-09-18T09:10:12+09:00\nparent_process: explorer.exe\nprocess: powershell.exe' },
+  ];
+  assert.deepEqual(evidencePublicContentAnnotationProblems(artifacts), []);
+
+  artifacts[0].publicContent += '\n時刻注記: response_timeは教材用の合成値です。実測時刻や時計同期を保証するものではありません。';
+  artifacts[1].publicContent += '\n時刻注記: timestampは教材用の合成値です。実測時刻や時計同期を保証するものではありません。';
+  const problems = evidencePublicContentAnnotationProblems(artifacts);
+  assert.equal(problems.length, 2);
+  assert.ok(problems.every(problem => problem.code === 'EVIDENCE_PUBLIC_CONTENT_ANNOTATION'));
+  assert.deepEqual(problems.map(problem => problem.field),
+    ['evidenceArtifacts[0].publicContent', 'evidenceArtifacts[1].publicContent']);
+  assert.ok(problems.every(problem => /時刻注記の行だけを削除/.test(problem.correctionHint)));
 });
 
 test('question specificity reads real values in nested JSON and arrays without accepting column names', () => {

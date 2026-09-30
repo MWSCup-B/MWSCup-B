@@ -154,7 +154,7 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
           + comparison + phishingMaterialPolicy(firstAttack.attackId) + ` 難易度${configuration.difficulty}・evidenceCount=${configuration.evidenceCount}は調査チェーンの基準で、法廷は調査対象に対応する${requestedCourtIssueCount(configuration, generationInput)}争点。取得資料総数の上限ではない。補助資料も個別の取得要件に従い通常プレイで取得する。`,
         grounds: structuredClone(artifactGrounds), learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_timeline', purpose: 'TIMELINE_PROOF',
-        description: comparison + ' Timeline eventは照合対象の文脈である。narrativeTimestampsは教材用の表示時刻で、観測記録による裏付けではない。教材の合成時刻は合成値と明記し、実測値・時計同期・因果関係を捏造しない。時刻・識別情報が不足する比較は未確認とする。',
+        description: comparison + ' Timeline eventは照合対象の文脈である。narrativeTimestampsは教材用の表示時刻で、観測記録による裏付けではない。教材用の合成時刻であることは生成条件とUIの資料枠で示し、EvidenceのpublicContentへ時刻注記の行を追加しない。実測値・時計同期・因果関係を捏造しない。時刻・識別情報が不足する比較は未確認とする。',
         grounds: [...structuredClone(artifactGrounds), ...events.map(event => ({
           sourceType: 'TIMELINE_EVENT', sourceId: event.eventId, attackNodeId: null }))],
         learningObjectiveIds: ['objective_trace'] },

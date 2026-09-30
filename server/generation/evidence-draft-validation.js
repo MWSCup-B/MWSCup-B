@@ -17,10 +17,27 @@ function issue(error, field = error.field) {
           : '指摘された取得条件・形式・調査手順を修正し、元のRequirement・ground・証言と複数資料の対応を維持してください。') };
 }
 
+const productionTimeAnnotation = /(?:時刻注記\s*[:：]|(?:response_time|timestamp|時刻).{0,80}教材用の合成値|実測時刻や時計同期を保証)/;
+
+export function evidencePublicContentAnnotationProblems(evidenceArtifacts) {
+  const issues = [];
+  evidenceArtifacts.forEach((artifact, index) => {
+    if (!artifact.publicContent.split('\n').some(line => productionTimeAnnotation.test(line))) return;
+    issues.push({
+      code: 'EVIDENCE_PUBLIC_CONTENT_ANNOTATION',
+      field: `evidenceArtifacts[${index}].publicContent`,
+      reason: '証拠の公開原文に、教材用の合成時刻や実測時刻・時計同期に関する制作注記を含めることはできません。',
+      retryable: true,
+      correctionHint: '時刻注記の行だけを削除し、取得定義で要求された時刻・識別子・観測内容は残してください。引用、行範囲、調査手順は注記削除後の公開原文に合わせてください。',
+    });
+  });
+  return issues;
+}
+
 // Called only after schema/shape validation. Independent failures go to the same
 // bounded repair instead of revealing the next defect only on the last attempt.
 export function evidenceDraftProblems(draft, evidencePackage, agentInput, observationArtifacts = evidencePackage.evidenceArtifacts) {
-  const issues = [];
+  const issues = evidencePublicContentAnnotationProblems(evidencePackage.evidenceArtifacts);
   const inspect = (operation, index = null) => {
     try { operation(); }
     catch (error) {

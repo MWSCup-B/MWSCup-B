@@ -151,7 +151,13 @@ export function renderInvestigationWorkspace(game, state, action, redraw, { el, 
         insert(`grep -F ${JSON.stringify(entry.value)} material.txt`)));
     }
     if (state.tool === 'facts') {
-      overlay.append(el('p', '現在表示している絞り込み結果から、証拠として保存する行を選びます。記載内容が真実かどうかや、実際の操作者についての推論とは区別してください。'));
+      const lineCount = Number.isInteger(material.lineCount) ? material.lineCount : material.facts.length;
+      overlay.append(el('p', '現在表示している絞り込み結果から行を個別に保存するか、選択中の資料の原文全行を一括保存します。記載内容が真実かどうかや、実際の操作者についての推論とは区別してください。'));
+      overlay.append(button(material.allFactsSaved
+        ? `この資料の全${lineCount}行は保存済み`
+        : `この資料の全${lineCount}行を一括保存`,
+      () => action('save-all-facts', { materialId: material.materialId }),
+      'workspace-save-all-facts', material.allFactsSaved || lineCount === 0));
       const visibleLines = new Set(selected?.lines ?? []);
       const visibleFacts = material.facts.filter(fact => visibleLines.has(fact.line));
       if (!visibleFacts.length) overlay.append(el('p', '現在の表示結果には、保存できる原文行がありません。絞り込み条件または表示履歴を確認してください。'));

@@ -74,6 +74,23 @@ test('legacy whole-document collection stays compatible and cannot overwrite a l
   assert.ok(!session.wholeDocumentEvidenceIds.includes(evidenceId));
 });
 
+test('saving every line of each required material supplies unchanged source rows to court', () => {
+  const session = start();
+  const pair = currentCorrectPair(runtime, 1);
+  for (const materialId of requiredCourtEvidence(runtime.gameCase, 1)) {
+    actGenerated(session, runtime, { action: 'workspace-read', materialId });
+    actGenerated(session, runtime, { action: 'save-all-facts', materialId });
+    const source = runtime.gameCase.detective.evidence.find(item => item.evidenceId === materialId);
+    assert.deepEqual(session.savedFacts[materialId],
+      sourceLines(source).map((text, index) => ({ line: index + 1, text })));
+  }
+  const court = actGenerated(session, runtime, { action: 'retrial', ...pair });
+  assert.ok(court.presentableEvidence.every(item =>
+    item.publicContent === sourceLines(runtime.gameCase.detective.evidence
+      .find(source => source.evidenceId === item.evidenceId)).join('\n')));
+  assert.equal(actGenerated(session, runtime, { action: 'objection', ...pair }).result.outcome, 'SUCCESS');
+});
+
 test('correct argument cannot advance with irrelevant or incomplete saved lines; restoring all support can', () => {
   const session = start();
   const pair = currentCorrectPair(runtime, 1);
