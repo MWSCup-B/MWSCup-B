@@ -54,8 +54,9 @@ test('all selected attack question backgrounds and final explanations stay bound
     const conclusion = buildIncidentConclusion(configuration, generationInput);
     assert.ok(conclusion.length <= 16000, `${attackIds}: ${conclusion.length}`);
     assert.match(conclusion, /原因|要因|成功条件|環境|必要/);
-    assert.match(conclusion, /被害と発生原因[\s\S]*別の攻撃者[\s\S]*無罪判決の根拠/);
-    assert.doesNotMatch(conclusion, /合理的な疑い|その処理を被告人が行ったと判断できない/);
+    assert.match(conclusion, /被害と発生原因[\s\S]*第三者による操作[\s\S]*可能性を排除できず[\s\S]*無罪判決の根拠/);
+    assert.match(conclusion, /合理的な疑い/);
+    assert.doesNotMatch(conclusion, /その処理を被告人が行ったと判断できない/);
     assert.doesNotMatch(conclusion, /被告人は操作していない|真犯人|groundTruth|attack_node|fact_/);
     assert.deepEqual({ configuration, generationInput }, original);
   }

@@ -30,7 +30,7 @@ export function validateEvidenceSemanticReview(review, input) {
   const invalid = reason => fail('EVIDENCE_REVIEW_INVALID', 'evidenceSemanticReview', reason);
   if (checkIds.length !== EVIDENCE_REVIEW_CHECKS.length || new Set(checkIds).size !== checkIds.length
     || EVIDENCE_REVIEW_CHECKS.some(id => !checkIds.includes(id)))
-    invalid('証拠・人物帰属・反駁・解説の全4観点を独立に審査してください。');
+    invalid('証拠・人物断定の根拠と限界・反駁・解説の全4観点を独立に審査してください。');
   const passed = review.checks.every(check => check.status === 'PASS');
   if ((review.status === 'VERIFIED') !== (passed && review.issues.length === 0)
     || (review.status !== 'VERIFIED' && (passed || !review.issues.length)))

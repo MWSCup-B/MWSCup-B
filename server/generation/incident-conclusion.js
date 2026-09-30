@@ -46,8 +46,8 @@ export function buildIncidentConclusion(configuration, generationInput) {
   const incidents = buildIncidentNarratives(configuration, graph,
     generationInput.technicalInput.attackDefinitions);
   if (incidents.length) return paragraphs.join('\n\n') + '\n\n本件の被害と発生原因\n'
-    + incidents.map(item => `${item.attackerAction}\n${item.impact}\n${item.prosecutionKnowledge}\n${item.causalRefutation}\n${item.verdictBasis}`).join('\n\n')
-    + '\n\n取得した資料を対応付けた結果、検察側が被告人によるものとした被害操作は、別の攻撃主体が用意した入力や処理を起点として発生したことが確認できました。被告人を当該攻撃の実行者とする検察側の説明は、この発生経路と矛盾します。この点が、被告人に対する無罪判決の根拠となります。';
+    + incidents.map(item => `${item.impact}\n${item.prosecutionKnowledge}\n${item.causalRefutation}\n${item.verdictBasis}`).join('\n\n')
+    + '\n\n取得した技術資料を対応付けると、事件で生じた処理経路・対象・結果は確認できます。一方、検察側が主張する被告人による攻撃処理の準備・作成・直接操作までは立証されず、アカウント・IPアドレス・端末情報だけで実際の人物を断定することもできません。第三者による操作、認証情報の悪用、誘導または自動処理の可能性を排除できず、合理的な疑いが残ることが、被告人に対する無罪判決の根拠となります。';
   return paragraphs.join('\n\n') + '\n\n'
     + '以上の経緯と、資料から確認できる範囲を区別する必要があります。検察側が主張する操作を被告人本人に結び付ける裏付けは不十分であり、記録上のアカウントや端末だけで人物を断定することはできません。この合理的な疑いが、被告人に対する無罪判決の根拠となります。';
 }

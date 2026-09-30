@@ -60,7 +60,8 @@ for (const ids of [...catalog.map(a => [a.id]), ['sql_injection', 'reflected_xss
     const narratives = session.scenarioPackage.groundTruth.incidentNarratives;
     assert.equal(narratives.length, ids.length, ids.join(' / '));
     assert.ok(narratives.every(item => /別の攻撃者/.test(item.attackerAction)
-      && /弁護側が被告人に無罪判決を求める根拠/.test(item.verdictBasis)));
+      && /可能性を排除できない/.test(item.verdictBasis)
+      && /第三者が実行したと断定.*しない/.test(item.verdictBasis)));
     manager.approve(session); await manager.waitForIdle();
     assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));
     assert.equal(session.evaluationResult.status, 'ACCEPTED');
@@ -79,6 +80,17 @@ for (const ids of [...catalog.map(a => [a.id]), ['sql_injection', 'reflected_xss
     const stages = session.scenarioPackage.evidenceRequirements.requirements
       .filter(requirement => requirement.investigationStage);
     assert.equal(stages.length, questions.length);
+    assert.equal(session.scenarioPackage.groundTruth.caseFacts?.length ?? 0, 0);
+    assert.ok(session.scenarioPackage.evidenceRequirements.requirements
+      .every(requirement => requirement.purpose !== 'IDENTITY_PROOF'
+        && requirement.grounds.every(ground => ground.sourceType !== 'CASE_FACT')));
+    for (const narrative of narratives) {
+      const routedIds = new Set(stages.flatMap(stage => stage.grounds
+        .filter(ground => ground.attackNodeId === narrative.attackNodeId)
+        .map(ground => ground.sourceId)));
+      assert.ok(narrative.requiredArtifactIds.every(id => routedIds.has(id)),
+        `all required technical materials are routed for ${narrative.attackNodeId}`);
+    }
     for (const stage of stages) {
       assert.ok(stage.grounds.every(ground => ground.sourceType === 'ATTACK_GRAPH_ARTIFACT'));
       for (const ground of stage.grounds) {

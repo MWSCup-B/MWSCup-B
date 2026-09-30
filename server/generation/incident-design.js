@@ -4,6 +4,7 @@ import { fail } from './schema.js';
 // attack scope. Preconditions are evaluated in the same graph as every other fact.
 export const INCIDENT_DESIGN = 'ATTACK_CAUSED_HARM_V1';
 const technicalCausalRefutation = '選択された攻撃について取得可能と定義された技術資料を段階ごとに照合する。各資料が記録する対象・内容・処理結果を原文の識別値で対応付け、資料にない因果関係を時刻の近さだけで補わない。アカウント名・IPアドレス・端末情報だけから人物や意図を特定せず、確認された攻撃経路が被告人による攻撃処理の作成・直接操作という検察側の主張と両立するかを論じる。必要な技術資料や対応関係が不足する場合は、その不足を明示して差し戻す。';
+const technicalVerdictBasis = '取得可能な技術資料は、事件で生じた処理経路・対象・結果を示す一方、アカウント名・IPアドレス・端末情報を実際の操作者本人の署名として扱うことはできない。検察側が主張する被告人による攻撃処理の準備・作成・直接操作が資料から確認できず、第三者による操作、認証情報の悪用、誘導または自動処理の可能性を排除できない場合、その合理的な疑いを無罪判決の根拠とする。第三者が実行したと断定したり、その実名を技術資料だけから特定したりしない。';
 const condition = (source, predicate, args, description) => ({ source, predicate, args, value: true, description });
 const artifact = (id, binding, logSource, type, predicate, args, description) => ({ id, description,
   acquisition: { binding, logSource, type, targetType: logSource === 'DEVICE' ? 'ENDPOINT' : 'LOG_SOURCE' },
@@ -15,8 +16,8 @@ export function incidentDefinitions(catalog, configuration) {
   return catalog.map(original => {
     const definition = structuredClone(original);
     if (definition.incidentNarrative) {
-      delete definition.incidentNarrative.attributionObservation;
       definition.incidentNarrative.causalRefutation = technicalCausalRefutation;
+      definition.incidentNarrative.verdictBasis = technicalVerdictBasis;
     }
     if (definition.id === 'stored_xss') {
       definition.prerequisites.find(item => item.predicate === 'user_uses_browser').description =
@@ -66,7 +67,7 @@ export function buildIncidentNarratives(configuration, graph, definitions) {
   return graph.nodes.flatMap(node => {
     const profile = incidentProfile(definitions, node.attackDefinitionId);
     if (!profile) fail('INCIDENT_NARRATIVE_MISSING', 'incidentDesign',
-      `攻撃${node.attackDefinitionId}について、真犯人の行為・検察側の誤認・因果反証・無罪理由が定義されていません。`);
+      `攻撃${node.attackDefinitionId}について、事件の成立経路・検察側の誤認・因果反証・無罪理由が定義されていません。`);
     const effect = node.effects.find(item => item.predicate === profile.impactEffectPredicate);
     if (!effect || node.state !== 'SATISFIED') fail('INCIDENT_IMPACT_UNVERIFIED', 'incidentDesign', '被害の成立条件が確認できません。');
     const available = node.artifactEvaluations.filter(item => item.state === 'SATISFIED').map(item => item.artifactId);

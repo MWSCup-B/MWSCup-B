@@ -15,15 +15,16 @@ import { createGeneratedGame, actGenerated } from '../server/generated-game.js';
 import { MockCodexRunner } from './helpers/mock-codex.js';
 
 const catalog = await loadCatalog();
-test('all registered attacks define an affirmative alternative-attacker acquittal', () => {
+test('all registered attacks separate private incident truth from the player-facing reasonable doubt', () => {
   for (const definition of catalog) {
     const profile = definition.incidentNarrative;
     assert.ok(profile, `${definition.id}: incidentNarrative`);
     assert.match(profile.attackerAction, /別の攻撃者/, `${definition.id}: attackerAction`);
     assert.match(profile.allegation, /検察側/, `${definition.id}: allegation`);
     assert.match(profile.prosecutionKnowledge, /検察側/, `${definition.id}: prosecutionKnowledge`);
-    assert.match(profile.verdictBasis, /弁護側が被告人に無罪判決を求める根拠/, `${definition.id}: verdictBasis`);
-    assert.doesNotMatch(profile.verdictBasis, /攻撃者の実名|被告人を無罪とする/, `${definition.id}: verdictBasis`);
+    assert.match(profile.verdictBasis, /可能性を排除できない/, `${definition.id}: verdictBasis`);
+    assert.match(profile.verdictBasis, /第三者が実行したと断定.*しない/, `${definition.id}: verdictBasis`);
+    assert.doesNotMatch(profile.verdictBasis, /調査報告|直接観察/, `${definition.id}: verdictBasis`);
   }
 });
 
@@ -67,7 +68,8 @@ for (const attackIds of [['stored_xss'], ['sql_injection'], ['phishing', 'unauth
     }
     assert.doesNotMatch(buildIncidentOverview(session.configuration), /SQL|XSS|スクリプト|具体的な手口|これから/);
     const conclusion = buildIncidentConclusion(session.configuration, session.generationInput);
-    assert.match(conclusion, /別の攻撃主体|別の攻撃者/);
+    assert.match(conclusion, /第三者による操作.*可能性を排除でき/);
+    assert.doesNotMatch(conclusion, /(?:第三者|別の攻撃者)が実行した(?:。|ことが確認|と認定)/);
     assert.ok(conclusion.includes(narrative.impact));
     manager.approve(session); await manager.waitForIdle();
     assert.equal(session.auto.state, 'READY', JSON.stringify(session.auto.details));

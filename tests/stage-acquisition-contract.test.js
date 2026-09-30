@@ -96,5 +96,7 @@ test('credential phishing disputes preparation and collection, not the induced v
   assert.match(completion.investigationStage.limitedRefutation, /被告人が誘導に従って入力・送信したこと自体は否定せず/);
   const incident = generationInput.technicalInput.attackDefinitions.find(item => item.id === 'credential_phishing').incidentNarrative;
   assert.match(incident.attackerAction, /被告人は.*フォームへ入力して送信/);
-  assert.match(incident.verdictBasis, /入力・送信した事実.*準備した行為は区別/);
+  assert.match(incident.prosecutionKnowledge, /準備した人物を特定する記録がない/);
+  assert.match(incident.verdictBasis, /可能性を排除できない/);
+  assert.match(incident.verdictBasis, /第三者が実行したと断定.*しない/);
 });

@@ -159,12 +159,12 @@ export function buildScenarioTemplate({ generationInput, configuration }) {
           sourceType: 'TIMELINE_EVENT', sourceId: event.eventId, attackNodeId: null }))],
         learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_contradiction', purpose: 'CONTRADICTION_PROOF',
-        description: `事件全体では、検察側調査官character_witnessによる資料の解釈を基に、character_defendantを対象に「${allegation}」とする検察側の立場を検討する。各法廷の反駁対象はinvestigationStageの攻撃固有の記録解釈とし、全体の主張を追加の争点として水増ししない。発言はTESTIMONYとして技術的事実から分離する。資料に裏付けられる観測内容の発言と、人物・意図を断定する主張は別statementとし、反駁が成立する部分と成立しない部分を資料から区別できるようにする。被告人の端末・アカウントとの対応は、検察側の主張だけから事実化しない。Ground TruthのincidentNarrativesに別の攻撃者による因果経路が定義されている場合は、取得資料によってその経路を具体的に示し、被告人による直接操作説と両立しないことを反駁の結論とする。資料にない人物、アリバイ、攻撃経路は追加しない。` + issueDesign,
+        description: `事件全体では、検察側調査官character_witnessによる資料の解釈を基に、character_defendantを対象に「${allegation}」とする検察側の立場を検討する。各法廷の反駁対象はinvestigationStageの攻撃固有の記録解釈とし、全体の主張を追加の争点として水増ししない。発言はTESTIMONYとして技術的事実から分離する。資料に裏付けられる観測内容の発言と、人物・意図を断定する主張は別statementとし、反駁が成立する部分と成立しない部分を資料から区別できるようにする。被告人の端末・アカウントとの対応は、検察側の主張だけから事実化しない。取得資料によって攻撃の成立経路・対象・結果を具体的に示し、その記録範囲が被告人による準備・作成・直接操作という検察側の主張を裏付けるかを検討する。資料にない人物、アリバイ、攻撃経路は追加せず、別人の特定を正解条件にしない。` + issueDesign,
         grounds: [...factGrounds, ...structuredClone(artifactGrounds), ...characterGrounds],
         learningObjectiveIds: ['objective_trace'] },
       { requirementId: 'requirement_exoneration', purpose: 'EXONERATION_PROOF',
         description: comparison + (incidentNarratives.length
-          ? ' 別々に取得した2件以上の技術資料を比較し、Ground TruthのincidentNarrativesに定義された別の攻撃者による因果経路を具体的に示す。その経路が、character_defendantによる直接操作という検察側の説明と両立しないことを無罪の根拠とする。'
+          ? ' 別々に取得した2件以上の技術資料を比較し、事件で確認できる処理経路・対象・結果と記録の限界を具体的に示す。character_defendantによる攻撃処理の準備・作成・直接操作という検察側の説明が資料で裏付けられず、第三者による操作、認証情報の悪用、誘導または自動処理の可能性を排除できないことを無罪の根拠とする。第三者が実行したとの断定や人物の特定は要求しない。'
           : ' 別々に取得した2件以上の技術資料を比較し、character_witnessによるcharacter_defendantの人物・意図の特定は提示資料だけでは支えられない、という限定的な結論を示す。')
           + ' 人物・Ground Truth参照は論証の対象と技術的文脈であり、観測資料の代用ではない。定義されていない人物対応、アリバイ、攻撃経路を補完しない。必要な補助資料を内部専用にせず、通常プレイですべて取得・閲覧可能にする。',
         grounds: [...characterGrounds, ...structuredClone(artifactGrounds), ...factGrounds],

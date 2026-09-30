@@ -25,7 +25,7 @@ function revisionFor(requirement, values) {
     description: null, grounds: null, stageText: null, ...values }] };
 }
 
-test('3攻撃6調査先を攻撃と取得元で分け、各攻撃の完結段階で人物帰属を論証する', () => {
+test('3攻撃6調査先を攻撃と取得元で分け、各攻撃で被告人直接操作説の限界を検証する', () => {
   const value = fixture();
   const { scenarioPackage, configuration, generationInput } = value;
   const originalInput = structuredClone(generationInput);
